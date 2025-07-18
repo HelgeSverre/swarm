@@ -1,5 +1,7 @@
 <?php
 
+/** @noinspection PhpUnused */
+
 namespace HelgeSverre\Swarm\CLI;
 
 use HelgeSverre\Swarm\Agent\AgentResponse;
@@ -78,15 +80,15 @@ class TUIRenderer
         'warning' => '⚠',
     ];
 
-    protected $terminalWidth;
+    protected int $terminalWidth;
 
-    protected $terminalHeight;
+    protected int $terminalHeight;
 
-    protected $history = [];
+    protected array $history = [];
 
-    protected $maxHistoryLines = 20;
+    protected int $maxHistoryLines = 20;
 
-    protected $currentLine = 1;
+    protected int $currentLine = 1;
 
     public function __construct()
     {
@@ -108,11 +110,11 @@ class TUIRenderer
         echo "\n\n";
         echo $leftPadding . $this->colorize('┌' . str_repeat('─', $boxWidth - 2) . '┐', self::THEME['border']) . "\n";
         echo $leftPadding . $this->colorize('│', self::THEME['border']) .
-             $this->colorize(mb_str_pad('Swarm CLI v1.0', $boxWidth - 2, ' ', STR_PAD_BOTH), self::THEME['header'], 'bold') .
-             $this->colorize('│', self::THEME['border']) . "\n";
+            $this->colorize(mb_str_pad('Swarm CLI v1.0', $boxWidth - 2, ' ', STR_PAD_BOTH), self::THEME['header'], 'bold') .
+            $this->colorize('│', self::THEME['border']) . "\n";
         echo $leftPadding . $this->colorize('│', self::THEME['border']) .
-             $this->colorize(mb_str_pad('AI-Powered Coding Assistant', $boxWidth - 2, ' ', STR_PAD_BOTH), self::THEME['muted']) .
-             $this->colorize('│', self::THEME['border']) . "\n";
+            $this->colorize(mb_str_pad('AI-Powered Coding Assistant', $boxWidth - 2, ' ', STR_PAD_BOTH), self::THEME['muted']) .
+            $this->colorize('│', self::THEME['border']) . "\n";
         echo $leftPadding . $this->colorize('└' . str_repeat('─', $boxWidth - 2) . '┘', self::THEME['border']) . "\n";
         echo "\n";
         echo $this->colorize('  🤖 Ready to help with your coding tasks!', self::THEME['success']) . "\n";
@@ -130,13 +132,13 @@ class TUIRenderer
         $this->moveCursor($inputStartRow, 1);
 
         // Draw input box
-        echo $this->drawBoxTop('Input', self::THEME['border']);
+        echo $this->drawBoxTop('', self::THEME['border']);
         echo $this->drawBoxLine('', self::THEME['border']); // Empty line for input
         echo $this->drawBoxBottom(self::THEME['border']);
 
         // Position cursor inside the box for the prompt
         $this->moveCursor($inputStartRow + 1, 3);
-        echo $this->colorize($message . ' ', 'white');
+        echo $this->colorize($message . ' ', self::THEME['accent']);
 
         // Get cursor position after the prompt
         $promptEndCol = 3 + mb_strlen($message) + 1;
@@ -152,6 +154,9 @@ class TUIRenderer
             $input = trim(fgets(STDIN));
         }
 
+        // Don't move to next line - stay in the input box
+        // The next refresh will clear the screen anyway
+
         return trim($input);
     }
 
@@ -162,13 +167,37 @@ class TUIRenderer
         // The response will be shown in the next refresh cycle
     }
 
+    public function showProcessing(): void
+    {
+        // Show a processing indicator in the input area
+        $inputStartRow = $this->terminalHeight - 2;
+        $this->moveCursor($inputStartRow, 3);
+
+        // Clear the line first
+        echo "\033[K";
+
+        // Show animated processing message
+        $frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        $messages = [
+            'Processing',
+            'Thinking',
+            'Analyzing',
+            'Working on it',
+        ];
+
+        $message = $messages[array_rand($messages)];
+        $frame = $frames[time() % count($frames)];
+
+        echo $this->colorize("{$frame} {$message}...", self::THEME['warning']);
+    }
+
     public function showNotification(string $message, string $type = 'info'): void
     {
         $color = match ($type) {
-            'error' => 'bright_red',
-            'success' => 'bright_green',
-            'warning' => 'bright_yellow',
-            default => 'bright_blue'
+            'error' => self::THEME['error'],
+            'success' => self::THEME['success'],
+            'warning' => self::THEME['warning'],
+            default => self::THEME['info']
         };
 
         $this->moveCursor(1, 1);
@@ -197,11 +226,12 @@ class TUIRenderer
         $this->clearScreen();
         $this->drawHeader();
         $this->drawTaskStatus($status);
+        echo "\n"; // Add spacing between sections
         $this->drawRecentActivity();
         $this->drawFooter();
 
         // Leave space for input box at the bottom
-        $remainingLines = $this->terminalHeight - $this->getCurrentLine() - 4;
+        $remainingLines = $this->terminalHeight - $this->getCurrentLine() - 5; // Adjusted for extra newline
         if ($remainingLines > 0) {
             echo str_repeat("\n", $remainingLines);
         }
@@ -335,33 +365,35 @@ class TUIRenderer
 
     protected function formatParams(array $params): string
     {
-        $formatted = [];
-        foreach ($params as $key => $value) {
-            if (is_string($value) && mb_strlen($value) > 20) {
-                $value = mb_substr($value, 0, 17) . '...';
-            }
-            $formatted[] = "{$key}: " . json_encode($value);
-        }
-
-        return implode(', ', $formatted);
+        return implode(', ', array_map(
+            fn ($key, $value) => sprintf(
+                '%s: %s',
+                $key,
+                json_encode(
+                    is_string($value) && mb_strlen($value) > 20
+                        ? mb_substr($value, 0, 17) . '...'
+                        : $value
+                )
+            ),
+            array_keys($params),
+            array_values($params)
+        ));
     }
 
-    protected function summarizeResult($result): string
+    protected function summarizeResult(mixed $result): string
     {
-        if (is_array($result)) {
-            $data = $result['data'] ?? $result;
-            if (isset($data['files'])) {
-                return count($data['files']) . ' files found';
-            }
-            if (isset($data['stdout'])) {
-                return 'exit: ' . ($data['return_code'] ?? '?');
-            }
-            if (isset($data['bytes_written'])) {
-                return $data['bytes_written'] . ' bytes written';
-            }
+        if (! is_array($result)) {
+            return 'completed';
         }
 
-        return 'completed';
+        $data = $result['data'] ?? $result;
+
+        return match (true) {
+            isset($data['files']) => count($data['files']) . ' files found',
+            isset($data['stdout']) => 'exit: ' . ($data['return_code'] ?? '?'),
+            isset($data['bytes_written']) => $data['bytes_written'] . ' bytes written',
+            default => 'completed'
+        };
     }
 
     protected function drawHeader(): void
@@ -380,8 +412,8 @@ class TUIRenderer
         $remainingWidth = $this->terminalWidth - $titleLength - $timeLength - 6;
 
         echo $leftPart . $titlePart .
-             $this->colorize(str_repeat(' ', $remainingWidth), self::THEME['border']) .
-             $timePart . $rightPart . "\n";
+            $this->colorize(str_repeat(' ', $remainingWidth), self::THEME['border']) .
+            $timePart . $rightPart . "\n";
     }
 
     protected function drawTaskStatus(array $status): void
@@ -484,7 +516,7 @@ class TUIRenderer
             $titleLength = mb_strlen($title) + 2;
             $remainingWidth = $this->terminalWidth - $titleLength - 4;
             $line = $leftCorner . $this->colorize($horizontal, $borderColor) . $titleFormatted .
-                    $this->colorize(str_repeat($horizontal, $remainingWidth), $borderColor) . $rightCorner;
+                $this->colorize(str_repeat($horizontal, $remainingWidth), $borderColor) . $rightCorner;
         } else {
             $line = $leftCorner . $this->colorize(str_repeat($horizontal, $this->terminalWidth - 2), $borderColor) . $rightCorner;
         }
@@ -530,7 +562,7 @@ class TUIRenderer
             $titleLength = mb_strlen($title) + 2;
             $remainingWidth = $this->terminalWidth - $titleLength - 4;
             $line = $leftTee . $this->colorize($horizontal, $borderColor) . $titleFormatted .
-                    $this->colorize(str_repeat($horizontal, $remainingWidth), $borderColor) . $rightTee;
+                $this->colorize(str_repeat($horizontal, $remainingWidth), $borderColor) . $rightTee;
         } else {
             $line = $leftTee . $this->colorize(str_repeat($horizontal, $this->terminalWidth - 2), $borderColor) . $rightTee;
         }
