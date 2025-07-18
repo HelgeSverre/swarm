@@ -47,8 +47,8 @@ test('task manager handles empty task description', function () {
 
     $tasks = $taskManager->getTasks();
 
-    expect($tasks)->toHaveCount(1)
-        ->and($tasks[0]['description'])->toBeNull();
+    // Tasks without description are now filtered out
+    expect($tasks)->toBeEmpty();
 });
 
 test('task manager can plan a task', function () {
@@ -98,7 +98,7 @@ test('task manager gets next planned task', function () {
     expect($nextTask)->not->toBeNull()
         ->and($nextTask['description'])->toBe('Task 2')
         ->and($nextTask['status'])->toBe('executing')
-        ->and($taskManager->currentTask)->toBe($nextTask);
+        ->and($taskManager->currentTask->toArray())->toBe($nextTask);
 });
 
 test('getNextTask returns null when no planned tasks', function () {
