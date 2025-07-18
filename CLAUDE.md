@@ -1,5 +1,72 @@
 # CLAUDE.md - Project-specific instructions for Swarm
 
+## System Architecture
+
+### Overview
+Swarm is an AI-powered coding assistant that uses OpenAI's GPT models to understand natural language requests and execute coding tasks. The system is built with a modular architecture that separates concerns between request processing, task management, tool execution, and UI rendering.
+
+### Core Flow
+```
+1. User Input (CLI) 
+   ↓
+2. Request Classification (CodingAgent)
+   ↓
+3. Route to Handler (demonstration/explanation/conversation/implementation)
+   ↓
+4. Task Extraction & Planning (if needed)
+   ↓
+5. Tool Execution (via ToolRouter)
+   ↓
+6. Response Generation
+   ↓
+7. Terminal UI Update
+```
+
+### Key Architectural Decisions
+
+1. **Request Classification First**: Before any task extraction, the system classifies the user's intent using structured outputs. This prevents unnecessary tool usage for simple queries.
+
+2. **Conversation Memory**: All OpenAI API calls include conversation history (last 20 messages) for context awareness. Tool and error messages are filtered out to keep context clean.
+
+3. **Structured Outputs**: Uses OpenAI's `response_format` with JSON schemas for reliable parsing of classifications and task plans.
+
+4. **Tool Abstraction**: Tools implement a common interface and use PHP attributes for schema generation, making it easy to add new capabilities.
+
+5. **Async-Ready**: Infrastructure for async processing is in place (AsyncProcessor) for future parallel task execution.
+
+## Component Details
+
+### CodingAgent (src/Agent/CodingAgent.php)
+The brain of the system. Key methods:
+- `processRequest()`: Main entry point, classifies and routes requests
+- `classifyRequest()`: Uses structured outputs to determine request type
+- `handleDemonstration()`: Returns code examples in markdown
+- `handleExplanation()`: Provides educational content
+- `handleConversation()`: General conversation with context
+- `extractTasks()`: Extracts actionable tasks from implementation requests
+- `planTask()`: Creates structured execution plans
+- `executeTask()`: Runs tasks using tools
+
+### ToolRouter (src/Core/ToolRouter.php)
+Manages tool registration and execution:
+- Maintains registry of available tools
+- Routes function calls to appropriate tool handlers
+- Logs all tool executions
+- Handles errors gracefully
+
+### Tool System (src/Tools/*)
+Each tool is a class implementing the Tool interface:
+- Uses PHP attributes for configuration (@Tool, @ToolParam)
+- Auto-generates OpenAI function schemas
+- Examples: ReadFile, WriteFile, FindFiles, Search, Terminal
+
+### TUIRenderer (src/CLI/TUIRenderer.php)
+Manages the terminal UI:
+- ANSI escape codes for colors and positioning
+- Real-time updates without flicker
+- Input handling with readline support
+- Progress animations and status tracking
+
 ## PHP Code Style Preferences
 
 ### Class Member Visibility
@@ -51,22 +118,40 @@
 - Log errors with full context
 - Handle API errors gracefully
 
-## Project Structure
-```
-src/
-├── Agent/          # AI agent logic
-├── CLI/            # Command-line interface components
-├── Exceptions/     # Custom exceptions
-├── Router/         # Tool routing system
-├── Task/           # Task management
-└── Tools/          # Individual tool implementations
+## Key Implementation Details
+
+### Conversation History Management
+```php
+// History is maintained in CodingAgent::$conversationHistory
+// Filtered in buildMessagesWithHistory() to exclude:
+- 'tool' role messages (incompatible with API)
+- 'error' role messages (noise)
+// Limited to last 20 messages for token management
 ```
 
-## Key Components
-- **CodingAgent**: Main AI agent that processes requests
-- **TUIRenderer**: Terminal UI rendering with ANSI codes
-- **ToolRouter**: Routes tool calls to appropriate handlers
-- **TaskManager**: Manages task queue and execution
+### Request Classification Schema
+```php
+{
+  'request_type' => enum['demonstration', 'implementation', 'explanation', 'query', 'conversation'],
+  'requires_tools' => boolean,
+  'confidence' => number (0-1),
+  'reasoning' => string
+}
+```
+
+### Task Planning Schema
+```php
+{
+  'plan_summary' => string,
+  'steps' => array of {
+    'description' => string,
+    'tool_needed' => string,
+    'expected_outcome' => string
+  },
+  'estimated_complexity' => enum['simple', 'moderate', 'complex'],
+  'potential_issues' => array of strings
+}
+```
 
 ## Environment Variables
 - `OPENAI_API_KEY`: Required for OpenAI API access
@@ -75,3 +160,10 @@ src/
 - `LOG_ENABLED`: Enable file logging
 - `LOG_LEVEL`: Logging level (debug, info, warning, error)
 - `LOG_PATH`: Path for log files (default: storage/logs)
+
+## Future Improvements
+1. **Parallel Task Execution**: Use AsyncProcessor for concurrent tool calls
+2. **Conversation Persistence**: Save/load conversation history
+3. **Tool Chaining**: Allow tools to call other tools
+4. **Custom Instructions**: User-defined behavior modifications
+5. **Multi-Model Support**: Add support for other LLM providers
