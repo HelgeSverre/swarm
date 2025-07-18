@@ -14,7 +14,47 @@ define('SWARM_VERSION', '1.0.0');
 require __DIR__ . '/vendor/autoload.php';
 
 use HelgeSverre\Swarm\CLI\SwarmCLI;
+use HelgeSverre\Swarm\Core\ExceptionHandler;
+use Monolog\Handler\RotatingFileHandler;
+use Monolog\Level;
+use Monolog\Logger;
+
+// Create logger for exception handler
+$logger = null;
+if ($_ENV['LOG_ENABLED'] ?? false) {
+    try {
+        $logger = new Logger('swarm');
+        $logPath = $_ENV['LOG_PATH'] ?? 'storage/logs';
+
+        if (! is_dir($logPath)) {
+            mkdir($logPath, 0755, true);
+        }
+
+        $logLevel = match (mb_strtolower($_ENV['LOG_LEVEL'] ?? 'info')) {
+            'debug' => Level::Debug,
+            'info' => Level::Info,
+            'warning', 'warn' => Level::Warning,
+            'error' => Level::Error,
+            default => Level::Info,
+        };
+
+        $logger->pushHandler(
+            new RotatingFileHandler("{$logPath}/swarm.log", 7, $logLevel)
+        );
+    } catch (Exception $e) {
+        // Ignore logging setup errors
+    }
+}
+
+// Set up exception handler
+$exceptionHandler = new ExceptionHandler($logger);
+$exceptionHandler->register();
 
 // Create and run the CLI
-$cli = new SwarmCLI;
-$cli->run();
+try {
+    $cli = new SwarmCLI;
+    $cli->run();
+} catch (Throwable $e) {
+    // Let the exception handler deal with it
+    throw $e;
+}

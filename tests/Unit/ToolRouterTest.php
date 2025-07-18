@@ -1,8 +1,8 @@
 <?php
 
+use HelgeSverre\Swarm\Core\ToolResponse;
+use HelgeSverre\Swarm\Core\ToolRouter;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
-use HelgeSverre\Swarm\Router\ToolResponse;
-use HelgeSverre\Swarm\Router\ToolRouter;
 
 test('can register and dispatch tools', function () {
     $router = new ToolRouter;

@@ -90,6 +90,14 @@ class TUIRenderer
 
     protected int $currentLine = 1;
 
+    protected bool $isProcessing = false;
+
+    protected float $processingStartTime = 0;
+
+    protected int $animationFrame = 0;
+
+    protected string $processingMessage = '';
+
     public function __construct()
     {
         $this->detectTerminalSize();
@@ -138,20 +146,17 @@ class TUIRenderer
 
         // Position cursor inside the box for the prompt
         $this->moveCursor($inputStartRow + 1, 3);
-        echo $this->colorize($message . ' ', self::THEME['accent']);
-
-        // Get cursor position after the prompt
-        $promptEndCol = 3 + mb_strlen($message) + 1;
 
         // Restore normal terminal mode for input
         $this->restoreNormalMode();
 
-        // Use readline if available for better input handling
-        if (function_exists('readline')) {
-            $input = readline('');
-        } else {
-            // Fallback to fgets if readline not available
-            $input = trim(fgets(STDIN));
+        // Use protected input handler that prevents erasing the prompt
+        $promptWithSpace = $message . ' ';
+        $input = InputHandler::readLine($promptWithSpace, self::COLORS[self::THEME['accent']]);
+
+        // Add to command history if not empty
+        if (trim($input) !== '') {
+            InputHandler::addHistory(trim($input));
         }
 
         // Don't move to next line - stay in the input box
@@ -162,13 +167,48 @@ class TUIRenderer
 
     public function displayResponse(AgentResponse $response): void
     {
-        $this->addToHistory('agent', $response->getMessage(), 'bright_green');
+        // Clean the response message of newlines for history
+        $message = $response->getMessage();
+        $cleanMessage = trim(str_replace(["\r\n", "\r", "\n"], ' ', $message));
+
+        // Also remove multiple spaces
+        $cleanMessage = preg_replace('/\s+/', ' ', $cleanMessage);
+
+        $this->addToHistory('agent', $cleanMessage, 'white');
         // Don't show notification as it disrupts the UI flow
         // The response will be shown in the next refresh cycle
     }
 
+    public function startProcessing(): void
+    {
+        $this->isProcessing = true;
+        $this->processingStartTime = microtime(true);
+        $this->animationFrame = 0;
+
+        // Select a random message for this processing session
+        $messages = ['Processing', 'Thinking', 'Analyzing', 'Working on it'];
+        $this->processingMessage = $messages[array_rand($messages)];
+
+        // Show initial frame
+        $this->showProcessing();
+    }
+
+    public function stopProcessing(): void
+    {
+        $this->isProcessing = false;
+
+        // Clear the processing line
+        $inputStartRow = $this->terminalHeight - 2;
+        $this->moveCursor($inputStartRow, 3);
+        echo "\033[K"; // Clear line
+    }
+
     public function showProcessing(): void
     {
+        if (! $this->isProcessing) {
+            return;
+        }
+
         // Show a processing indicator in the input area
         $inputStartRow = $this->terminalHeight - 2;
         $this->moveCursor($inputStartRow, 3);
@@ -176,19 +216,23 @@ class TUIRenderer
         // Clear the line first
         echo "\033[K";
 
-        // Show animated processing message
-        $frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-        $messages = [
-            'Processing',
-            'Thinking',
-            'Analyzing',
-            'Working on it',
-        ];
+        // Show processing message with animated spinner
+        $spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
-        $message = $messages[array_rand($messages)];
-        $frame = $frames[time() % count($frames)];
+        // Use the stored message and current animation frame
+        $spinner = $spinnerChars[$this->animationFrame % count($spinnerChars)];
+        $elapsed = round(microtime(true) - $this->processingStartTime, 1);
 
-        echo $this->colorize("{$frame} {$message}...", self::THEME['warning']);
+        echo $this->colorize("{$spinner}  {$this->processingMessage}... ({$elapsed}s)", self::THEME['warning']);
+
+        // Flush output immediately for real-time updates
+        if (ob_get_level() > 0) {
+            ob_flush();
+        }
+        flush();
+
+        // Increment animation frame for next call
+        $this->animationFrame++;
     }
 
     public function showNotification(string $message, string $type = 'info'): void
@@ -207,8 +251,10 @@ class TUIRenderer
 
     public function displayError(string $error): void
     {
-        $this->addToHistory('error', $error, 'bright_red');
-        $this->showNotification('❌ Error: ' . mb_substr($error, 0, 50) . '...', 'red');
+        // Clean the error message of newlines for history
+        $cleanError = str_replace(["\r\n", "\r", "\n"], ' ', $error);
+        $this->addToHistory('error', $cleanError, 'bright_red');
+        $this->showNotification('❌ Error: ' . mb_substr($cleanError, 0, 50) . '...', 'red');
     }
 
     public function displayToolCall(string $tool, array $params, $result): void
@@ -245,9 +291,17 @@ class TUIRenderer
 
     public function cleanup(): void
     {
+        // Make sure processing is stopped
+        $this->stopProcessing();
+
         // Ensure terminal is in normal mode
         $this->restoreNormalMode();
         echo self::COLORS['reset'];
+
+        // Clear screen and show cursor
+        $this->clearScreen();
+        $this->moveCursor(1, 1);
+        echo "\033[?25h"; // Show cursor
     }
 
     // Additional utility methods for specific use cases
@@ -282,6 +336,12 @@ class TUIRenderer
         }
     }
 
+    public function clearScreen(): void
+    {
+        // Clear screen and scrollback buffer, then move cursor to top-left
+        echo "\033[2J\033[3J\033[H";
+    }
+
     protected function detectTerminalSize(): void
     {
         // Try to get terminal size
@@ -312,12 +372,6 @@ class TUIRenderer
     {
         // We no longer use persistent raw mode
         // Terminal modes are managed per-operation
-    }
-
-    protected function clearScreen(): void
-    {
-        // Clear screen and scrollback buffer, then move cursor to top-left
-        echo "\033[2J\033[3J\033[H";
     }
 
     protected function colorize(string $text, string $color, ?string $style = null): string
@@ -422,14 +476,14 @@ class TUIRenderer
         $currentTask = $status['current_task'] ?? null;
 
         if (empty($tasks) && ! $currentTask) {
-            echo $this->drawBoxLine('🎯 No active tasks', self::THEME['border'], self::THEME['muted']);
+            echo $this->drawBoxLine('🎯  No active tasks', self::THEME['border'], self::THEME['muted']);
 
             return;
         }
 
         if ($currentTask) {
             $currentDescription = $currentTask['description'] ?? '';
-            $content = '🎯 Current: ' . $currentDescription;
+            $content = '🎯  Current: ' . $currentDescription;
             echo $this->drawBoxLine($content, self::THEME['border'], self::THEME['accent']);
         }
 
@@ -441,7 +495,7 @@ class TUIRenderer
             $color = $this->getStatusColor($task['status']);
             $description = $task['description'] ?? '';
 
-            $content = "  {$icon} {$description}";
+            $content = "  {$icon}  {$description}";
             echo $this->drawBoxLine($content, self::THEME['border'], $color);
         }
 
@@ -480,11 +534,29 @@ class TUIRenderer
         if (empty($recentHistory)) {
             echo $this->drawBoxLine('No recent activity', self::THEME['border'], self::THEME['muted']);
         } else {
+            $availableWidth = $this->terminalWidth - 4; // Account for borders and padding
+
             foreach ($recentHistory as $entry) {
                 $icon = $entry['type'] === 'tool' ? '🔧' : ($entry['type'] === 'error' ? '❌' : '💬');
                 $message = $entry['message'] ?? '';
-                $content = "{$icon} {$message}";
-                echo $this->drawBoxLine($content, self::THEME['border'], $entry['color']);
+
+                // First, handle any newlines by replacing them with spaces
+                $cleanMessage = str_replace(["\r\n", "\r", "\n"], ' ', $message);
+
+                // Wrap the text to fit within the box
+                $wrappedLines = $this->wrapText($cleanMessage, $availableWidth);
+
+                // Display first line with icon
+                if (! empty($wrappedLines)) {
+                    $firstLine = "{$icon}  " . $wrappedLines[0];
+                    echo $this->drawBoxLine($firstLine, self::THEME['border'], $entry['color']);
+
+                    // Display subsequent lines with indentation
+                    for ($i = 1; $i < count($wrappedLines); $i++) {
+                        $continuationLine = '    ' . $wrappedLines[$i]; // 4 spaces to align with icon
+                        echo $this->drawBoxLine($continuationLine, self::THEME['border'], $entry['color']);
+                    }
+                }
             }
         }
     }
@@ -492,7 +564,7 @@ class TUIRenderer
     protected function drawFooter(): void
     {
         echo $this->drawBoxBottom(self::THEME['border']);
-        echo $this->colorize('💡 Commands: help | exit | clear', self::THEME['muted']) . "\n";
+        echo $this->colorize('💡  Commands: help | exit | clear', self::THEME['muted']) . "\n";
     }
 
     protected function restoreNormalMode(): void
@@ -586,8 +658,60 @@ class TUIRenderer
         $lines = 1; // Header
         $lines += 5; // Task status (minimum)
         $lines += 1; // Separator
-        $lines += min(8, count($this->history)) + 1; // Recent activity
+
+        // Count actual lines used by recent activity (including wrapped lines)
+        $recentHistory = array_slice($this->history, -8);
+        $availableWidth = $this->terminalWidth - 4;
+        $activityLines = 0;
+
+        foreach ($recentHistory as $entry) {
+            $message = $entry['message'] ?? '';
+            $cleanMessage = str_replace(["\r\n", "\r", "\n"], ' ', $message);
+            $wrappedLines = $this->wrapText($cleanMessage, $availableWidth);
+            $activityLines += count($wrappedLines);
+        }
+
+        $lines += max(1, $activityLines); // At least 1 line for "No recent activity"
         $lines += 2; // Footer
+
+        return $lines;
+    }
+
+    protected function wrapText(string $text, int $maxWidth): array
+    {
+        // Account for icon and spacing (about 4 characters)
+        $effectiveWidth = $maxWidth - 4;
+
+        if (mb_strlen($text) <= $effectiveWidth) {
+            return [$text];
+        }
+
+        $lines = [];
+        $words = explode(' ', $text);
+        $currentLine = '';
+
+        foreach ($words as $word) {
+            // If adding this word would exceed the width
+            if (mb_strlen($currentLine . ' ' . $word) > $effectiveWidth) {
+                if ($currentLine !== '') {
+                    $lines[] = trim($currentLine);
+                    $currentLine = $word;
+                } else {
+                    // Single word is too long, need to break it
+                    while (mb_strlen($word) > $effectiveWidth) {
+                        $lines[] = mb_substr($word, 0, $effectiveWidth);
+                        $word = mb_substr($word, $effectiveWidth);
+                    }
+                    $currentLine = $word;
+                }
+            } else {
+                $currentLine .= ($currentLine === '' ? '' : ' ') . $word;
+            }
+        }
+
+        if ($currentLine !== '') {
+            $lines[] = trim($currentLine);
+        }
 
         return $lines;
     }

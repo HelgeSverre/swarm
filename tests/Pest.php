@@ -27,3 +27,19 @@
 expect()->extend('toBeOne', function () {
     return $this->toBe(1);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Architecture Testing
+|--------------------------------------------------------------------------
+|
+| Architecture tests help ensure your application follows consistent patterns
+| and conventions. They can catch architectural violations early in development.
+|
+*/
+
+// You can enable the arch preset for additional built-in rules
+arch()->preset()->php();
+// arch()->preset()->security();
+// arch()->preset()->laravel(); // if using Laravel
+arch()->preset()->strict();

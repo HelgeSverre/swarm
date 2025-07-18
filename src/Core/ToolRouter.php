@@ -1,30 +1,66 @@
 <?php
 
-namespace HelgeSverre\Swarm\Router;
+namespace HelgeSverre\Swarm\Core;
 
 use Exception;
+use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
 use Psr\Log\LoggerInterface;
 
 class ToolRouter
 {
-    protected $tools = [];
+    protected array $tools = [];
 
-    protected $executionLog = [];
+    protected array $toolInstances = [];
 
-    protected ?LoggerInterface $logger;
+    protected array $executionLog = [];
 
-    public function __construct(?LoggerInterface $logger = null)
-    {
-        $this->logger = $logger;
-    }
+    public function __construct(
+        protected readonly ?LoggerInterface $logger = null
+    ) {}
 
     public function registerTool(string $name, callable $handler): self
     {
         $this->tools[$name] = $handler;
+
         $this->logger?->info('Tool registered', ['tool' => $name]);
 
         return $this;
+    }
+
+    public function register(Tool $tool): self
+    {
+        $name = $tool->name();
+        $this->tools[$name] = $tool->toCallable();
+        $this->toolInstances[$name] = $tool;
+
+        $this->logger?->info('Tool registered', ['tool' => $name]);
+
+        return $this;
+    }
+
+    public function getRegisteredTools(): array
+    {
+        return array_keys($this->tools);
+    }
+
+    public function getToolInstances(): array
+    {
+        return $this->toolInstances;
+    }
+
+    public function getToolSchemas(): array
+    {
+        $schemas = [];
+
+        // Get schemas from Tool instances
+        foreach ($this->toolInstances as $name => $tool) {
+            if ($tool instanceof Tool) {
+                $schemas[] = $tool->toOpenAISchema();
+            }
+        }
+
+        return $schemas;
     }
 
     public function dispatch(string $tool, array $params): ToolResponse

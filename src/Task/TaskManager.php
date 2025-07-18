@@ -6,16 +6,16 @@ use Psr\Log\LoggerInterface;
 
 class TaskManager
 {
-    public $currentTask = null;
+    public ?Task $currentTask = null;
 
+    /**
+     * @var Task[]
+     */
     protected array $tasks = [];
 
-    protected ?LoggerInterface $logger;
-
-    public function __construct(?LoggerInterface $logger = null)
-    {
-        $this->logger = $logger;
-    }
+    public function __construct(
+        protected readonly ?LoggerInterface $logger = null
+    ) {}
 
     public function addTasks(array $extractedTasks): void
     {

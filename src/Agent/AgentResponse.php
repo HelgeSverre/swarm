@@ -26,4 +26,21 @@ class AgentResponse
     {
         return $this->success ?? false;
     }
+
+    public function toArray(): array
+    {
+        return [
+            'message' => $this->message,
+            'success' => $this->success,
+        ];
+    }
+
+    public static function fromArray(array $data): self
+    {
+        $instance = new self;
+        $instance->message = $data['message'] ?? '';
+        $instance->success = $data['success'] ?? false;
+
+        return $instance;
+    }
 }

@@ -44,10 +44,17 @@ foreach ($envPaths as $envPath) {
     }
 }
 
-// Run the CLI
+// Run the CLI with better exception handling
 try {
     require __DIR__ . '/../cli.php';
-} catch (Exception $e) {
-    echo "Error: " . $e->getMessage() . "\n";
+} catch (Throwable $e) {
+    // Try to use our exception handler if available
+    if (class_exists('HelgeSverre\Swarm\Core\ExceptionHandler')) {
+        $handler = new HelgeSverre\Swarm\Core\ExceptionHandler();
+        exit($handler->handle($e));
+    }
+    
+    // Fallback to basic error display
+    fwrite(STDERR, "\033[31mError: " . $e->getMessage() . "\033[0m\n");
     exit(1);
 }

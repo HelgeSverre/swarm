@@ -1,14 +1,14 @@
 <?php
 
-namespace HelgeSverre\Swarm\Router;
+namespace HelgeSverre\Swarm\Core;
 
 class ToolResponse
 {
-    protected $success;
+    protected bool $success = false;
 
-    protected $data;
+    protected ?array $data = null;
 
-    protected $error;
+    protected mixed $error = null;
 
     public static function success(array $data): self
     {
@@ -28,9 +28,19 @@ class ToolResponse
         return $instance;
     }
 
+    public function isSuccess(): bool
+    {
+        return $this->success;
+    }
+
     public function getData(): array
     {
         return $this->data ?? [];
+    }
+
+    public function getError(): ?string
+    {
+        return $this->error;
     }
 
     public function toArray(): array
