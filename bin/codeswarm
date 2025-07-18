@@ -1,0 +1,50 @@
+#!/usr/bin/env php
+<?php
+
+// Find and load the autoloader
+use Dotenv\Dotenv;
+
+$possibleAutoloaders = [
+    __DIR__ . '/../vendor/autoload.php',     // Local development
+    __DIR__ . '/../../../autoload.php',      // Installed as dependency
+    __DIR__ . '/../../vendor/autoload.php',  // Alternative structure
+];
+
+$autoloaderFound = false;
+foreach ($possibleAutoloaders as $autoloader) {
+    if (file_exists($autoloader)) {
+        require $autoloader;
+        $autoloaderFound = true;
+        break;
+    }
+}
+
+if (!$autoloaderFound) {
+    die("Could not find autoloader. Please run 'composer install' first.\n");
+}
+
+// Change to the directory where the script was called from
+$workingDir = getcwd();
+chdir($workingDir);
+
+// Look for .env file in current directory or script directory
+$envPaths = [
+    $workingDir . '/.env',
+    __DIR__ . '/../.env',
+];
+
+foreach ($envPaths as $envPath) {
+    if (file_exists($envPath)) {
+        $dotenv = Dotenv::createImmutable(dirname($envPath));
+        $dotenv->load();
+        break;
+    }
+}
+
+// Run the CLI
+try {
+    require __DIR__ . '/../cli.php';
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+    exit(1);
+}
