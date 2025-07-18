@@ -43,9 +43,13 @@ class PromptTemplates
     /**
      * System prompt for task execution with functions
      */
-    public static function executionSystem(): string
+    public static function executionSystem(string $toolDescriptions = ''): string
     {
-        return 'You are a helpful coding assistant. Use the provided functions to complete tasks. ' .
+        $toolInfo = $toolDescriptions ? "Available tools: {$toolDescriptions}. " : '';
+
+        return 'You are a helpful coding assistant. ' .
+            $toolInfo .
+            'Use the provided functions to complete tasks. ' .
             'Remember the context from our previous conversation.';
     }
 
@@ -72,9 +76,12 @@ class PromptTemplates
     /**
      * System prompt for conversations
      */
-    public static function conversationSystem(): string
+    public static function conversationSystem(string $toolDescriptions = ''): string
     {
+        $toolInfo = $toolDescriptions ? "You have access to these tools: {$toolDescriptions}. " : 'You have access to various tools. ';
+
         return 'You are a helpful coding assistant engaged in conversation with the user. ' .
+            $toolInfo .
             'Provide helpful, informative responses. Remember the context from our previous conversation. ' .
             'If the user asks for code examples, provide them in markdown format.';
     }

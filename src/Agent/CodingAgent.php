@@ -3,7 +3,7 @@
 namespace HelgeSverre\Swarm\Agent;
 
 use Exception;
-use HelgeSverre\Swarm\Core\ToolRouter;
+use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Prompts\PromptTemplates;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI;
@@ -17,7 +17,7 @@ class CodingAgent
     protected $progressCallback = null;
 
     public function __construct(
-        protected readonly ToolRouter $toolRouter,
+        protected readonly ToolExecutor $toolExecutor,
         protected readonly TaskManager $taskManager,
         protected readonly OpenAI\Contracts\ClientContract $llmClient,
         protected readonly ?LoggerInterface $logger = null,
@@ -52,13 +52,8 @@ class CodingAgent
             return $this->handleExplanation($userInput);
         }
 
-        // Handle general queries or conversations
-        if ($classification['request_type'] === 'query' || $classification['request_type'] === 'conversation') {
-            return $this->handleConversation($userInput);
-        }
-
-        // Extract tasks for implementation requests or tool-requiring requests
-        if ($classification['request_type'] === 'implementation' || $classification['requires_tools']) {
+        // Check if request requires tools first
+        if ($classification['requires_tools'] || $classification['request_type'] === 'implementation') {
             $this->reportProgress('extracting_tasks', ['message' => 'Identifying tasks to complete...']);
             $tasks = $this->extractTasks($userInput);
 
@@ -96,7 +91,12 @@ class CodingAgent
             }
         }
 
-        // Default to conversation if no tasks were found
+        // Handle general queries or conversations without tools
+        if ($classification['request_type'] === 'query' || $classification['request_type'] === 'conversation') {
+            return $this->handleConversation($userInput);
+        }
+
+        // Default to conversation if no other handler matched
         return $this->handleConversation($userInput);
     }
 
@@ -106,6 +106,38 @@ class CodingAgent
             'tasks' => $this->taskManager->getTasks(),
             'current_task' => $this->taskManager->currentTask?->toArray(),
         ];
+    }
+
+    /**
+     * Get recent conversation history for display
+     */
+    public function getConversationHistory(int $limit = 10): array
+    {
+        // Get recent history, filtering out tool responses for cleaner display
+        $history = array_slice($this->conversationHistory, -$limit);
+
+        return array_map(function ($entry) {
+            return [
+                'role' => $entry['role'],
+                'content' => $this->truncateContent($entry['content']),
+                'timestamp' => $entry['timestamp'],
+            ];
+        }, array_filter($history, function ($entry) {
+            // Include user, assistant messages, but not tool or error messages
+            return in_array($entry['role'], ['user', 'assistant']);
+        }));
+    }
+
+    /**
+     * Truncate content for display purposes
+     */
+    protected function truncateContent(string $content, int $maxLength = 200): string
+    {
+        if (mb_strlen($content) <= $maxLength) {
+            return $content;
+        }
+
+        return mb_substr($content, 0, $maxLength - 3) . '...';
     }
 
     /**
@@ -121,7 +153,7 @@ class CodingAgent
     protected function getToolFunctions(): array
     {
         // Get schemas dynamically from registered tools
-        return $this->toolRouter->getToolSchemas();
+        return $this->toolExecutor->getToolSchemas();
     }
 
     protected function addToHistory(string $role, string $content): void
@@ -142,7 +174,7 @@ class CodingAgent
     {
         // Default system prompt if none provided
         if ($systemPrompt === null) {
-            $systemPrompt = PromptTemplates::defaultSystem($this->toolRouter->getRegisteredTools());
+            $systemPrompt = PromptTemplates::defaultSystem($this->toolExecutor->getRegisteredTools());
         }
 
         $messages = [
@@ -392,7 +424,7 @@ class CodingAgent
         $startTime = microtime(true);
 
         // Build messages with history
-        $systemPrompt = PromptTemplates::executionSystem();
+        $systemPrompt = PromptTemplates::executionSystem($this->toolExecutor->getToolDescriptions());
         $messages = $this->buildMessagesWithHistory($prompt, $systemPrompt);
 
         $this->logger?->debug('OpenAI function call request', [
@@ -506,7 +538,7 @@ class CodingAgent
                                             ],
                                             'tool_needed' => [
                                                 'type' => 'string',
-                                                'description' => 'Which tool to use (read_file, write_file, find_files, search_content, bash)',
+                                                'description' => 'Which tool to use (read_file, write_file, grep, bash)',
                                             ],
                                             'expected_outcome' => [
                                                 'type' => 'string',
@@ -613,7 +645,7 @@ class CodingAgent
                     'params' => $toolCall['arguments'],
                 ]);
 
-                $result = $this->toolRouter->dispatch($toolCall['name'], $toolCall['arguments']);
+                $result = $this->toolExecutor->dispatch($toolCall['name'], $toolCall['arguments']);
                 $this->addToHistory('tool', "Tool: {$toolCall['name']}\nParams: " . json_encode($toolCall['arguments']) . "\nResult: " . json_encode($result->toArray()));
             } catch (Exception $e) {
                 $this->logger?->error('Tool execution failed during task', [
@@ -641,7 +673,7 @@ class CodingAgent
 
     protected function getRecentToolLog(): string
     {
-        $log = $this->toolRouter->getExecutionLog();
+        $log = $this->toolExecutor->getExecutionLog();
         $recent = array_slice($log, -5); // Last 5 tool calls
 
         return json_encode($recent, JSON_PRETTY_PRINT);
@@ -673,7 +705,7 @@ class CodingAgent
     {
         $this->logger?->info('Handling conversation/query');
 
-        $systemPrompt = PromptTemplates::conversationSystem();
+        $systemPrompt = PromptTemplates::conversationSystem($this->toolExecutor->getToolDescriptions());
 
         $response = $this->callOpenAI($userInput, $systemPrompt);
 

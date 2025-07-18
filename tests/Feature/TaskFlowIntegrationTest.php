@@ -1,16 +1,16 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\ToolRegistry;
-use HelgeSverre\Swarm\Core\ToolRouter;
+use HelgeSverre\Swarm\Core\Toolchain;
+use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
 use OpenAI\Testing\ClientFake;
 use Psr\Log\NullLogger;
 
 test('full task lifecycle from extraction to completion', function () {
-    $router = new ToolRouter(new NullLogger);
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor(new NullLogger);
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -115,7 +115,7 @@ test('full task lifecycle from extraction to completion', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -147,8 +147,8 @@ test('full task lifecycle from extraction to completion', function () {
 });
 
 test('multiple tasks are processed sequentially', function () {
-    $router = new ToolRouter(new NullLogger);
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor(new NullLogger);
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -295,7 +295,7 @@ test('multiple tasks are processed sequentially', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -327,7 +327,7 @@ test('multiple tasks are processed sequentially', function () {
 });
 
 test('agent handles conversation when no tasks extracted', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -361,7 +361,7 @@ test('agent handles conversation when no tasks extracted', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -377,7 +377,7 @@ test('agent handles conversation when no tasks extracted', function () {
 });
 
 test('task execution handles errors gracefully', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -463,7 +463,7 @@ test('task execution handles errors gracefully', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,

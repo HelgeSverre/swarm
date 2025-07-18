@@ -1,38 +1,38 @@
 <?php
 
+use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Core\ToolResponse;
-use HelgeSverre\Swarm\Core\ToolRouter;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
 
 test('can register and dispatch tools', function () {
-    $router = new ToolRouter;
+    $executor = new ToolExecutor;
 
-    $router->registerTool('test_tool', function ($params) {
+    $executor->registerTool('test_tool', function ($params) {
         return ToolResponse::success(['result' => 'Hello ' . $params['name']]);
     });
 
-    $response = $router->dispatch('test_tool', ['name' => 'World']);
+    $response = $executor->dispatch('test_tool', ['name' => 'World']);
 
     expect($response)->toBeInstanceOf(ToolResponse::class);
     expect($response->getData())->toBe(['result' => 'Hello World']);
 });
 
 test('throws exception for unknown tool', function () {
-    $router = new ToolRouter;
+    $executor = new ToolExecutor;
 
-    $router->dispatch('unknown_tool', []);
+    $executor->dispatch('unknown_tool', []);
 })->throws(ToolNotFoundException::class, "Tool 'unknown_tool' not found");
 
 test('logs tool execution', function () {
-    $router = new ToolRouter;
+    $executor = new ToolExecutor;
 
-    $router->registerTool('logged_tool', function ($params) {
+    $executor->registerTool('logged_tool', function ($params) {
         return ToolResponse::success(['done' => true]);
     });
 
-    $router->dispatch('logged_tool', ['test' => 'param']);
+    $executor->dispatch('logged_tool', ['test' => 'param']);
 
-    $log = $router->getExecutionLog();
+    $log = $executor->getExecutionLog();
 
     expect($log)->toHaveCount(2);
     expect($log[0])->toMatchArray([
@@ -48,19 +48,19 @@ test('logs tool execution', function () {
 });
 
 test('logs failed tool execution', function () {
-    $router = new ToolRouter;
+    $executor = new ToolExecutor;
 
-    $router->registerTool('failing_tool', function ($params) {
+    $executor->registerTool('failing_tool', function ($params) {
         throw new Exception('Tool failed');
     });
 
     try {
-        $router->dispatch('failing_tool', []);
+        $executor->dispatch('failing_tool', []);
     } catch (Exception $e) {
         // Expected
     }
 
-    $log = $router->getExecutionLog();
+    $log = $executor->getExecutionLog();
 
     expect($log)->toHaveCount(2);
     expect($log[0])->toMatchArray([

@@ -20,7 +20,7 @@ class ExceptionHandler
     /**
      * Handle an exception/throwable
      */
-    public function handle(Throwable $e): int
+    public function handle(Throwable $e): void
     {
         // Log the exception with full context
         $this->logException($e);
@@ -28,8 +28,8 @@ class ExceptionHandler
         // Display error to stderr (won't interfere with TUI)
         $this->displayError($e);
 
-        // Return appropriate exit code
-        return $this->getExitCode($e);
+        // Exit with appropriate code
+        exit($this->getExitCode($e));
     }
 
     /**

@@ -1,15 +1,15 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\ToolRegistry;
-use HelgeSverre\Swarm\Core\ToolRouter;
+use HelgeSverre\Swarm\Core\Toolchain;
+use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
 use OpenAI\Testing\ClientFake;
 
 test('agent extracts tasks using function calling', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager;
 
@@ -37,7 +37,7 @@ test('agent extracts tasks using function calling', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         null,
@@ -68,8 +68,8 @@ test('agent extracts tasks using function calling', function () {
 });
 
 test('agent executes task with function calling', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager;
 
@@ -108,7 +108,7 @@ test('agent executes task with function calling', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         null,
@@ -131,7 +131,7 @@ test('agent executes task with function calling', function () {
     $method->invoke($agent, $task);
 
     // Verify tool was called
-    $log = $router->getExecutionLog();
+    $log = $executor->getExecutionLog();
 
     // The agent should have executed the read_file tool
     // Since we're testing the method directly, we just verify the router was used
@@ -148,7 +148,7 @@ test('agent executes task with function calling', function () {
 });
 
 test('agent handles no function call response', function () {
-    $router = new ToolRouter;
+    $executor = new ToolExecutor;
     $taskManager = new TaskManager;
 
     // Create fake OpenAI client with regular response (no function call)
@@ -166,7 +166,7 @@ test('agent handles no function call response', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         null,
@@ -185,8 +185,8 @@ test('agent handles no function call response', function () {
 });
 
 test('agent correctly passes tool schemas to OpenAI', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager;
 
@@ -209,7 +209,7 @@ test('agent correctly passes tool schemas to OpenAI', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         null,
@@ -218,7 +218,7 @@ test('agent correctly passes tool schemas to OpenAI', function () {
     );
 
     // Get tool schemas from router
-    $toolSchemas = $router->getToolSchemas();
+    $toolSchemas = $executor->getToolSchemas();
 
     // Use reflection to call callOpenAIWithFunctions
     $reflection = new ReflectionClass($agent);

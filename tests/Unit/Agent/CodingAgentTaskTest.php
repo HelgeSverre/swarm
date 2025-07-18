@@ -1,15 +1,15 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\ToolRegistry;
-use HelgeSverre\Swarm\Core\ToolRouter;
+use HelgeSverre\Swarm\Core\Toolchain;
+use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
 use OpenAI\Testing\ClientFake;
 use Psr\Log\NullLogger;
 
 test('extractTasks successfully extracts tasks from function call', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -35,7 +35,7 @@ test('extractTasks successfully extracts tasks from function call', function () 
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -57,7 +57,7 @@ test('extractTasks successfully extracts tasks from function call', function () 
 });
 
 test('extractTasks returns empty array when no function call', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -74,7 +74,7 @@ test('extractTasks returns empty array when no function call', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -92,7 +92,7 @@ test('extractTasks returns empty array when no function call', function () {
 });
 
 test('extractTasks handles malformed JSON gracefully', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -113,7 +113,7 @@ test('extractTasks handles malformed JSON gracefully', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -131,7 +131,7 @@ test('extractTasks handles malformed JSON gracefully', function () {
 });
 
 test('planTask sends correct prompt and updates task manager', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $planResponse = json_encode([
@@ -159,7 +159,7 @@ test('planTask sends correct prompt and updates task manager', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -186,8 +186,8 @@ test('planTask sends correct prompt and updates task manager', function () {
 });
 
 test('executeTask processes tool calls until completion', function () {
-    $router = new ToolRouter(new NullLogger);
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor(new NullLogger);
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -225,7 +225,7 @@ test('executeTask processes tool calls until completion', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -256,8 +256,8 @@ test('executeTask processes tool calls until completion', function () {
 });
 
 test('executeTask stops after max iterations', function () {
-    $router = new ToolRouter(new NullLogger);
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor(new NullLogger);
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -285,7 +285,7 @@ test('executeTask stops after max iterations', function () {
     $client = new ClientFake($responses);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -309,12 +309,12 @@ test('executeTask stops after max iterations', function () {
 
     // Verify it made calls but stopped at max iterations
     // The exact count might vary due to other tests, so just verify it's reasonable
-    $executionLog = $router->getExecutionLog();
+    $executionLog = $executor->getExecutionLog();
     expect(count($executionLog))->toBeGreaterThan(0);
 });
 
 test('generateTaskSummary creates meaningful summary', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -331,7 +331,7 @@ test('generateTaskSummary creates meaningful summary', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -355,7 +355,7 @@ test('generateTaskSummary creates meaningful summary', function () {
 });
 
 test('conversation history is maintained', function () {
-    $router = new ToolRouter(new NullLogger);
+    $executor = new ToolExecutor(new NullLogger);
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -400,7 +400,7 @@ test('conversation history is maintained', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,

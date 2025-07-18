@@ -1,21 +1,20 @@
 <?php
 
-use HelgeSverre\Swarm\Core\ToolRegistry;
-use HelgeSverre\Swarm\Core\ToolRouter;
+use HelgeSverre\Swarm\Core\Toolchain;
+use HelgeSverre\Swarm\Core\ToolExecutor;
 
 test('function calling schemas are properly formatted', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
-    $schemas = $router->getToolSchemas();
+    $schemas = $executor->getToolSchemas();
 
     // Verify we have all expected tools
     $toolNames = array_column($schemas, 'name');
     expect($toolNames)->toContain('read_file')
         ->and($toolNames)->toContain('write_file')
         ->and($toolNames)->toContain('bash')
-        ->and($toolNames)->toContain('find_files')
-        ->and($toolNames)->toContain('search_content');
+        ->and($toolNames)->toContain('grep');
 
     // Verify bash tool schema is correct
     $bashSchema = null;
@@ -33,11 +32,11 @@ test('function calling schemas are properly formatted', function () {
 });
 
 test('tools execute correctly with function call parameters', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     // Test bash tool execution
-    $result = $router->dispatch('bash', [
+    $result = $executor->dispatch('bash', [
         'command' => 'echo "Function calling works!"',
     ]);
 
@@ -48,14 +47,14 @@ test('tools execute correctly with function call parameters', function () {
     $testFile = sys_get_temp_dir() . '/test_fc.txt';
 
     // Write file
-    $result = $router->dispatch('write_file', [
+    $result = $executor->dispatch('write_file', [
         'path' => $testFile,
         'content' => 'Testing function calls',
     ]);
     expect($result->isSuccess())->toBeTrue();
 
     // Read file
-    $result = $router->dispatch('read_file', [
+    $result = $executor->dispatch('read_file', [
         'path' => $testFile,
     ]);
     expect($result->isSuccess())->toBeTrue()
@@ -66,13 +65,13 @@ test('tools execute correctly with function call parameters', function () {
 });
 
 test('function parameters are validated and defaults applied', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     // Test write_file with default backup parameter
     $testFile = sys_get_temp_dir() . '/test_defaults.txt';
 
-    $result = $router->dispatch('write_file', [
+    $result = $executor->dispatch('write_file', [
         'path' => $testFile,
         'content' => 'Test content',
         // backup parameter should default to true
@@ -90,8 +89,8 @@ test('function parameters are validated and defaults applied', function () {
 });
 
 test('search tools work with function parameters', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     // Create test files
     $testDir = sys_get_temp_dir() . '/test_search_' . uniqid();
@@ -99,17 +98,18 @@ test('search tools work with function parameters', function () {
     file_put_contents($testDir . '/test.php', '<?php echo "test";');
     file_put_contents($testDir . '/test.txt', 'test content');
 
-    // Test find_files
-    $result = $router->dispatch('find_files', [
+    // Test grep for finding files
+    $result = $executor->dispatch('grep', [
         'pattern' => '*.php',
         'directory' => $testDir,
+        'files_only' => true,
     ]);
 
     expect($result->isSuccess())->toBeTrue()
         ->and($result->getData()['count'])->toBe(1);
 
-    // Test search_content
-    $result = $router->dispatch('search_content', [
+    // Test grep for searching content
+    $result = $executor->dispatch('grep', [
         'search' => 'echo',
         'directory' => $testDir,
     ]);

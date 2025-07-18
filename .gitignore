@@ -36,3 +36,6 @@ coverage/
 # Code Quality Tools
 .php-cs-fixer.cache
 .pint.cache
+
+# Swarm state file
+.swarm.json

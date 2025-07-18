@@ -7,7 +7,7 @@ use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
 use Psr\Log\LoggerInterface;
 
-class ToolRouter
+class ToolExecutor
 {
     protected array $tools = [];
 
@@ -71,6 +71,22 @@ class ToolRouter
         }
 
         return $schemas;
+    }
+
+    /**
+     * Get formatted tool descriptions for prompts
+     */
+    public function getToolDescriptions(): string
+    {
+        $descriptions = [];
+
+        foreach ($this->toolInstances as $name => $tool) {
+            if ($tool instanceof Tool) {
+                $descriptions[] = "{$name}: {$tool->description()}";
+            }
+        }
+
+        return implode(', ', $descriptions);
     }
 
     public function dispatch(string $tool, array $params): ToolResponse

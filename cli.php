@@ -19,6 +19,12 @@ use Monolog\Handler\RotatingFileHandler;
 use Monolog\Level;
 use Monolog\Logger;
 
+// Set unlimited execution time for the main CLI process
+set_time_limit(0);
+
+// Ensure we can handle large memory usage
+ini_set('memory_limit', '4G');
+
 // Create logger for exception handler
 $logger = null;
 if ($_ENV['LOG_ENABLED'] ?? false) {

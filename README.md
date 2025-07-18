@@ -142,12 +142,27 @@ php test_agent.php
 
 Environment variables (in `.env`):
 
+### OpenAI Settings
 - `OPENAI_API_KEY`: Your OpenAI API key (required)
 - `OPENAI_MODEL`: Model to use (default: gpt-4)
 - `OPENAI_TEMPERATURE`: Temperature for responses (default: 0.7)
+
+### Logging Settings  
 - `LOG_ENABLED`: Enable file logging (true/false)
 - `LOG_PATH`: Log directory (default: storage/logs)
 - `LOG_LEVEL`: Log level (debug, info, warning, error)
+
+### Timeout Settings
+- `SWARM_REQUEST_TIMEOUT`: Per-request timeout in seconds (default: 600 = 10 minutes)
+- `SWARM_SUBPROCESS_TIMEOUT`: Subprocess timeout in seconds (default: 300 = 5 minutes)
+- `SWARM_HEARTBEAT_INTERVAL`: Heartbeat interval in seconds (default: 30)
+- `SWARM_TIMEOUT_RETRY_ENABLED`: Enable retry suggestion on timeout (default: true)
+
+**Note on Running the App**: 
+- When using `composer swarm`, Composer enforces its own 300-second timeout
+- For long-running operations, use `./bin/swarm` directly to avoid Composer timeouts
+- The main CLI process runs with unlimited execution time
+- Individual requests and subprocesses have configurable timeouts
 
 ## Advanced Features
 

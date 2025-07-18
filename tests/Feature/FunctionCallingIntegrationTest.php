@@ -1,16 +1,16 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\ToolRegistry;
-use HelgeSverre\Swarm\Core\ToolRouter;
+use HelgeSverre\Swarm\Core\Toolchain;
+use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
 use OpenAI\Testing\ClientFake;
 use Psr\Log\NullLogger;
 
 test('agent correctly extracts tasks using function calling', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager;
 
@@ -38,7 +38,7 @@ test('agent correctly extracts tasks using function calling', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         new NullLogger,
@@ -60,8 +60,8 @@ test('agent correctly extracts tasks using function calling', function () {
 });
 
 test('agent selects correct tool based on task description', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     $testCases = [
         [
@@ -81,12 +81,12 @@ test('agent selects correct tool based on task description', function () {
         ],
         [
             'prompt' => 'Find all markdown files',
-            'expectedTool' => 'find_files',
+            'expectedTool' => 'grep',
             'expectedParams' => ['pattern' => '*.md'],
         ],
         [
             'prompt' => 'Search for TODO comments',
-            'expectedTool' => 'search_content',
+            'expectedTool' => 'grep',
             'expectedParams' => ['search' => 'TODO'],
         ],
     ];
@@ -113,7 +113,7 @@ test('agent selects correct tool based on task description', function () {
         ]);
 
         $agent = new CodingAgent(
-            $router,
+            $executor,
             $taskManager,
             $client,
             null,
@@ -122,7 +122,7 @@ test('agent selects correct tool based on task description', function () {
         );
 
         // Get tool schemas directly from router to verify they include the expected tool
-        $toolSchemas = $router->getToolSchemas();
+        $toolSchemas = $executor->getToolSchemas();
         $toolNames = array_column($toolSchemas, 'name');
 
         expect($toolNames)->toContain($testCase['expectedTool']);
@@ -130,8 +130,8 @@ test('agent selects correct tool based on task description', function () {
 });
 
 test('agent handles function call responses correctly', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
     $taskManager = new TaskManager;
 
@@ -158,7 +158,7 @@ test('agent handles function call responses correctly', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         null,
@@ -172,7 +172,7 @@ test('agent handles function call responses correctly', function () {
     $method->setAccessible(true);
 
     // Get tool schemas from router
-    $toolSchemas = $router->getToolSchemas();
+    $toolSchemas = $executor->getToolSchemas();
     $result = $method->invoke($agent, 'Read the file at /tmp/test_function_call.txt', $toolSchemas);
 
     expect($result)->toBeArray()
@@ -185,7 +185,7 @@ test('agent handles function call responses correctly', function () {
 });
 
 test('agent handles no function call response correctly', function () {
-    $router = new ToolRouter;
+    $executor = new ToolExecutor;
     $taskManager = new TaskManager;
 
     // Mock a regular response without function call
@@ -203,7 +203,7 @@ test('agent handles no function call response correctly', function () {
     ]);
 
     $agent = new CodingAgent(
-        $router,
+        $executor,
         $taskManager,
         $client,
         null,

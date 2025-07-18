@@ -1,18 +1,17 @@
 <?php
 
-use HelgeSverre\Swarm\Core\ToolRegistry;
-use HelgeSverre\Swarm\Core\ToolRouter;
-use HelgeSverre\Swarm\Tools\FindFiles;
+use HelgeSverre\Swarm\Core\Toolchain;
+use HelgeSverre\Swarm\Core\ToolExecutor;
+use HelgeSverre\Swarm\Tools\Grep;
 use HelgeSverre\Swarm\Tools\ReadFile;
-use HelgeSverre\Swarm\Tools\Search;
 use HelgeSverre\Swarm\Tools\Terminal;
 use HelgeSverre\Swarm\Tools\WriteFile;
 
 test('tool schemas are properly formatted for OpenAI function calling', function () {
-    $router = new ToolRouter;
-    ToolRegistry::registerAll($router);
+    $executor = new ToolExecutor;
+    Toolchain::registerAll($executor);
 
-    $schemas = $router->getToolSchemas();
+    $schemas = $executor->getToolSchemas();
 
     foreach ($schemas as $schema) {
         // Each schema must have required fields for OpenAI
@@ -68,28 +67,28 @@ test('required parameters are correctly defined in schemas', function () {
 });
 
 test('tools can be dispatched with function call parameters', function () {
-    $router = new ToolRouter;
-    $router->register(new Terminal);
+    $executor = new ToolExecutor;
+    $executor->register(new Terminal);
 
     // Simulate function call parameters from OpenAI
     $functionCallParams = [
         'command' => 'echo "Hello from function call"',
     ];
 
-    $result = $router->dispatch('bash', $functionCallParams);
+    $result = $executor->dispatch('bash', $functionCallParams);
 
     expect($result->isSuccess())->toBeTrue()
         ->and($result->getData()['stdout'])->toContain('Hello from function call');
 });
 
 test('default parameters work correctly when not provided in function call', function () {
-    $router = new ToolRouter;
-    $router->register(new WriteFile);
+    $executor = new ToolExecutor;
+    $executor->register(new WriteFile);
 
     $testFile = sys_get_temp_dir() . '/test_defaults.txt';
 
     // Call without backup parameter (should use default true)
-    $result = $router->dispatch('write_file', [
+    $result = $executor->dispatch('write_file', [
         'path' => $testFile,
         'content' => 'test content',
     ]);
@@ -103,19 +102,18 @@ test('default parameters work correctly when not provided in function call', fun
 });
 
 test('search tool parameter mapping works with router dependency', function () {
-    $router = new ToolRouter;
-    $router->register(new FindFiles);
-    $router->register(new Search($router));
+    $executor = new ToolExecutor;
+    $executor->register(new Grep);
 
-    $schemas = $router->getToolSchemas();
+    $schemas = $executor->getToolSchemas();
     $searchSchema = null;
     foreach ($schemas as $schema) {
-        if ($schema['name'] === 'search_content') {
+        if ($schema['name'] === 'grep') {
             $searchSchema = $schema;
             break;
         }
     }
 
     expect($searchSchema['parameters']['properties'])->toHaveKeys(['search', 'pattern', 'directory', 'case_sensitive'])
-        ->and($searchSchema['parameters']['required'])->toBe(['search']);
+        ->and($searchSchema['parameters']['required'])->toBe([]);
 });

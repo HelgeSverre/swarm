@@ -7,14 +7,14 @@ namespace HelgeSverre\Swarm\CLI;
 use HelgeSverre\Swarm\Agent\AgentResponse;
 
 /**
- * TUIRenderer: Rich Terminal User Interface for CodeSwarm CLI
+ * Rich Terminal User Interface for Swarm CLI
  *
  * Uses ANSI escape codes for colors, positioning, and formatting
  * Provides a real-time updating interface similar to modern CLI tools
  */
 class TUIRenderer
 {
-    // ANSI Color codes
+    /** @var array<string, string> ANSI Color codes */
     protected const array COLORS = [
         'reset' => "\033[0m",
         'bold' => "\033[1m",
@@ -38,7 +38,7 @@ class TUIRenderer
         'bright_white' => "\033[97m",
     ];
 
-    // Theme colors
+    /** @var array<string, string> Theme colors */
     protected const THEME = [
         'border' => 'dark_gray',
         'header' => 'bright_white',
@@ -50,7 +50,7 @@ class TUIRenderer
         'muted' => 'gray',
     ];
 
-    // Box drawing characters
+    /** @var array<string, string> Box drawing characters */
     protected const array BOX = [
         'horizontal' => '─',
         'vertical' => '│',
@@ -65,7 +65,7 @@ class TUIRenderer
         'tee_left' => '┤',
     ];
 
-    // Status icons
+    /** @var array<string, string> Status icons */
     protected const array ICONS = [
         'pending' => '⏸',
         'planned' => '📋',
@@ -296,7 +296,7 @@ class TUIRenderer
         $this->drawHeader();
         $this->drawTaskStatus($status);
         echo "\n"; // Add spacing between sections
-        $this->drawRecentActivity();
+        $this->drawRecentActivity($status);
         $this->drawFooter();
 
         // Leave space for input box at the bottom
@@ -497,9 +497,14 @@ class TUIRenderer
     {
         $tasks = $status['tasks'] ?? [];
         $currentTask = $status['current_task'] ?? null;
+        $operation = $status['operation'] ?? '';
 
         if (empty($tasks) && ! $currentTask) {
-            echo $this->drawBoxLine('🎯  No active tasks', self::THEME['border'], self::THEME['muted']);
+            if ($operation) {
+                echo $this->drawBoxLine('⚡ ' . ucfirst($operation), self::THEME['border'], self::THEME['accent']);
+            } else {
+                echo $this->drawBoxLine('🎯  No active tasks', self::THEME['border'], self::THEME['muted']);
+            }
 
             return;
         }
@@ -562,18 +567,67 @@ class TUIRenderer
         };
     }
 
-    protected function drawRecentActivity(): void
+    protected function getActivityColor(string $type): string
+    {
+        return match ($type) {
+            'agent' => 'white',
+            'user' => 'bright_white',
+            'tool' => 'cyan',
+            'error' => 'bright_red',
+            'notification' => 'bright_cyan',
+            default => 'white'
+        };
+    }
+
+    protected function drawRecentActivity(array $status = []): void
     {
         echo $this->drawBoxSeparator('Recent Activity', self::THEME['border']);
 
-        $recentHistory = array_slice($this->history, -8);
+        // Combine conversation history and tool log from synced state
+        $activity = [];
 
-        if (empty($recentHistory)) {
+        // Add conversation history
+        if (isset($status['conversation_history'])) {
+            foreach ($status['conversation_history'] as $entry) {
+                $type = $entry['role'] === 'user' ? 'user' : 'agent';
+                $activity[] = [
+                    'type' => $type,
+                    'message' => $entry['content'],
+                    'timestamp' => $entry['timestamp'] ?? time(),
+                    'color' => $this->getActivityColor($type),
+                ];
+            }
+        }
+
+        // Add tool executions
+        if (isset($status['tool_log'])) {
+            foreach ($status['tool_log'] as $log) {
+                if ($log['status'] === 'completed' && isset($log['tool'])) {
+                    $activity[] = [
+                        'type' => 'tool',
+                        'message' => "🔧 {$log['tool']}" . (isset($log['params']['path']) ? ": {$log['params']['path']}" : ''),
+                        'timestamp' => $log['timestamp'] ?? time(),
+                        'color' => $this->getActivityColor('tool'),
+                    ];
+                }
+            }
+        }
+
+        // Sort by timestamp and get recent items
+        usort($activity, fn ($a, $b) => ($a['timestamp'] ?? 0) - ($b['timestamp'] ?? 0));
+        $recentActivity = array_slice($activity, -8);
+
+        // Fallback to internal history if no synced data
+        if (empty($recentActivity)) {
+            $recentActivity = array_slice($this->history, -8);
+        }
+
+        if (empty($recentActivity)) {
             echo $this->drawBoxLine('No recent activity', self::THEME['border'], self::THEME['muted']);
         } else {
             $availableWidth = $this->terminalWidth - 4; // Account for borders and padding
 
-            foreach ($recentHistory as $entry) {
+            foreach ($recentActivity as $entry) {
                 $icon = match ($entry['type']) {
                     'tool' => '🔧',
                     'error' => '❌',
@@ -597,13 +651,13 @@ class TUIRenderer
                     } else {
                         $firstLine = "{$icon}  " . $wrappedLines[0];
                     }
-                    echo $this->drawBoxLine($firstLine, self::THEME['border'], $entry['color']);
+                    echo $this->drawBoxLine($firstLine, self::THEME['border'], $entry['color'] ?? 'white');
 
                     // Display subsequent lines with indentation
                     for ($i = 1; $i < count($wrappedLines); $i++) {
                         $indentSpaces = ($entry['type'] === 'notification') ? '  ' : '    '; // Less indent for notifications
                         $continuationLine = $indentSpaces . $wrappedLines[$i];
-                        echo $this->drawBoxLine($continuationLine, self::THEME['border'], $entry['color']);
+                        echo $this->drawBoxLine($continuationLine, self::THEME['border'], $entry['color'] ?? 'white');
                     }
                 }
             }

@@ -30,13 +30,13 @@ test('write file tool generates correct schema', function () {
         ->and($schema['parameters']['required'])->toBe(['path', 'content']);
 });
 
-test('tool router collects schemas from registered tools', function () {
-    $router = new HelgeSverre\Swarm\Core\ToolRouter;
+test('tool executor collects schemas from registered tools', function () {
+    $executor = new HelgeSverre\Swarm\Core\ToolExecutor;
 
-    $router->register(new HelgeSverre\Swarm\Tools\ReadFile);
-    $router->register(new HelgeSverre\Swarm\Tools\WriteFile);
+    $executor->register(new HelgeSverre\Swarm\Tools\ReadFile);
+    $executor->register(new HelgeSverre\Swarm\Tools\WriteFile);
 
-    $schemas = $router->getToolSchemas();
+    $schemas = $executor->getToolSchemas();
 
     expect($schemas)->toBeArray()
         ->and($schemas)->toHaveCount(2)
