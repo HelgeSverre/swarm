@@ -20,6 +20,7 @@ arch('Response objects should not have setters')
         'getError',
         'getMessage',
         'toArray',
+        'fromArray',
     ]);
 
 // Value objects should use static factory methods

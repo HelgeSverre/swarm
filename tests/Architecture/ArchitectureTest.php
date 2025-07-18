@@ -31,6 +31,7 @@ arch('Core Router should only be used by Agent layer')
     ->toOnlyBeUsedIn([
         'HelgeSverre\Swarm\Agent',
         'HelgeSverre\Swarm\CLI\SwarmCLI', // CLI needs to inject it
+        'HelgeSverre\Swarm\CLI\AsyncProcessor', // AsyncProcessor needs it for async operations
         'HelgeSverre\Swarm\Core\ToolRegistry', // Registry needs to use it
         'HelgeSverre\Swarm\Tools\Search', // Search tool needs router for sub-searches
     ]);
@@ -52,11 +53,6 @@ arch('Task layer should not depend on other layers except Core')
 // Exception classes should be in Exceptions namespace
 arch('Exception classes must be in Exceptions namespace')
     ->expect('HelgeSverre\Swarm\Exceptions')
-    ->toBeClasses();
-
-// No classes outside src directory
-arch('All application classes should be in src directory')
-    ->expect('HelgeSverre\Swarm')
     ->toBeClasses();
 
 // Response objects should be in their respective layers

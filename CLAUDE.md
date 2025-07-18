@@ -55,9 +55,9 @@ Manages tool registration and execution:
 - Handles errors gracefully
 
 ### Tool System (src/Tools/*)
-Each tool is a class implementing the Tool interface:
-- Uses PHP attributes for configuration (@Tool, @ToolParam)
-- Auto-generates OpenAI function schemas
+Each tool is a class extending the abstract Tool class:
+- Implements required methods: `name()`, `description()`, `parameters()`, `execute()`
+- Auto-generates OpenAI function schemas via `toOpenAISchema()`
 - Examples: ReadFile, WriteFile, FindFiles, Search, Terminal
 
 ### TUIRenderer (src/CLI/TUIRenderer.php)

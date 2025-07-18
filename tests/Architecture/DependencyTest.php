@@ -54,9 +54,7 @@ arch('Tools should depend on Tool abstraction')
     ->classes()
     ->toExtend('HelgeSverre\Swarm\Contracts\Tool')
     ->ignoring([
-        'HelgeSverre\Swarm\Tools\Attributes', // Attributes are not tools
         'HelgeSverre\Swarm\Tools\ToolDefinition', // Value object
-        'HelgeSverre\Swarm\Tools\ToolSchemaGenerator', // Helper class
         'HelgeSverre\Swarm\Tools\ToolRegistry', // Registry class
     ]);
 

@@ -14,8 +14,6 @@ arch('All tool classes must extend Tool abstract class')
     ->ignoring([
         'HelgeSverre\Swarm\Tools\ToolRegistry',
         'HelgeSverre\Swarm\Tools\ToolDefinition',
-        'HelgeSverre\Swarm\Tools\ToolSchemaGenerator',
-        'HelgeSverre\Swarm\Tools\Attributes',
     ]);
 
 // Tools should be self-contained (no cross-tool dependencies)

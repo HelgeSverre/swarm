@@ -75,8 +75,7 @@ src/
 ├── Core/                  # Core functionality
 │   ├── ToolRouter.php    # Routes tool calls
 │   ├── ToolRegistry.php  # Tool registration
-│   ├── ToolResponse.php  # Tool response wrapper
-│   └── ToolSchemaGenerator.php # OpenAI function schemas
+│   └── ToolResponse.php  # Tool response wrapper
 ├── Task/                  # Task management
 │   ├── TaskManager.php   # Task queue management
 │   ├── Task.php          # Task entity
@@ -176,9 +175,10 @@ Tasks are planned with detailed steps and complexity estimates:
 
 ### Tool System
 Tools are registered with schemas for OpenAI function calling:
-- Attribute-based configuration
-- Automatic schema generation
+- Abstract class-based design (extends `Tool`)
+- Automatic schema generation via `toOpenAISchema()`
 - Type validation and error handling
+- Easy to add new tools by implementing the interface
 
 ## Contributing
 
