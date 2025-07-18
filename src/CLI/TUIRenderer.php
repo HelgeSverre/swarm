@@ -614,7 +614,7 @@ class TUIRenderer
         }
 
         // Sort by timestamp and get recent items
-        usort($activity, fn ($a, $b) => ($a['timestamp'] ?? 0) - ($b['timestamp'] ?? 0));
+        usort($activity, fn ($a, $b) => $a['timestamp'] - $b['timestamp']);
         $recentActivity = array_slice($activity, -8);
 
         // Fallback to internal history if no synced data

@@ -71,6 +71,7 @@ enum TaskStatus: string
             self::Completed => '✅',
         };
     }
+
     case Pending = 'pending';
     case Planned = 'planned';
     case Executing = 'executing';
