@@ -1,5 +1,16 @@
 {
   "name": "helgesverre/swarm",
+  "description": "AI Coding agent written in PHP",
+  "keywords": [
+    "ai",
+    "coding",
+    "agent",
+    "assistant",
+    "cli",
+    "openai",
+    "gpt"
+  ],
+  "homepage": "https://github.com/helgesverre/swarm",
   "license": "MIT",
   "version": "1.0.0",
   "type": "project",
@@ -11,20 +22,58 @@
   ],
   "require": {
     "php": "^8.3",
-    "openai-php/client": "^0.14.0",
-    "symfony/http-client": "^7.3",
+    "ext-json": "*",
+    "ext-mbstring": "*",
+    "monolog/monolog": "^3.0",
     "nyholm/psr7": "^1.8",
+    "openai-php/client": "^0.14.0",
+    "spatie/ray": "^1.42",
+    "symfony/http-client": "^7.3",
     "vlucas/phpdotenv": "^5.6"
+  },
+  "require-dev": {
+    "friendsofphp/php-cs-fixer": "^3.0",
+    "laravel/pint": "^1.13",
+    "pestphp/pest": "^3.8",
+    "phpstan/phpstan": "^1.10"
+  },
+  "suggest": {
+    "ext-readline": "Provides better CLI input handling with arrow keys, history, and advanced editing features"
   },
   "autoload": {
     "psr-4": {
       "HelgeSverre\\Swarm\\": "src/"
     }
   },
-  "bin": ["bin/codeswarm"],
+  "autoload-dev": {
+    "psr-4": {
+      "HelgeSverre\\Swarm\\Tests\\": "tests/"
+    }
+  },
+  "bin": [
+    "bin/swarm"
+  ],
+  "scripts": {
+    "swarm": "@php cli.php",
+    "test": "vendor/bin/pest",
+    "check": "vendor/bin/phpstan analyse src --level=5",
+    "format": "vendor/bin/pint",
+    "post-install-cmd": [
+      "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+    ],
+    "post-create-project-cmd": [
+      "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+    ]
+  },
   "config": {
     "allow-plugins": {
+      "pestphp/pest-plugin": true,
       "php-http/discovery": true
-    }
-  }
+    },
+    "optimize-autoloader": true,
+    "sort-packages": true,
+    "preferred-install": "dist"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
 }

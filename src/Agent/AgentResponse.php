@@ -1,17 +1,19 @@
 <?php
 
-namespace HelgeSverre\Swarm;
+namespace HelgeSverre\Swarm\Agent;
 
 class AgentResponse
 {
     protected $message;
+
     protected $success;
 
     public static function success(string $message): self
     {
-        $instance = new self();
+        $instance = new self;
         $instance->message = $message;
         $instance->success = true;
+
         return $instance;
     }
 

@@ -1,26 +1,30 @@
 <?php
 
-namespace HelgeSverre\Swarm;
+namespace HelgeSverre\Swarm\Router;
 
 class ToolResponse
 {
     protected $success;
+
     protected $data;
+
     protected $error;
 
     public static function success(array $data): self
     {
-        $instance = new self();
+        $instance = new self;
         $instance->success = true;
         $instance->data = $data;
+
         return $instance;
     }
 
     public static function error(string $error): self
     {
-        $instance = new self();
+        $instance = new self;
         $instance->success = false;
         $instance->error = $error;
+
         return $instance;
     }
 
@@ -34,7 +38,7 @@ class ToolResponse
         return [
             'success' => $this->success,
             'data' => $this->data,
-            'error' => $this->error
+            'error' => $this->error,
         ];
     }
 }

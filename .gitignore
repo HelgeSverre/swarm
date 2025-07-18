@@ -26,3 +26,13 @@ Thumbs.db
 
 # Miscellaneous
 tmp/
+
+# Testing
+.phpunit.cache/
+.phpunit.result.cache
+coverage/
+*.coverage
+
+# Code Quality Tools
+.php-cs-fixer.cache
+.pint.cache

@@ -1,0 +1,102 @@
+{
+  "preset": "laravel",
+  "exclude": [
+    "tests/Fixtures"
+  ],
+  "rules": {
+    "array_indentation": true,
+    "array_syntax": {
+      "syntax": "short"
+    },
+    "blank_line_after_namespace": true,
+    "blank_line_after_opening_tag": true,
+    "combine_consecutive_issets": true,
+    "combine_consecutive_unsets": true,
+    "concat_space": {
+      "spacing": "one"
+    },
+    "declare_equal_normalize": true,
+    "declare_parentheses": true,
+    "explicit_string_variable": true,
+    "final_class": false,
+    "fully_qualified_strict_types": true,
+    "global_namespace_import": {
+      "import_classes": true,
+      "import_constants": true,
+      "import_functions": true
+    },
+    "is_null": true,
+    "lambda_not_used_import": true,
+    "logical_operators": true,
+    "mb_str_functions": true,
+    "method_chaining_indentation": true,
+    "no_empty_comment": true,
+    "no_empty_phpdoc": true,
+    "no_empty_statement": true,
+    "no_extra_blank_lines": {
+      "tokens": [
+        "break",
+        "case",
+        "continue",
+        "curly_brace_block",
+        "default",
+        "extra",
+        "parenthesis_brace_block",
+        "return",
+        "square_brace_block",
+        "switch",
+        "throw",
+        "use"
+      ]
+    },
+    "no_superfluous_phpdoc_tags": {
+      "allow_mixed": true
+    },
+    "no_unused_imports": true,
+    "no_useless_else": true,
+    "no_useless_return": true,
+    "ordered_class_elements": {
+      "order": [
+        "use_trait",
+        "constant_public",
+        "constant_protected",
+        "constant_private",
+        "property_public",
+        "property_protected",
+        "property_private",
+        "construct",
+        "destruct",
+        "magic",
+        "phpunit",
+        "method_public",
+        "method_protected",
+        "method_private"
+      ]
+    },
+    "ordered_imports": {
+      "sort_algorithm": "alpha"
+    },
+    "php_unit_method_casing": false,
+    "phpdoc_align": {
+      "align": "left"
+    },
+    "phpdoc_order": true,
+    "phpdoc_separation": true,
+    "phpdoc_types_order": {
+      "null_adjustment": "always_last",
+      "sort_algorithm": "none"
+    },
+    "single_line_comment_style": {
+      "comment_types": [
+        "hash"
+      ]
+    },
+    "single_quote": true,
+    "ternary_to_null_coalescing": true,
+    "yoda_style": {
+      "equal": false,
+      "identical": false,
+      "less_and_greater": false
+    }
+  }
+}
