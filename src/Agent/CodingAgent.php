@@ -4,6 +4,7 @@ namespace HelgeSverre\Swarm\Agent;
 
 use Exception;
 use HelgeSverre\Swarm\Core\ToolRouter;
+use HelgeSverre\Swarm\Prompts\PromptTemplates;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI;
 use Psr\Log\LoggerInterface;
@@ -12,6 +13,8 @@ use RuntimeException;
 class CodingAgent
 {
     protected array $conversationHistory = [];
+
+    protected $progressCallback = null;
 
     public function __construct(
         protected readonly ToolRouter $toolRouter,
@@ -22,12 +25,21 @@ class CodingAgent
         protected readonly float $temperature = 0.7
     ) {}
 
+    /**
+     * Set a callback to report progress during processing
+     */
+    public function setProgressCallback(callable $callback): void
+    {
+        $this->progressCallback = $callback;
+    }
+
     public function processRequest(string $userInput): AgentResponse
     {
         $this->logger?->info('Processing user request', ['input_length' => mb_strlen($userInput)]);
         $this->addToHistory('user', $userInput);
 
         // First, classify the request
+        $this->reportProgress('classifying', ['message' => 'Analyzing request type...']);
         $classification = $this->classifyRequest($userInput);
 
         // Handle demonstration requests without tools
@@ -45,8 +57,9 @@ class CodingAgent
             return $this->handleConversation($userInput);
         }
 
-        // Only extract tasks for implementation or tool-requiring requests
-        if ($classification['requires_tools']) {
+        // Extract tasks for implementation requests or tool-requiring requests
+        if ($classification['request_type'] === 'implementation' || $classification['requires_tools']) {
+            $this->reportProgress('extracting_tasks', ['message' => 'Identifying tasks to complete...']);
             $tasks = $this->extractTasks($userInput);
 
             if (! empty($tasks)) {
@@ -55,6 +68,10 @@ class CodingAgent
                 // Plan each task
                 foreach ($this->taskManager->getTasks() as $task) {
                     if ($task['status'] === 'pending') {
+                        $this->reportProgress('planning_task', [
+                            'message' => 'Planning: ' . $task['description'],
+                            'task_id' => $task['id'],
+                        ]);
                         $this->planTask($task);
                     }
                 }
@@ -62,12 +79,17 @@ class CodingAgent
                 // Execute tasks one by one
                 $taskResults = [];
                 while ($currentTask = $this->taskManager->getNextTask()) {
+                    $this->reportProgress('executing_task', [
+                        'message' => 'Executing: ' . $currentTask['description'],
+                        'task_id' => $currentTask['id'],
+                    ]);
                     $this->executeTask($currentTask);
                     $this->taskManager->completeCurrentTask();
                     $taskResults[] = $currentTask['description'];
                 }
 
                 // Generate a summary of what was done
+                $this->reportProgress('generating_summary', ['message' => 'Generating summary...']);
                 $summary = $this->generateTaskSummary($userInput, $taskResults);
 
                 return AgentResponse::success($summary);
@@ -82,8 +104,18 @@ class CodingAgent
     {
         return [
             'tasks' => $this->taskManager->getTasks(),
-            'current_task' => $this->taskManager->currentTask ?? null,
+            'current_task' => $this->taskManager->currentTask?->toArray(),
         ];
+    }
+
+    /**
+     * Report progress to the callback if set
+     */
+    protected function reportProgress(string $operation, array $details = []): void
+    {
+        if ($this->progressCallback) {
+            call_user_func($this->progressCallback, $operation, $details);
+        }
     }
 
     protected function getToolFunctions(): array
@@ -110,9 +142,7 @@ class CodingAgent
     {
         // Default system prompt if none provided
         if ($systemPrompt === null) {
-            $systemPrompt = 'You are a helpful coding assistant. Always return valid JSON when asked for JSON. ' .
-                'Available tools are: read_file, write_file, find_files, search_content, bash. ' .
-                'Use "bash" for terminal/command line operations.';
+            $systemPrompt = PromptTemplates::defaultSystem($this->toolRouter->getRegisteredTools());
         }
 
         $messages = [
@@ -156,9 +186,7 @@ class CodingAgent
         $this->logger?->debug('Classifying request', ['input' => $input]);
 
         try {
-            $systemPrompt = 'You are an expert at understanding user intent in coding requests. ' .
-                'Classify whether the user wants you to show an example, actually implement something, ' .
-                'explain a concept, or just have a conversation.';
+            $systemPrompt = PromptTemplates::classificationSystem();
 
             $messages = $this->buildMessagesWithHistory(
                 "Classify this request: \"{$input}\"",
@@ -260,9 +288,7 @@ class CodingAgent
             ],
         ];
 
-        $prompt = "Extract tasks given in this input:\n\n" .
-            "{$input}" .
-            "\n\nIf there are specific tasks to do, extract them. Otherwise, treat the input as a general question or conversation.";
+        $prompt = PromptTemplates::extractTasks($input);
 
         $this->logger?->debug('Extracting tasks from input', ['prompt_length' => mb_strlen($prompt)]);
 
@@ -270,7 +296,7 @@ class CodingAgent
             $result = $this->llmClient->chat()->create([
                 'model' => $this->model,
                 'messages' => [
-                    ['role' => 'system', 'content' => 'You are a helpful coding assistant. Extract coding tasks from user input when they describe specific actions to take.'],
+                    ['role' => 'system', 'content' => PromptTemplates::defaultSystem()],
                     ['role' => 'user', 'content' => $prompt],
                 ],
                 'functions' => [$extractTasksFunction],
@@ -316,6 +342,7 @@ class CodingAgent
         ]);
 
         try {
+            $this->reportProgress('calling_openai', ['message' => 'Calling OpenAI API...']);
             $result = $this->llmClient->chat()->create([
                 'model' => $this->model,
                 'messages' => $messages,
@@ -365,8 +392,7 @@ class CodingAgent
         $startTime = microtime(true);
 
         // Build messages with history
-        $systemPrompt = 'You are a helpful coding assistant. Use the provided functions to complete tasks. ' .
-            'Remember the context from our previous conversation.';
+        $systemPrompt = PromptTemplates::executionSystem();
         $messages = $this->buildMessagesWithHistory($prompt, $systemPrompt);
 
         $this->logger?->debug('OpenAI function call request', [
@@ -447,10 +473,10 @@ class CodingAgent
         $context = $this->buildContext();
 
         try {
-            $systemPrompt = 'You are an expert at planning coding tasks. Create a detailed plan with specific steps.';
+            $systemPrompt = PromptTemplates::planningSystem();
 
             $messages = $this->buildMessagesWithHistory(
-                "Plan how to execute this coding task:\n\n{$task['description']}\n\nContext:\n{$context}",
+                PromptTemplates::planTask($task['description'], $context),
                 $systemPrompt
             );
 
@@ -537,7 +563,7 @@ class CodingAgent
             ]);
 
             // Fallback to regular planning
-            $prompt = "Plan how to execute this coding task:\n\n{$task['description']}\n\nContext:\n{$context}\n\nReturn a plan and list of steps.";
+            $prompt = PromptTemplates::planTaskFallback($task['description'], $context);
             $planResponse = $this->callOpenAI($prompt);
             $this->taskManager->planTask($task['id'], $planResponse, []);
         }
@@ -572,7 +598,7 @@ class CodingAgent
             $context = $this->buildContext();
             $toolLog = $this->getRecentToolLog();
 
-            $prompt = "Execute this task step by step:\n\n{$task['description']}\n\nPlan:\n{$task['plan']}\n\nContext:\n{$context}\n\nRecent tool results:\n{$toolLog}\n\nDecide what to do next to complete the task.";
+            $prompt = PromptTemplates::executeTask($task, $context, $toolLog);
 
             $toolCall = $this->callOpenAIWithFunctions($prompt, $this->getToolFunctions());
 
@@ -625,9 +651,7 @@ class CodingAgent
     {
         $this->logger?->info('Handling demonstration request');
 
-        $systemPrompt = 'You are a helpful coding assistant. The user is asking for a code example or demonstration. ' .
-            'Provide the requested code example in markdown format with proper syntax highlighting. ' .
-            'Do NOT suggest creating files unless explicitly asked. Focus on showing the code example.';
+        $systemPrompt = PromptTemplates::demonstrationSystem();
 
         $response = $this->callOpenAI($userInput, $systemPrompt);
 
@@ -638,9 +662,7 @@ class CodingAgent
     {
         $this->logger?->info('Handling explanation request');
 
-        $systemPrompt = 'You are a helpful coding assistant. The user is asking for an explanation of a concept. ' .
-            'Provide a clear, educational explanation. Use code examples in markdown if helpful, ' .
-            'but focus on explaining the concept rather than implementing anything.';
+        $systemPrompt = PromptTemplates::explanationSystem();
 
         $response = $this->callOpenAI($userInput, $systemPrompt);
 
@@ -651,9 +673,7 @@ class CodingAgent
     {
         $this->logger?->info('Handling conversation/query');
 
-        $systemPrompt = 'You are a helpful coding assistant engaged in conversation with the user. ' .
-            'Provide helpful, informative responses. Remember the context from our previous conversation. ' .
-            'If the user asks for code examples, provide them in markdown format.';
+        $systemPrompt = PromptTemplates::conversationSystem();
 
         $response = $this->callOpenAI($userInput, $systemPrompt);
 
@@ -666,14 +686,7 @@ class CodingAgent
         $recentHistory = $this->getRecentHistory();
         $toolLog = $this->getRecentToolLog();
 
-        $prompt = "The user asked: {$userInput}\n\n";
-        $prompt .= "The following tasks were completed:\n";
-        foreach ($taskResults as $task) {
-            $prompt .= "- {$task}\n";
-        }
-        $prompt .= "\nRecent actions taken:\n{$toolLog}\n\n";
-        $prompt .= "Recent conversation:\n{$recentHistory}\n\n";
-        $prompt .= 'Provide a helpful response to the user summarizing what was done, focusing on the actual results and outcomes. Be specific about what files were created, modified, or what actions were taken.';
+        $prompt = PromptTemplates::generateSummary($userInput, $taskResults, $recentHistory, $toolLog);
 
         return $this->callOpenAI($prompt);
     }

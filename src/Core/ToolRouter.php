@@ -15,9 +15,19 @@ class ToolRouter
 
     protected array $executionLog = [];
 
+    protected $progressCallback = null;
+
     public function __construct(
         protected readonly ?LoggerInterface $logger = null
     ) {}
+
+    /**
+     * Set a callback to report progress during tool execution
+     */
+    public function setProgressCallback(callable $callback): void
+    {
+        $this->progressCallback = $callback;
+    }
 
     public function registerTool(string $name, callable $handler): self
     {
@@ -86,8 +96,18 @@ class ToolRouter
         ]);
 
         try {
+            // Report progress if callback is set
+            if ($this->progressCallback) {
+                call_user_func($this->progressCallback, $tool, $params, 'started');
+            }
+
             $response = $this->tools[$tool]($params);
             $duration = microtime(true) - $startTime;
+
+            // Report completion if callback is set
+            if ($this->progressCallback) {
+                call_user_func($this->progressCallback, $tool, $params, 'completed');
+            }
             $this->logExecution($logId, $tool, $params, 'completed', $response, $duration);
 
             $this->logger?->info('Tool dispatch completed', [

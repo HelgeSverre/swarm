@@ -68,6 +68,8 @@ class TUIRenderer
     // Status icons
     protected const array ICONS = [
         'pending' => '⏸',
+        'planned' => '📋',
+        'executing' => '⏳',
         'running' => '⏳',
         'completed' => '✓',
         'failed' => '✗',
@@ -97,6 +99,8 @@ class TUIRenderer
     protected int $animationFrame = 0;
 
     protected string $processingMessage = '';
+
+    protected string $currentOperation = '';
 
     public function __construct()
     {
@@ -196,6 +200,7 @@ class TUIRenderer
     public function stopProcessing(): void
     {
         $this->isProcessing = false;
+        $this->currentOperation = ''; // Clear current operation
 
         // Clear the processing line
         $inputStartRow = $this->terminalHeight - 2;
@@ -223,7 +228,10 @@ class TUIRenderer
         $spinner = $spinnerChars[$this->animationFrame % count($spinnerChars)];
         $elapsed = round(microtime(true) - $this->processingStartTime, 1);
 
-        echo $this->colorize("{$spinner}  {$this->processingMessage}... ({$elapsed}s)", self::THEME['warning']);
+        // Show current operation if set
+        $message = $this->currentOperation ?: $this->processingMessage;
+
+        echo $this->colorize("{$spinner}  {$message}... ({$elapsed}s)", self::THEME['warning']);
 
         // Flush output immediately for real-time updates
         if (ob_get_level() > 0) {
@@ -235,6 +243,13 @@ class TUIRenderer
         $this->animationFrame++;
     }
 
+    public function updateProcessingMessage(string $message): void
+    {
+        $this->currentOperation = $message;
+        // Immediately show the update
+        $this->showProcessing();
+    }
+
     public function showNotification(string $message, string $type = 'info'): void
     {
         $color = match ($type) {
@@ -244,9 +259,17 @@ class TUIRenderer
             default => self::THEME['info']
         };
 
-        $this->moveCursor(1, 1);
-        echo $this->colorize("  ⚡ {$message}", $color, 'bold') . str_repeat(' ', max(0, $this->terminalWidth - mb_strlen($message) - 6));
-        usleep(1500000); // Show for 1.5 seconds
+        // Add notification to history instead of overwriting the UI
+        $icon = match ($type) {
+            'error' => '❌',
+            'success' => '✅',
+            'warning' => '⚠️',
+            default => 'ℹ️'
+        };
+
+        $this->addToHistory('notification', "{$icon} {$message}", $color);
+        // Immediately refresh to show the notification
+        $this->refresh([]);
     }
 
     public function displayError(string $error): void
@@ -485,6 +508,20 @@ class TUIRenderer
             $currentDescription = $currentTask['description'] ?? '';
             $content = '🎯  Current: ' . $currentDescription;
             echo $this->drawBoxLine($content, self::THEME['border'], self::THEME['accent']);
+
+            // Show plan if available
+            if (! empty($currentTask['plan'])) {
+                $planLines = explode("\n", $currentTask['plan']);
+                $firstLine = $this->truncate($planLines[0], $this->terminalWidth - 10);
+                echo $this->drawBoxLine('    📋 ' . $firstLine, self::THEME['border'], self::THEME['muted']);
+            }
+
+            // Show steps if available
+            if (! empty($currentTask['steps']) && is_array($currentTask['steps'])) {
+                $stepCount = count($currentTask['steps']);
+                $stepText = $stepCount === 1 ? '1 step' : $stepCount . ' steps';
+                echo $this->drawBoxLine('    📝 ' . $stepText . ' planned', self::THEME['border'], self::THEME['muted']);
+            }
         }
 
         // Draw task list
@@ -537,7 +574,13 @@ class TUIRenderer
             $availableWidth = $this->terminalWidth - 4; // Account for borders and padding
 
             foreach ($recentHistory as $entry) {
-                $icon = $entry['type'] === 'tool' ? '🔧' : ($entry['type'] === 'error' ? '❌' : '💬');
+                $icon = match ($entry['type']) {
+                    'tool' => '🔧',
+                    'error' => '❌',
+                    'notification' => '',  // No icon for notifications, they have their own
+                    'agent' => '🤖',
+                    default => '💬'
+                };
                 $message = $entry['message'] ?? '';
 
                 // First, handle any newlines by replacing them with spaces
@@ -548,12 +591,18 @@ class TUIRenderer
 
                 // Display first line with icon
                 if (! empty($wrappedLines)) {
-                    $firstLine = "{$icon}  " . $wrappedLines[0];
+                    // For notifications, don't add an icon (they already have one in the message)
+                    if ($entry['type'] === 'notification') {
+                        $firstLine = $wrappedLines[0];
+                    } else {
+                        $firstLine = "{$icon}  " . $wrappedLines[0];
+                    }
                     echo $this->drawBoxLine($firstLine, self::THEME['border'], $entry['color']);
 
                     // Display subsequent lines with indentation
                     for ($i = 1; $i < count($wrappedLines); $i++) {
-                        $continuationLine = '    ' . $wrappedLines[$i]; // 4 spaces to align with icon
+                        $indentSpaces = ($entry['type'] === 'notification') ? '  ' : '    '; // Less indent for notifications
+                        $continuationLine = $indentSpaces . $wrappedLines[$i];
                         echo $this->drawBoxLine($continuationLine, self::THEME['border'], $entry['color']);
                     }
                 }

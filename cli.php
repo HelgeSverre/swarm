@@ -32,9 +32,8 @@ if ($_ENV['LOG_ENABLED'] ?? false) {
 
         $logLevel = match (mb_strtolower($_ENV['LOG_LEVEL'] ?? 'info')) {
             'debug' => Level::Debug,
-            'info' => Level::Info,
             'warning', 'warn' => Level::Warning,
-            'error' => Level::Error,
+            'error', 'err', 'danger' => Level::Error,
             default => Level::Info,
         };
 

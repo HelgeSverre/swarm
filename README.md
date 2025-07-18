@@ -10,6 +10,9 @@ AI-powered coding agent written in PHP that helps with development tasks through
 - **Structured Task Planning**: Uses OpenAI's structured outputs for reliable task execution
 - **Interactive Terminal UI**: Beautiful TUI with real-time updates and progress tracking
 - **Extensible Tool System**: Modular architecture for adding new capabilities
+- **Type-safe Task Management**: Immutable Task objects with proper state transitions
+- **Centralized Prompt Templates**: Consistent prompts across all interactions
+- **Progress Reporting**: Real-time updates during task execution
 
 ## Requirements
 
@@ -76,9 +79,11 @@ src/
 │   ├── ToolRouter.php    # Routes tool calls
 │   ├── ToolRegistry.php  # Tool registration
 │   └── ToolResponse.php  # Tool response wrapper
+├── Prompts/               # Prompt management
+│   └── PromptTemplates.php # Centralized prompt templates
 ├── Task/                  # Task management
 │   ├── TaskManager.php   # Task queue management
-│   ├── Task.php          # Task entity
+│   ├── Task.php          # Immutable task value object
 │   └── TaskStatus.php    # Task status enum
 ├── Tools/                 # Tool implementations
 │   ├── ReadFile.php      # File reading
@@ -179,6 +184,13 @@ Tools are registered with schemas for OpenAI function calling:
 - Automatic schema generation via `toOpenAISchema()`
 - Type validation and error handling
 - Easy to add new tools by implementing the interface
+
+### Prompt Management
+All prompts are centralized in `PromptTemplates` class:
+- System prompts for different interaction modes
+- Task-related prompts (extraction, planning, execution)
+- Code assistance prompts (explain, refactor, debug, review, generate, document, test)
+- Dynamic tool list integration
 
 ## Contributing
 
