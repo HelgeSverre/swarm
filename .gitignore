@@ -39,3 +39,5 @@ coverage/
 
 # Swarm state file
 .swarm.json
+
+/node_modules/
