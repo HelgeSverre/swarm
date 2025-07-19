@@ -102,14 +102,14 @@ class UI
         $input = InputHandler::readLine($promptWithSpace, ThemeColor::Accent->toEscapeCode());
 
         // Add to command history if not empty
-        if (trim($input) !== '') {
-            InputHandler::addHistory(trim($input));
+        if (mb_trim($input) !== '') {
+            InputHandler::addHistory(mb_trim($input));
         }
 
         // Don't move to next line - stay in the input box
         // The next refresh will clear the screen anyway
 
-        return trim($input);
+        return mb_trim($input);
     }
 
     public function displayResponse(AgentResponse $response): void
@@ -758,7 +758,7 @@ class UI
             // If adding this word would exceed the width
             if (mb_strlen($currentLine . ' ' . $word) > $effectiveWidth) {
                 if ($currentLine !== '') {
-                    $lines[] = trim($currentLine);
+                    $lines[] = mb_trim($currentLine);
                     $currentLine = $word;
                 } else {
                     // Single word is too long, need to break it
@@ -774,7 +774,7 @@ class UI
         }
 
         if ($currentLine !== '') {
-            $lines[] = trim($currentLine);
+            $lines[] = mb_trim($currentLine);
         }
 
         return $lines;

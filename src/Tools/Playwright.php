@@ -448,7 +448,7 @@ JS;
                 return ['success' => false, 'error' => $error ?: 'Process failed'];
             }
 
-            $result = json_decode(trim($output), true);
+            $result = json_decode(mb_trim($output), true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 return ['success' => false, 'error' => 'Invalid JSON response: ' . $output];
             }

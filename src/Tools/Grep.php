@@ -123,7 +123,7 @@ class Grep extends Tool
                     $results[] = [
                         'file' => $file,
                         'line' => $lineNum + 1,
-                        'content' => trim($line),
+                        'content' => mb_trim($line),
                         'match' => $matches[0] ?? $search,
                     ];
                 }
@@ -172,7 +172,7 @@ class Grep extends Tool
                 }
             }
         } else {
-            $searchPattern = rtrim($directory, '/') . '/' . $pattern;
+            $searchPattern = mb_rtrim($directory, '/') . '/' . $pattern;
             $globFiles = glob($searchPattern);
             if ($globFiles !== false) {
                 foreach ($globFiles as $file) {

@@ -98,7 +98,7 @@ class StreamingBackgroundProcessor
 
         // Read all available lines from stdout
         while (($line = fgets($this->pipes[1])) !== false) {
-            $line = trim($line);
+            $line = mb_trim($line);
             if (empty($line)) {
                 continue;
             }
@@ -121,7 +121,7 @@ class StreamingBackgroundProcessor
 
         // Check for errors on stderr
         while (($error = fgets($this->pipes[2])) !== false) {
-            $error = trim($error);
+            $error = mb_trim($error);
             if (! empty($error)) {
                 $this->logger?->error('Process error output', ['error' => $error]);
                 $updates[] = [

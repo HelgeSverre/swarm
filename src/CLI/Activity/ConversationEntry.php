@@ -64,7 +64,7 @@ class ConversationEntry extends ActivityEntry
      */
     private function parseContent(): void
     {
-        if (str_starts_with(trim($this->content), '{') || str_starts_with(trim($this->content), '[')) {
+        if (str_starts_with(mb_trim($this->content), '{') || str_starts_with(mb_trim($this->content), '[')) {
             $decoded = json_decode($this->content, true);
             if (json_last_error() === JSON_ERROR_NONE) {
                 $this->parsedContent = $decoded;

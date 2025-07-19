@@ -110,7 +110,7 @@ test('loads state from .swarm.json file', function () {
                 $json = file_get_contents($stateFile);
 
                 // Handle empty file
-                if (empty(trim($json))) {
+                if (empty(mb_trim($json))) {
                     $this->logger?->warning('State file is empty, starting with clean slate');
 
                     return;
@@ -218,7 +218,7 @@ test('handles missing state file gracefully', function () {
                 $json = file_get_contents($stateFile);
 
                 // Handle empty file
-                if (empty(trim($json))) {
+                if (empty(mb_trim($json))) {
                     $this->logger?->warning('State file is empty, starting with clean slate');
 
                     return;
@@ -331,7 +331,7 @@ test('handles corrupt JSON gracefully', function () {
                 $json = file_get_contents($stateFile);
 
                 // Handle empty file
-                if (empty(trim($json))) {
+                if (empty(mb_trim($json))) {
                     $this->logger?->warning('State file is empty, starting with clean slate');
 
                     return;
@@ -439,7 +439,7 @@ test('handles empty state file gracefully', function () {
                 $json = file_get_contents($stateFile);
 
                 // Handle empty file
-                if (empty(trim($json))) {
+                if (empty(mb_trim($json))) {
                     $this->logger?->warning('State file is empty, starting with clean slate');
 
                     return;

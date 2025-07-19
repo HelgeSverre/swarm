@@ -50,5 +50,5 @@ test('terminal tool changes working directory', function () {
     ]);
 
     expect($result->isSuccess())->toBeTrue()
-        ->and(trim($result->getData()['stdout']))->toBe(realpath($tempDir));
+        ->and(mb_trim($result->getData()['stdout']))->toBe(realpath($tempDir));
 });

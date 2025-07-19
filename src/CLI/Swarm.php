@@ -438,7 +438,7 @@ class Swarm
             $json = file_get_contents($stateFile);
 
             // Handle empty file
-            if (empty(trim($json))) {
+            if (empty(mb_trim($json))) {
                 $this->logger->warning('State file is empty, starting with clean slate');
 
                 return;

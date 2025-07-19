@@ -113,7 +113,7 @@ class StreamingAsyncProcessor
             $stateFile = getcwd() . '/.swarm.json';
             if (file_exists($stateFile)) {
                 $stateContent = file_get_contents($stateFile);
-                if (! empty(trim($stateContent))) {
+                if (! empty(mb_trim($stateContent))) {
                     $state = json_decode($stateContent, true);
                     if ($state && isset($state['conversation_history']) && is_array($state['conversation_history'])) {
                         $agent->setConversationHistory($state['conversation_history']);

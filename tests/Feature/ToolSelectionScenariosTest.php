@@ -71,7 +71,7 @@ test('correct tools are selected for terminal operations', function () {
         'command' => 'echo "Hello from terminal"',
     ]);
     expect($result->isSuccess())->toBeTrue()
-        ->and(trim($result->getData()['stdout']))->toBe('Hello from terminal');
+        ->and(mb_trim($result->getData()['stdout']))->toBe('Hello from terminal');
 });
 
 test('all expected tools are registered', function () {

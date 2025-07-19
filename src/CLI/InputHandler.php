@@ -43,7 +43,7 @@ class InputHandler
      */
     public static function addHistory(string $line): void
     {
-        if (trim($line) !== '') {
+        if (mb_trim($line) !== '') {
             self::getReadline()->addHistory($line);
         }
     }
