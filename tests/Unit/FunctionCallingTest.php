@@ -53,8 +53,7 @@ test('required parameters are correctly defined in schemas', function () {
     $writeFile = new WriteFile;
     $schema = $writeFile->toOpenAISchema();
 
-    expect($schema['parameters']['required'])->toBe(['path', 'content'])
-        ->and($schema['parameters']['properties']['backup']['default'])->toBe(true);
+    expect($schema['parameters']['required'])->toBe(['path', 'content']);
 
     // Test Terminal tool
     $terminal = new Terminal;

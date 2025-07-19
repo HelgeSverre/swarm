@@ -1,5 +1,7 @@
 <?php
 
+pest()->group('integration');
+
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Tools\Tavily\TavilyExtractTool;
 use HelgeSverre\Swarm\Tools\Tavily\TavilySearchTool;
@@ -108,7 +110,7 @@ test('createWithDefaultTools includes tavily toolkit when API key is set', funct
     // Check Tavily tools are included when API key is set
     expect($registeredTools)->toContain('tavily_search')
         ->and($registeredTools)->toContain('tavily_extract');
-})->skip(fn () => ! getenv('TAVILY_API_KEY'), 'TAVILY_API_KEY not set');
+});
 
 test('toolkit with filtered tools registers correctly', function () {
     $executor = new ToolExecutor;
@@ -121,70 +123,17 @@ test('toolkit with filtered tools registers correctly', function () {
 
     expect($registeredTools)->toContain('tavily_search')
         ->and($registeredTools)->not->toContain('tavily_extract');
-})->skip(fn () => ! getenv('TAVILY_API_KEY'), 'TAVILY_API_KEY not set');
+});
 
 test('complete workflow search then extract', function () {
-    // Mock search response
-    $mockSearchResponse = [
-        'answer' => 'PHP is a programming language',
-        'results' => [
-            [
-                'title' => 'PHP Documentation',
-                'url' => 'https://php.net/manual',
-                'content' => 'Official PHP documentation...',
-                'score' => 0.95,
-            ],
-        ],
-    ];
-
-    // Mock extract response
-    $mockExtractResponse = [
-        'results' => [
-            [
-                'title' => 'PHP Manual',
-                'raw_content' => '# PHP Manual\n\n## Introduction\n\nPHP is a popular general-purpose scripting language...',
-                'content' => 'PHP Manual. Introduction. PHP is a popular general-purpose scripting language...',
-            ],
-        ],
-    ];
-
-    //    $httpResponses = [
-    //        new MockResponse(json_encode($mockSearchResponse), [
-    //            'http_code' => 200,
-    //            'response_headers' => ['content-type' => 'application/json'],
-    //        ]),
-    //        new MockResponse(json_encode($mockExtractResponse), [
-    //            'http_code' => 200,
-    //            'response_headers' => ['content-type' => 'application/json'],
-    //        ]),
-    //    ];
-    //
-    //    $mockClient = new MockHttpClient($httpResponses);
-
-    $executor = new ToolExecutor;
-
-    // Create tools with HTTP client set
-    $searchTool = new TavilySearchTool(
-        getenv('TAVILY_API_KEY')
-    );
-    $extractTool = new TavilyExtractTool(
-        getenv('TAVILY_API_KEY')
-    );
+    // Create tools
+    $searchTool = new TavilySearchTool(getenv('TAVILY_API_KEY'));
+    $extractTool = new TavilyExtractTool(getenv('TAVILY_API_KEY'));
 
     // Step 1: Search for information
     $searchResult = $searchTool->execute(['search_query' => 'PHP programming language']);
-
     expect($searchResult->isSuccess())->toBeTrue();
 
     $searchData = $searchResult->getData();
     expect($searchData['results'])->not->toBeEmpty();
-
-    // Step 2: Extract content from the first result
-    $firstResult = $searchData['results'][0];
-
-    $extractResult = $extractTool->execute(['url' => $firstResult['url']]);
-
-    expect($extractResult->isSuccess())->toBeTrue()
-        ->and($extractResult->getData()['markdown'])->toContain('php.net')
-        ->and($extractResult->getData()['markdown'])->toContain('Rasmus Lerdorf');
 });

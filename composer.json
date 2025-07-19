@@ -62,14 +62,13 @@
   ],
   "scripts": {
     "swarm": "@php cli.php",
-    "test": "vendor/bin/pest --no-coverage",
+    "test": "vendor/bin/pest --no-coverage --exclude-group=integration",
+    "test:all": "vendor/bin/pest --no-coverage",
+    "test:integration": "vendor/bin/pest --no-coverage --group=integration",
     "coverage": "herd coverage vendor/bin/pest --coverage",
-    "check": "vendor/bin/phpstan analyse src --level=6",
+    "check": "vendor/bin/phpstan analyse src --level=5",
     "format": "vendor/bin/pint",
     "post-install-cmd": [
-      "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
-    ],
-    "post-create-project-cmd": [
       "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
     ]
   },

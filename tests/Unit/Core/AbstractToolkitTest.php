@@ -4,145 +4,143 @@ use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Core\AbstractToolkit;
 use HelgeSverre\Swarm\Core\ToolResponse;
 
-// Create test tools for testing
-class TestToolA extends Tool
-{
-    public function name(): string
+beforeEach(function () {
+    $this->testToolA = new class extends Tool
     {
-        return 'test_tool_a';
-    }
+        public function name(): string
+        {
+            return 'test_tool_a';
+        }
 
-    public function description(): string
-    {
-        return 'Test tool A';
-    }
+        public function description(): string
+        {
+            return 'Test tool A';
+        }
 
-    public function parameters(): array
-    {
-        return [];
-    }
+        public function parameters(): array
+        {
+            return [];
+        }
 
-    public function required(): array
-    {
-        return [];
-    }
+        public function required(): array
+        {
+            return [];
+        }
 
-    public function execute(array $params): ToolResponse
-    {
-        return ToolResponse::success(['tool' => 'A']);
-    }
-}
+        public function execute(array $params): ToolResponse
+        {
+            return ToolResponse::success(['tool' => 'A']);
+        }
+    };
 
-class TestToolB extends Tool
-{
-    public function name(): string
+    $this->testToolB = new class extends Tool
     {
-        return 'test_tool_b';
-    }
+        public function name(): string
+        {
+            return 'test_tool_b';
+        }
 
-    public function description(): string
-    {
-        return 'Test tool B';
-    }
+        public function description(): string
+        {
+            return 'Test tool B';
+        }
 
-    public function parameters(): array
-    {
-        return [];
-    }
+        public function parameters(): array
+        {
+            return [];
+        }
 
-    public function required(): array
-    {
-        return [];
-    }
+        public function required(): array
+        {
+            return [];
+        }
 
-    public function execute(array $params): ToolResponse
-    {
-        return ToolResponse::success(['tool' => 'B']);
-    }
-}
+        public function execute(array $params): ToolResponse
+        {
+            return ToolResponse::success(['tool' => 'B']);
+        }
+    };
 
-// Test implementation of AbstractToolkit
-class TestToolkit extends AbstractToolkit
-{
-    public function provide(): array
+    $toolA = $this->testToolA;
+    $toolB = $this->testToolB;
+
+    $this->testToolkit = new class($toolA, $toolB) extends AbstractToolkit
     {
-        return [
-            new TestToolA,
-            new TestToolB,
-        ];
-    }
-}
+        public function __construct(
+            private Tool $toolA,
+            private Tool $toolB
+        ) {}
+
+        public function provide(): array
+        {
+            return [
+                $this->toolA,
+                $this->toolB,
+            ];
+        }
+    };
+});
 
 test('toolkit provides all tools by default', function () {
-    $toolkit = new TestToolkit;
-    $tools = $toolkit->tools();
+    $tools = $this->testToolkit->tools();
 
     expect($tools)->toHaveCount(2)
-        ->and($tools[0])->toBeInstanceOf(TestToolA::class)
-        ->and($tools[1])->toBeInstanceOf(TestToolB::class);
+        ->and($tools[0])->toBe($this->testToolA)
+        ->and($tools[1])->toBe($this->testToolB);
 });
 
 test('toolkit can exclude specific tools', function () {
-    $toolkit = new TestToolkit;
-    $toolkit->exclude([TestToolA::class]);
-    $tools = $toolkit->tools();
+    $this->testToolkit->exclude([$this->testToolA::class]);
+    $tools = $this->testToolkit->tools();
 
     expect($tools)->toHaveCount(1)
-        ->and($tools[0])->toBeInstanceOf(TestToolB::class);
+        ->and($tools[0])->toBe($this->testToolB);
 });
 
 test('toolkit can exclude multiple tools', function () {
-    $toolkit = new TestToolkit;
-    $toolkit->exclude([TestToolA::class, TestToolB::class]);
-    $tools = $toolkit->tools();
+    $this->testToolkit->exclude([$this->testToolA::class, $this->testToolB::class]);
+    $tools = $this->testToolkit->tools();
 
     expect($tools)->toHaveCount(0);
 });
 
 test('toolkit can filter to only specific tools', function () {
-    $toolkit = new TestToolkit;
-    $toolkit->only([TestToolA::class]);
-    $tools = $toolkit->tools();
+    $this->testToolkit->only([$this->testToolA::class]);
+    $tools = $this->testToolkit->tools();
 
     expect($tools)->toHaveCount(1)
-        ->and($tools[0])->toBeInstanceOf(TestToolA::class);
+        ->and($tools[0])->toBe($this->testToolA);
 });
 
 test('toolkit only filter takes precedence over exclude', function () {
-    $toolkit = new TestToolkit;
-    $toolkit->exclude([TestToolA::class])
-        ->only([TestToolA::class, TestToolB::class]);
-    $tools = $toolkit->tools();
+    $this->testToolkit->exclude([$this->testToolA::class])
+        ->only([$this->testToolA::class, $this->testToolB::class]);
+    $tools = $this->testToolkit->tools();
 
     expect($tools)->toHaveCount(2)
-        ->and($tools[0])->toBeInstanceOf(TestToolA::class)
-        ->and($tools[1])->toBeInstanceOf(TestToolB::class);
+        ->and($tools[0])->toBe($this->testToolA)
+        ->and($tools[1])->toBe($this->testToolB);
 });
 
 test('toolkit returns null guidelines by default', function () {
-    $toolkit = new TestToolkit;
-
-    expect($toolkit->guidelines())->toBeNull();
+    expect($this->testToolkit->guidelines())->toBeNull();
 });
 
 test('toolkit exclude method is chainable', function () {
-    $toolkit = new TestToolkit;
-    $result = $toolkit->exclude([TestToolA::class]);
+    $result = $this->testToolkit->exclude([$this->testToolA::class]);
 
-    expect($result)->toBe($toolkit);
+    expect($result)->toBe($this->testToolkit);
 });
 
 test('toolkit only method is chainable', function () {
-    $toolkit = new TestToolkit;
-    $result = $toolkit->only([TestToolA::class]);
+    $result = $this->testToolkit->only([$this->testToolA::class]);
 
-    expect($result)->toBe($toolkit);
+    expect($result)->toBe($this->testToolkit);
 });
 
 test('toolkit tools method resets array keys', function () {
-    $toolkit = new TestToolkit;
-    $toolkit->exclude([TestToolA::class]);
-    $tools = $toolkit->tools();
+    $this->testToolkit->exclude([$this->testToolA::class]);
+    $tools = $this->testToolkit->tools();
 
     expect(array_keys($tools))->toBe([0]);
 });

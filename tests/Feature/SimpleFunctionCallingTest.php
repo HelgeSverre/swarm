@@ -64,13 +64,11 @@ test('tools execute correctly with function call parameters', function () {
 test('function parameters are validated and defaults applied', function () {
     $executor = ToolExecutor::createWithDefaultTools();
 
-    // Test write_file with default backup parameter
     $testFile = sys_get_temp_dir() . '/test_defaults.txt';
 
     $result = $executor->dispatch('write_file', [
         'path' => $testFile,
         'content' => 'Test content',
-        // backup parameter should default to true
     ]);
 
     expect($result->isSuccess())->toBeTrue();
@@ -78,9 +76,6 @@ test('function parameters are validated and defaults applied', function () {
     // Clean up
     if (file_exists($testFile)) {
         unlink($testFile);
-    }
-    if (file_exists($testFile . '.bak')) {
-        unlink($testFile . '.bak');
     }
 });
 

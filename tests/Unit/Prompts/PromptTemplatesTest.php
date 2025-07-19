@@ -27,10 +27,9 @@ describe('PromptTemplates', function () {
 
             expect($prompt)
                 ->toContain('understanding user intent')
-                ->toContain('show an example')
-                ->toContain('implement something')
-                ->toContain('explain a concept')
-                ->toContain('conversation');
+                ->toContain('Chain of Thought reasoning')
+                ->toContain('INTERNAL task management')
+                ->toContain('Think step by step');
         });
 
         test('planningSystem prompt', function () {
@@ -90,9 +89,10 @@ describe('PromptTemplates', function () {
             $prompt = PromptTemplates::extractTasks($input);
 
             expect($prompt)
-                ->toContain('Extract tasks')
+                ->toContain('extract actionable coding tasks')
                 ->toContain($input)
-                ->toContain('specific tasks to do');
+                ->toContain('INTERNAL task management')
+                ->toContain('FILE operations');
         });
 
         test('planTask includes description and context', function () {

@@ -29,13 +29,16 @@ class PromptTemplates
     }
 
     /**
-     * System prompt for request classification
+     * System prompt for request classification with Chain of Thought
      */
     public static function classificationSystem(): string
     {
-        return 'You are an expert at understanding user intent in coding requests. ' .
-            'Classify whether the user wants you to show an example, actually implement something, ' .
-            'explain a concept, or just have a conversation.';
+        return 'You are an expert at understanding user intent in coding requests using Chain of Thought reasoning. ' .
+            "\n\nIMPORTANT distinctions:\n" .
+            "- When users mention 'task list' or 'my tasks', they usually mean INTERNAL task management, NOT file creation\n" .
+            "- 'Create a file with tasks' or 'write tasks to a file' means FILE creation\n" .
+            "- 'Add to task list' or 'update my tasks' means INTERNAL task tracking\n\n" .
+            'Think step by step about what the user is asking for before classifying.';
     }
 
     /**
@@ -93,24 +96,34 @@ class PromptTemplates
     }
 
     /**
-     * Prompt for classifying user requests
-     * // TODO: classify into what? we dont specify any categories here, perhaps it happens outside of this?
+     * Prompt for classifying user requests with Chain of Thought
      */
     public static function classifyRequest(string $input): string
     {
-        return "Classify this request: \"{$input}\"";
+        return "Let's think step by step about this request:\n\n" .
+            "\"{$input}\"\n\n" .
+            "1. What is the user literally asking for?\n" .
+            "2. What is their underlying intent?\n" .
+            "3. Are they asking about internal task management or file operations?\n" .
+            "4. Do they need tools, or can this be answered directly?\n\n" .
+            'Classify this request based on your reasoning.';
     }
 
     /**
-     * Prompt for extracting tasks from user input
-     *
-     * @todo this needs some more instruction on how to extract tasks, currently this wil verbaitm take things from the input, but we need to "infer" the desired tasks and condense it appropriately for a "task list".
+     * Prompt for extracting tasks from user input with clear disambiguation
      */
     public static function extractTasks(string $input): string
     {
-        return "Extract tasks given in this input:\n\n" .
-            "{$input}" .
-            "\n\nIf there are specific tasks to do, extract them. Otherwise, treat the input as a general question or conversation.";
+        return "Analyze this request and extract actionable coding tasks:\n\n" .
+            "\"{$input}\"\n\n" .
+            "IMPORTANT: Distinguish between:\n" .
+            "1. INTERNAL task management - user wants to track/manage tasks in memory\n" .
+            "2. FILE operations - user wants to create/modify actual files\n\n" .
+            "If the user mentions 'task list', 'my tasks', or 'todo list' WITHOUT explicitly asking for a file,\n" .
+            "they likely mean internal task management. Extract tasks that help them manage their tasks.\n\n" .
+            "If they explicitly ask to 'create a file', 'write to file', or mention a filename,\n" .
+            "then extract file operation tasks.\n\n" .
+            "Extract and return the appropriate tasks based on the user's actual intent.";
     }
 
     /**

@@ -19,31 +19,34 @@ test('createFromEnvironment creates Swarm with proper dependencies', function ()
 });
 
 test('createFromEnvironment throws exception when API key is missing', function () {
-    // This test can only run if there's no .env file with an API key
-    $projectRoot = defined('SWARM_ROOT') ? SWARM_ROOT : dirname(__DIR__, 3);
-    if (file_exists($projectRoot . '/.env')) {
-        $envContent = file_get_contents($projectRoot . '/.env');
-        if (str_contains($envContent, 'OPENAI_API_KEY')) {
-            $this->markTestSkipped('Cannot test missing API key when .env file contains OPENAI_API_KEY');
-
-            return;
-        }
-    }
-
-    // Save current API key
+    // Save current environment state
     $originalKey = $_ENV['OPENAI_API_KEY'] ?? null;
     $originalEnvKey = getenv('OPENAI_API_KEY');
+    $projectRoot = defined('SWARM_ROOT') ? SWARM_ROOT : dirname(__DIR__, 3);
+    $envPath = $projectRoot . '/.env';
+    $envBackupPath = $projectRoot . '/.env.backup.test';
 
-    // Make sure API key is not set
-    unset($_ENV['OPENAI_API_KEY']);
-    putenv('OPENAI_API_KEY=');
+    // Temporarily rename .env file if it exists
+    $envExists = file_exists($envPath);
+    if ($envExists) {
+        rename($envPath, $envBackupPath);
+    }
 
-    // Should throw exception
     try {
+        // Make sure API key is not set in environment
+        unset($_ENV['OPENAI_API_KEY']);
+        putenv('OPENAI_API_KEY=');
+
+        // Should throw exception
         expect(fn () => Swarm::createFromEnvironment())
             ->toThrow(Exception::class, 'OpenAI API key not found');
     } finally {
-        // Restore original values
+        // Restore .env file
+        if ($envExists) {
+            rename($envBackupPath, $envPath);
+        }
+
+        // Restore environment values
         if ($originalKey !== null) {
             $_ENV['OPENAI_API_KEY'] = $originalKey;
         }

@@ -29,11 +29,6 @@ class WriteFile extends Tool
                 'type' => 'string',
                 'description' => 'Content to write to the file',
             ],
-            'backup' => [
-                'type' => 'boolean',
-                'description' => 'Whether to create a backup of existing file',
-                'default' => true,
-            ],
         ];
     }
 
@@ -46,19 +41,12 @@ class WriteFile extends Tool
     {
         $path = $params['path'] ?? throw new InvalidArgumentException('path required');
         $content = $params['content'] ?? throw new InvalidArgumentException('content required');
-        $backup = $params['backup'] ?? true;
-
-        // Backup existing file if requested
-        if ($backup && file_exists($path)) {
-            copy($path, $path . '.backup.' . time());
-        }
 
         $bytes = file_put_contents($path, $content);
 
         return ToolResponse::success([
             'path' => $path,
             'bytes_written' => $bytes,
-            'backup_created' => $backup && file_exists($path . '.backup.' . time()),
         ]);
     }
 }

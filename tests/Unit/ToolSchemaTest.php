@@ -22,11 +22,9 @@ test('write file tool generates correct schema', function () {
         ->and($schema['name'])->toBe('write_file')
         ->and($schema['description'])->toBe('Write content to a file')
         ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['path', 'content', 'backup'])
+        ->and($schema['parameters']['properties'])->toHaveKeys(['path', 'content'])
         ->and($schema['parameters']['properties']['path']['type'])->toBe('string')
         ->and($schema['parameters']['properties']['content']['type'])->toBe('string')
-        ->and($schema['parameters']['properties']['backup']['type'])->toBe('boolean')
-        ->and($schema['parameters']['properties']['backup']['default'])->toBe(true)
         ->and($schema['parameters']['required'])->toBe(['path', 'content']);
 });
 
@@ -79,7 +77,6 @@ test('write file tool executes correctly', function () {
     $result = $tool->execute([
         'path' => $testFile,
         'content' => $content,
-        'backup' => false,
     ]);
 
     expect($result->isSuccess())->toBeTrue()

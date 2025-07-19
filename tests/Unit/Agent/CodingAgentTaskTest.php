@@ -202,7 +202,6 @@ test('executeTask processes tool calls until completion', function () {
                             'arguments' => json_encode([
                                 'path' => sys_get_temp_dir() . '/test_execute.txt',
                                 'content' => 'Test',
-                                'backup' => false,
                             ]),
                         ],
                     ],

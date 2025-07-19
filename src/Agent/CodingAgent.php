@@ -65,6 +65,11 @@ class CodingAgent
             return $this->handleExplanation($userInput);
         }
 
+        // Handle internal task management (like "show my tasks", "clear tasks", etc.)
+        if ($classification['is_internal_task_management'] ?? false) {
+            return $this->handleInternalTaskManagement($userInput);
+        }
+
         // Check if request requires tools first
         if ($classification['requires_tools'] || $classification['request_type'] === RequestType::Implementation) {
             $this->reportProgress('extracting_tasks', ['message' => 'Identifying tasks to complete...']);
@@ -254,7 +259,7 @@ class CodingAgent
             $systemPrompt = PromptTemplates::classificationSystem();
 
             $messages = $this->buildMessagesWithHistory(
-                "Classify this request: \"{$input}\"",
+                PromptTemplates::classifyRequest($input),
                 $systemPrompt
             );
 
@@ -271,6 +276,10 @@ class CodingAgent
                         'schema' => [
                             'type' => 'object',
                             'properties' => [
+                                'chain_of_thought' => [
+                                    'type' => 'string',
+                                    'description' => 'Step-by-step reasoning about the user request',
+                                ],
                                 'request_type' => [
                                     'type' => 'string',
                                     'enum' => RequestType::values(),
@@ -279,6 +288,10 @@ class CodingAgent
                                 'requires_tools' => [
                                     'type' => 'boolean',
                                     'description' => 'Whether this request requires using tools like writing files or running commands',
+                                ],
+                                'is_internal_task_management' => [
+                                    'type' => 'boolean',
+                                    'description' => 'Whether this is about managing internal tasks (not file creation)',
                                 ],
                                 'confidence' => [
                                     'type' => 'number',
@@ -291,7 +304,7 @@ class CodingAgent
                                     'description' => 'Brief explanation of why this classification was chosen',
                                 ],
                             ],
-                            'required' => ['request_type', 'requires_tools', 'confidence', 'reasoning'],
+                            'required' => ['chain_of_thought', 'request_type', 'requires_tools', 'is_internal_task_management', 'confidence', 'reasoning'],
                             'additionalProperties' => false,
                         ],
                     ],
@@ -328,8 +341,10 @@ class CodingAgent
             $this->logger?->info('Request classified', [
                 'type' => $classification['request_type']->value,
                 'requires_tools' => $classification['requires_tools'],
+                'is_internal_task_management' => $classification['is_internal_task_management'] ?? false,
                 'confidence' => $classification['confidence'],
                 'reasoning' => $classification['reasoning'],
+                'chain_of_thought' => $classification['chain_of_thought'] ?? '',
             ]);
 
             return $classification;
@@ -824,5 +839,50 @@ class CodingAgent
         $prompt = PromptTemplates::generateSummary($userInput, $taskResults, $recentHistory, $toolLog);
 
         return $this->callOpenAI($prompt);
+    }
+
+    /**
+     * Handle internal task management requests
+     */
+    protected function handleInternalTaskManagement(string $userInput): AgentResponse
+    {
+        $this->logger?->info('Handling internal task management request');
+
+        // Get current tasks
+        $tasks = $this->taskManager->getTasks();
+        $taskHistory = $this->taskManager->getTaskHistory();
+
+        // Analyze what the user wants to do with tasks
+        $systemPrompt = 'You are helping the user manage their internal task list. ' .
+            "Available operations: view tasks, add tasks, clear completed tasks, view history.\n\n" .
+            'Current active tasks: ' . count($tasks) . "\n" .
+            'Tasks in history: ' . count($taskHistory);
+
+        $prompt = "The user said: \"{$userInput}\"\n\n" .
+            "Current tasks:\n";
+
+        if (empty($tasks)) {
+            $prompt .= "(No active tasks)\n";
+        } else {
+            foreach ($tasks as $index => $task) {
+                $prompt .= ($index + 1) . ". [{$task->status->value}] {$task->description}\n";
+            }
+        }
+
+        $prompt .= "\nBased on their request, provide a helpful response about their task list. " .
+            'If they want to add tasks, acknowledge it but explain that tasks are extracted from implementation requests. ' .
+            'If they want to see completed tasks, mention the history contains ' . count($taskHistory) . ' completed tasks.';
+
+        $response = $this->callOpenAI($prompt, $systemPrompt);
+
+        // If user wants to clear completed tasks, do it
+        if (mb_stripos($userInput, 'clear') !== false && mb_stripos($userInput, 'completed') !== false) {
+            $cleared = $this->taskManager->clearCompletedTasks();
+            if (count($cleared) > 0) {
+                $response .= "\n\n✓ Cleared " . count($cleared) . ' completed tasks from the active list.';
+            }
+        }
+
+        return AgentResponse::success($response);
     }
 }
