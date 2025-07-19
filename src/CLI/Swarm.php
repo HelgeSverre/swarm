@@ -119,7 +119,15 @@ class Swarm
         $llmClient = OpenAI::client($apiKey);
 
         $agent = new CodingAgent($toolExecutor, $taskManager, $llmClient, $logger, $model, $temperature);
-        $ui = new UI;
+        
+        // Check UI mode from environment
+        $uiMode = $_ENV['SWARM_UI_MODE'] ?? 'classic';
+        $ui = match ($uiMode) {
+            'three-pane', '3pane', 'threepane' => new UIThreePanes,
+            default => new UI,
+        };
+        
+        $logger->info('UI mode selected', ['mode' => $uiMode, 'class' => get_class($ui)]);
 
         return new self($agent, $ui, $logger);
     }
