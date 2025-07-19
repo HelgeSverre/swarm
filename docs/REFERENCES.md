@@ -19,6 +19,8 @@
 
 # Literature on AI Agents and LLMs
 
+- https://docs.swarms.world/en/latest/examples/paper_implementations/
+- https://docs.swarms.world/en/latest/examples/
 - https://arize.com/ai-agents/
 - https://arize.com/ai-product-manager/
 - https://apphp.gitbook.io/artificial-intelligence-with-php/llms.txt
@@ -27,6 +29,26 @@
 - https://dev.to/jamesli/agent-task-orchestration-system-from-design-to-production-1kof
 - https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/
 - https://dev.to/callebknox/agent-architectures-that-scale-53of
+
+----
+
+# Other interesting stuff.
+
+- https://www.psychologytoday.com/us/blog/finding-purpose/201902/what-actually-is-a-thought-and-how-is-information-physical
+- https://www.phparch.com/2024/01/creating-finite-state-machines-in-php-8-3/
+- https://doc.akka.io/libraries/akka-core/current/typed/guide/actors-motivation.html
+- https://medium.com/@m.elqrwash/understanding-the-actor-design-pattern-a-practical-guide-to-building-actor-systems-with-akka-in-9ffda751deba
+- https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/Orleans-MSR-TR-2014-41.pdf
+
+----
+
+# Async PHP Stuff
+
+- https://github.com/swoole/awesome-swoole
+- https://github.com/thgs/awesome-amphp
+- https://php.watch/versions/8.1/fibers
+- https://framework-x.org/docs/getting-started/quickstart/
+- https://dev.to/jackmarchant/exploring-async-php-5b68
 
 ----
 
