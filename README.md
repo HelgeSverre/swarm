@@ -144,8 +144,9 @@ Environment variables (in `.env`):
 
 ### OpenAI Settings
 - `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `OPENAI_MODEL`: Model to use (default: gpt-4)
+- `OPENAI_MODEL`: Model to use (default: gpt-4o-mini)
 - `OPENAI_TEMPERATURE`: Temperature for responses (default: 0.7)
+- `TAVILY_API_KEY`: API key for Tavily web search/extract tools (optional)
 
 ### Logging Settings  
 - `LOG_ENABLED`: Enable file logging (true/false)

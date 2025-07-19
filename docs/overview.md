@@ -21,32 +21,35 @@ Swarm is an AI-powered coding assistant that uses OpenAI's GPT models to underst
 ```mermaid
 flowchart TD
     A[User Input via CLI] --> B[Swarm::run]
-    B --> C[UI::prompt]
-    C --> D[CodingAgent::processRequest]
+    B --> C[StreamingBackgroundProcessor::launch]
+    C --> D[Child Process: StreamingAsyncProcessor]
+    D --> E[CodingAgent::processRequest]
     
-    D --> E{Request Classification}
-    E -->|Demonstration| F[handleDemonstration]
-    E -->|Explanation| G[handleExplanation]
-    E -->|Conversation| H[handleConversation]
-    E -->|Implementation| I[Task Extraction]
+    E --> F{Request Classification}
+    F -->|Demonstration| G[handleDemonstration]
+    F -->|Explanation| H[handleExplanation]
+    F -->|Conversation| I[handleConversation]
+    F -->|Implementation| J[Task Extraction]
     
-    F --> Z[AgentResponse]
-    G --> Z
-    H --> Z
+    G --> AA[AgentResponse]
+    H --> AA
+    I --> AA
     
-    I --> J[extractTasks]
-    J --> K[TaskManager::addTasks]
-    K --> L[Plan Each Task]
-    L --> M[Execute Tasks Loop]
-    M --> N[Tool Execution]
-    N --> O[ToolExecutor::dispatch]
-    O --> P[Individual Tool Call]
-    P --> M
-    M -->|All Complete| Q[Generate Summary]
-    Q --> Z
+    J --> K[extractTasks]
+    K --> L[TaskManager::addTasks]
+    L --> M[Plan Each Task]
+    M --> N[Execute Tasks Loop]
+    N --> O[Tool Execution]
+    O --> P[ToolExecutor::dispatch]
+    P --> Q[Individual Tool Call]
+    Q --> N
+    N -->|All Complete| R[Generate Summary]
+    R --> AA
     
-    Z --> R[UI::displayResponse]
-    R --> S[Update UI & History]
+    AA --> S[IPC Message to Parent]
+    S --> T[Swarm::processUpdates]
+    T --> U[UI::displayResponse]
+    U --> V[Update UI & History]
 ```
 
 ## Core Flow Diagrams
@@ -168,8 +171,8 @@ graph TB
     
     subgraph "Tool System"
         Executor[ToolExecutor]
-        Toolchain[Toolchain]
         Tools[Tool Implementations]
+        Toolkits[Toolkit System]
         ToolResp[ToolResponse]
     end
     
@@ -185,8 +188,8 @@ graph TB
     TUI --> Input
     Agent --> TaskMgr
     Agent --> Executor
-    Executor --> Toolchain
-    Toolchain --> Tools
+    Executor --> Tools
+    Executor --> Toolkits
     TUI --> Activity
     Activity --> Conv
     Activity --> Tool
@@ -243,28 +246,43 @@ Key methods:
 - Provides tool descriptions for prompts
 - Progress reporting
 
-### 5. **Toolchain** (`src/Core/Toolchain.php`)
-- Registers available tools
-- Current tools: ReadFile, WriteFile, Terminal, Grep
+### 5. **ToolExecutor** (`src/Core/ToolExecutor.php`)
+- Registers available tools and toolkits
+- Routes tool calls to implementations
+- Maintains execution log
+- Provides tool descriptions for prompts
+- Progress reporting
 
-### 6. **UI** (`src/CLI/UI.php`)
+### 6. **Tool System** (`src/Tools/*`)
+- Individual tools: ReadFile, WriteFile, Terminal, Grep, WebFetch, Playwright
+- Toolkit system: TavilyToolkit providing web search and extraction
+- All tools extend abstract Tool class
+- Toolkits implement Toolkit interface
+
+### 7. **UI** (`src/CLI/UI.php`)
 - Terminal UI management with ANSI codes
 - Activity history display with type-safe entries
 - Real-time updates
 - Input handling
 - Progress animations
 
-### 7. **Activity System** (`src/CLI/Activity/*`)
+### 8. **Activity System** (`src/CLI/Activity/*`)
 - Type-safe activity entries (replaced error-prone arrays)
 - Human-readable formatting
 - JSON parsing for function calls
 - Classes: ActivityEntry (base), ConversationEntry, ToolCallEntry, NotificationEntry
 
-### 8. **Task** (`src/Task/Task.php`)
+### 9. **Task** (`src/Task/Task.php`)
 - Immutable value object with readonly properties
 - Status tracking via TaskStatus enum
 - Timestamps for creation and completion
 - Immutable state transitions
+
+### 10. **IPC System** (`src/Core/IPC/*`)
+- StreamingBackgroundProcessor: Parent process management
+- StreamingAsyncProcessor: Child process execution
+- JSON message protocol for communication
+- Real-time progress updates
 
 ## Task Management
 
@@ -424,7 +442,7 @@ The system automatically saves and loads state from `.swarm.json`:
    }
    ```
 
-2. **Register in Toolchain**: Add to `Toolchain::registerAll()`
+2. **Register in ToolExecutor**: Add to tool registration in `Swarm::createFromEnvironment()`
    ```php
    $executor->register(new MyTool($logger));
    ```
@@ -439,6 +457,7 @@ The system automatically saves and loads state from `.swarm.json`:
 |----------|-------------|---------|
 | `OPENAI_API_KEY` | Required for AI functionality | - |
 | `OPENAI_MODEL` | Model to use | gpt-4o-mini |
+| `TAVILY_API_KEY` | API key for Tavily search/extract | - |
 | `OPENAI_TEMPERATURE` | Creativity level | 0.7 |
 | `LOG_ENABLED` | Enable file logging | false |
 | `LOG_LEVEL` | Logging level | info |
