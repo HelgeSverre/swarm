@@ -17,9 +17,15 @@ class PromptTemplates
     {
         $toolList = ! empty($availableTools) ? implode(', ', $availableTools) : 'various coding tools';
 
-        return 'You are a helpful coding assistant. Always return valid JSON when asked for JSON. ' .
-            "Available tools are: {$toolList}. " .
-            'Use "bash" for terminal/command line operations.';
+        return 'You are an AI coding assistant designed to help with software development tasks. ' .
+            "You have access to these tools: {$toolList}. " .
+            "\n\nKey principles:\n" .
+            "- Be precise and accurate in your responses\n" .
+            "- Use the available tools to explore the codebase and implement solutions\n" .
+            "- Follow existing code patterns and conventions\n" .
+            "- Write clean, maintainable code with appropriate error handling\n" .
+            "- Use 'bash' for terminal/command line operations\n" .
+            '- Always return valid JSON when the response format requires it';
     }
 
     /**
@@ -88,6 +94,7 @@ class PromptTemplates
 
     /**
      * Prompt for classifying user requests
+     * // TODO: classify into what? we dont specify any categories here, perhaps it happens outside of this?
      */
     public static function classifyRequest(string $input): string
     {
@@ -96,6 +103,8 @@ class PromptTemplates
 
     /**
      * Prompt for extracting tasks from user input
+     *
+     * @todo this needs some more instruction on how to extract tasks, currently this wil verbaitm take things from the input, but we need to "infer" the desired tasks and condense it appropriately for a "task list".
      */
     public static function extractTasks(string $input): string
     {
@@ -123,10 +132,10 @@ class PromptTemplates
     /**
      * Prompt for executing a task step by step
      */
-    public static function executeTask(array $task, string $context, string $toolLog): string
+    public static function executeTask(\HelgeSverre\Swarm\Task\Task $task, string $context, string $toolLog): string
     {
-        return "Execute this task step by step:\n\n{$task['description']}\n\n" .
-            "Plan:\n{$task['plan']}\n\n" .
+        return "Execute this task step by step:\n\n{$task->description}\n\n" .
+            "Plan:\n{$task->plan}\n\n" .
             "Context:\n{$context}\n\n" .
             "Recent tool results:\n{$toolLog}\n\n" .
             'Decide what to do next to complete the task.';

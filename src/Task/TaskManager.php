@@ -13,6 +13,16 @@ class TaskManager
      */
     protected array $tasks = [];
 
+    /**
+     * @var array<array{id: string, description: string, status: string, created_at: int, completed_at: int, execution_time?: int}>
+     */
+    protected array $taskHistory = [];
+
+    /**
+     * Maximum number of tasks to keep in history
+     */
+    protected int $historyLimit = 1000;
+
     public function __construct(
         protected readonly ?LoggerInterface $logger = null
     ) {}
@@ -60,7 +70,7 @@ class TaskManager
         }
     }
 
-    public function getNextTask(): ?array
+    public function getNextTask(): ?Task
     {
         foreach ($this->tasks as $index => $task) {
             if ($task->status === TaskStatus::Planned) {
@@ -72,7 +82,7 @@ class TaskManager
                     'description' => $task->description,
                 ]);
 
-                return $this->currentTask->toArray();
+                return $this->currentTask;
             }
         }
 
@@ -90,6 +100,9 @@ class TaskManager
             foreach ($this->tasks as $index => $task) {
                 if ($task->id === $taskId) {
                     $this->tasks[$index] = $task->complete();
+
+                    // Add to history
+                    $this->addToHistory($this->tasks[$index]);
 
                     $this->logger?->info('Task completed', [
                         'task_id' => $taskId,
@@ -112,7 +125,68 @@ class TaskManager
         }
     }
 
+    /**
+     * @return Task[]
+     */
     public function getTasks(): array
+    {
+        return $this->tasks;
+    }
+
+    /**
+     * Get task history
+     *
+     * @return array<array{id: string, description: string, status: string, created_at: int, completed_at: int, execution_time?: int}>
+     */
+    public function getTaskHistory(): array
+    {
+        return $this->taskHistory;
+    }
+
+    /**
+     * Set task history (for loading from state)
+     *
+     * @param array<array{id: string, description: string, status: string, created_at: int, completed_at: int, execution_time?: int}> $history
+     */
+    public function setTaskHistory(array $history): void
+    {
+        $this->taskHistory = $history;
+    }
+
+    /**
+     * Clear completed tasks from the active task list
+     *
+     * @return Task[] The completed tasks that were removed
+     */
+    public function clearCompletedTasks(): array
+    {
+        $completed = [];
+        $active = [];
+
+        foreach ($this->tasks as $task) {
+            if ($task->isCompleted()) {
+                $completed[] = $task;
+                // Ensure task is in history
+                $this->addToHistory($task);
+            } else {
+                $active[] = $task;
+            }
+        }
+
+        $this->tasks = $active;
+
+        $this->logger?->info('Cleared completed tasks', [
+            'completed_count' => count($completed),
+            'active_count' => count($active),
+        ]);
+
+        return $completed;
+    }
+
+    /**
+     * Get all tasks as arrays (for backward compatibility)
+     */
+    public function getTasksAsArrays(): array
     {
         return array_map(fn (Task $task) => $task->toArray(), $this->tasks);
     }
@@ -122,5 +196,41 @@ class TaskManager
         $statusEnum = TaskStatus::from($status);
 
         return count(array_filter($this->tasks, fn (Task $task) => $task->status === $statusEnum));
+    }
+
+    /**
+     * Add a completed task to history
+     */
+    protected function addToHistory(Task $task): void
+    {
+        if ($task->status !== TaskStatus::Completed) {
+            return;
+        }
+
+        // Check if task is already in history
+        foreach ($this->taskHistory as $historyItem) {
+            if ($historyItem['id'] === $task->id) {
+                return; // Task already in history
+            }
+        }
+
+        $historyEntry = $task->toArray();
+
+        // Calculate execution time if not already set
+        if (isset($historyEntry['created_at'], $historyEntry['completed_at'])) {
+            $historyEntry['execution_time'] = $historyEntry['completed_at'] - $historyEntry['created_at'];
+        }
+
+        $this->taskHistory[] = $historyEntry;
+
+        // Maintain history limit
+        while (count($this->taskHistory) > $this->historyLimit) {
+            array_shift($this->taskHistory);
+        }
+
+        $this->logger?->debug('Task added to history', [
+            'task_id' => $task->id,
+            'history_count' => count($this->taskHistory),
+        ]);
     }
 }

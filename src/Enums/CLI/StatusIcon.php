@@ -9,23 +9,6 @@ use HelgeSverre\Swarm\Task\TaskStatus;
  */
 enum StatusIcon: string
 {
-    // Task status icons
-    case Pending = 'pending';
-    case Planned = 'planned';
-    case Executing = 'executing';
-    case Running = 'running';
-    case Completed = 'completed';
-    case Failed = 'failed';
-    
-    // UI icons
-    case Robot = 'robot';
-    case Tool = 'tool';
-    case Task = 'task';
-    case Error = 'error';
-    case Success = 'success';
-    case Info = 'info';
-    case Warning = 'warning';
-
     /**
      * Get the icon character/emoji
      */
@@ -55,7 +38,7 @@ enum StatusIcon: string
         if (is_string($status)) {
             $status = TaskStatus::tryFrom($status);
         }
-        
+
         return match ($status) {
             TaskStatus::Pending => self::Pending,
             TaskStatus::Planned => self::Planned,
@@ -64,4 +47,20 @@ enum StatusIcon: string
             default => self::Pending,
         };
     }
+    // Task status icons
+    case Pending = 'pending';
+    case Planned = 'planned';
+    case Executing = 'executing';
+    case Running = 'running';
+    case Completed = 'completed';
+    case Failed = 'failed';
+
+    // UI icons
+    case Robot = 'robot';
+    case Tool = 'tool';
+    case Task = 'task';
+    case Error = 'error';
+    case Success = 'success';
+    case Info = 'info';
+    case Warning = 'warning';
 }

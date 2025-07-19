@@ -2,7 +2,7 @@
 
 namespace HelgeSverre\Swarm\Enums\Core;
 
-use Monolog\Logger;
+use Monolog\Level;
 
 /**
  * Logging levels
@@ -10,19 +10,19 @@ use Monolog\Logger;
 enum LogLevel: string
 {
     /**
-     * Convert to Monolog log level constant
+     * Convert to Monolog Level enum
      */
-    public function toMonologLevel(): int
+    public function toMonologLevel(): Level
     {
         return match ($this) {
-            self::Debug => Logger::DEBUG,
-            self::Info => Logger::INFO,
-            self::Notice => Logger::NOTICE,
-            self::Warning => Logger::WARNING,
-            self::Error => Logger::ERROR,
-            self::Critical => Logger::CRITICAL,
-            self::Alert => Logger::ALERT,
-            self::Emergency => Logger::EMERGENCY,
+            self::Debug => Level::Debug,
+            self::Info => Level::Info,
+            self::Notice => Level::Notice,
+            self::Warning => Level::Warning,
+            self::Error => Level::Error,
+            self::Critical => Level::Critical,
+            self::Alert => Level::Alert,
+            self::Emergency => Level::Emergency,
         };
     }
 

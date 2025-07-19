@@ -7,27 +7,6 @@ namespace HelgeSverre\Swarm\Enums\CLI;
  */
 enum AnsiColor: string
 {
-    case Reset = 'reset';
-    case Bold = 'bold';
-    case Dim = 'dim';
-    case Red = 'red';
-    case Green = 'green';
-    case Yellow = 'yellow';
-    case Blue = 'blue';
-    case Magenta = 'magenta';
-    case Cyan = 'cyan';
-    case White = 'white';
-    case Gray = 'gray';
-    case DarkGray = 'dark_gray';
-    case LightGray = 'light_gray';
-    case BrightRed = 'bright_red';
-    case BrightGreen = 'bright_green';
-    case BrightYellow = 'bright_yellow';
-    case BrightBlue = 'bright_blue';
-    case BrightMagenta = 'bright_magenta';
-    case BrightCyan = 'bright_cyan';
-    case BrightWhite = 'bright_white';
-
     /**
      * Get the ANSI escape code for this color
      */
@@ -56,4 +35,24 @@ enum AnsiColor: string
             self::BrightWhite => "\033[97m",
         };
     }
+    case Reset = 'reset';
+    case Bold = 'bold';
+    case Dim = 'dim';
+    case Red = 'red';
+    case Green = 'green';
+    case Yellow = 'yellow';
+    case Blue = 'blue';
+    case Magenta = 'magenta';
+    case Cyan = 'cyan';
+    case White = 'white';
+    case Gray = 'gray';
+    case DarkGray = 'dark_gray';
+    case LightGray = 'light_gray';
+    case BrightRed = 'bright_red';
+    case BrightGreen = 'bright_green';
+    case BrightYellow = 'bright_yellow';
+    case BrightBlue = 'bright_blue';
+    case BrightMagenta = 'bright_magenta';
+    case BrightCyan = 'bright_cyan';
+    case BrightWhite = 'bright_white';
 }

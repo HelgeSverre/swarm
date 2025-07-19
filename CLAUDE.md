@@ -75,7 +75,7 @@ Centralized prompt templates for consistency:
 - Task-related prompts with parameter injection
 - Code assistance prompts inspired by Claude Code patterns
 
-### TUIRenderer (src/CLI/TUIRenderer.php)
+### UI (src/CLI/UI.php)
 Manages the terminal UI:
 - ANSI escape codes for colors and positioning
 - Real-time updates without flicker

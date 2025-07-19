@@ -13,12 +13,12 @@ test('task manager can add single task', function () {
     $tasks = $taskManager->getTasks();
 
     expect($tasks)->toHaveCount(1)
-        ->and($tasks[0]['description'])->toBe('Create user migration')
-        ->and($tasks[0]['status'])->toBe('pending')
-        ->and($tasks[0]['plan'])->toBeNull()
-        ->and($tasks[0]['steps'])->toBe([])
-        ->and($tasks[0]['id'])->toBeString()
-        ->and($tasks[0]['created_at'])->toBeInt();
+        ->and($tasks[0]->description)->toBe('Create user migration')
+        ->and($tasks[0]->status->value)->toBe('pending')
+        ->and($tasks[0]->plan)->toBeNull()
+        ->and($tasks[0]->steps)->toBe([])
+        ->and($tasks[0]->id)->toBeString()
+        ->and($tasks[0]->createdAt)->toBeInstanceOf(DateTimeImmutable::class);
 });
 
 test('task manager can add multiple tasks', function () {
@@ -33,9 +33,9 @@ test('task manager can add multiple tasks', function () {
     $tasks = $taskManager->getTasks();
 
     expect($tasks)->toHaveCount(3)
-        ->and($tasks[0]['description'])->toBe('Create user migration')
-        ->and($tasks[1]['description'])->toBe('Add authentication')
-        ->and($tasks[2]['description'])->toBe('Setup database seeder');
+        ->and($tasks[0]->description)->toBe('Create user migration')
+        ->and($tasks[1]->description)->toBe('Add authentication')
+        ->and($tasks[2]->description)->toBe('Setup database seeder');
 });
 
 test('task manager handles empty task description', function () {
@@ -58,7 +58,7 @@ test('task manager can plan a task', function () {
         ['description' => 'Create user migration'],
     ]);
 
-    $taskId = $taskManager->getTasks()[0]['id'];
+    $taskId = $taskManager->getTasks()[0]->id;
     $plan = 'First create migration file, then add schema';
     $steps = ['Create migration', 'Add schema', 'Run migration'];
 
@@ -66,9 +66,9 @@ test('task manager can plan a task', function () {
 
     $tasks = $taskManager->getTasks();
 
-    expect($tasks[0]['plan'])->toBe($plan)
-        ->and($tasks[0]['steps'])->toBe($steps)
-        ->and($tasks[0]['status'])->toBe('planned');
+    expect($tasks[0]->plan)->toBe($plan)
+        ->and($tasks[0]->steps)->toBe($steps)
+        ->and($tasks[0]->status->value)->toBe('planned');
 });
 
 test('planning non-existent task does not throw error', function () {
@@ -88,7 +88,8 @@ test('task manager gets next planned task', function () {
         ['description' => 'Task 3'],
     ]);
 
-    $taskIds = array_column($taskManager->getTasks(), 'id');
+    $tasks = $taskManager->getTasks();
+    $taskIds = array_map(fn ($task) => $task->id, $tasks);
 
     // Plan only the second task
     $taskManager->planTask($taskIds[1], 'Plan for task 2', []);
@@ -96,9 +97,9 @@ test('task manager gets next planned task', function () {
     $nextTask = $taskManager->getNextTask();
 
     expect($nextTask)->not->toBeNull()
-        ->and($nextTask['description'])->toBe('Task 2')
-        ->and($nextTask['status'])->toBe('executing')
-        ->and($taskManager->currentTask->toArray())->toBe($nextTask);
+        ->and($nextTask->description)->toBe('Task 2')
+        ->and($nextTask->status->value)->toBe('executing')
+        ->and($taskManager->currentTask)->toBe($nextTask);
 });
 
 test('getNextTask returns null when no planned tasks', function () {
@@ -122,7 +123,7 @@ test('task manager completes current task', function () {
         ['description' => 'Create user migration'],
     ]);
 
-    $taskId = $taskManager->getTasks()[0]['id'];
+    $taskId = $taskManager->getTasks()[0]->id;
     $taskManager->planTask($taskId, 'Plan', []);
 
     $taskManager->getNextTask(); // Sets as executing
@@ -130,7 +131,7 @@ test('task manager completes current task', function () {
 
     $tasks = $taskManager->getTasks();
 
-    expect($tasks[0]['status'])->toBe('completed')
+    expect($tasks[0]->status->value)->toBe('completed')
         ->and($taskManager->currentTask)->toBeNull();
 });
 
@@ -149,22 +150,22 @@ test('task state transitions work correctly', function () {
         ['description' => 'Test task'],
     ]);
 
-    $taskId = $taskManager->getTasks()[0]['id'];
+    $taskId = $taskManager->getTasks()[0]->id;
 
     // Initial state
-    expect($taskManager->getTasks()[0]['status'])->toBe('pending');
+    expect($taskManager->getTasks()[0]->status->value)->toBe('pending');
 
     // Plan the task
     $taskManager->planTask($taskId, 'Test plan', ['Step 1', 'Step 2']);
-    expect($taskManager->getTasks()[0]['status'])->toBe('planned');
+    expect($taskManager->getTasks()[0]->status->value)->toBe('planned');
 
     // Start executing
     $taskManager->getNextTask();
-    expect($taskManager->getTasks()[0]['status'])->toBe('executing');
+    expect($taskManager->getTasks()[0]->status->value)->toBe('executing');
 
     // Complete the task
     $taskManager->completeCurrentTask();
-    expect($taskManager->getTasks()[0]['status'])->toBe('completed');
+    expect($taskManager->getTasks()[0]->status->value)->toBe('completed');
 });
 
 test('multiple tasks are processed in order', function () {
@@ -176,7 +177,7 @@ test('multiple tasks are processed in order', function () {
         ['description' => 'Task 3'],
     ]);
 
-    $taskIds = array_column($taskManager->getTasks(), 'id');
+    $taskIds = array_map(fn ($task) => $task->id, $taskManager->getTasks());
 
     // Plan all tasks
     $taskManager->planTask($taskIds[0], 'Plan 1', []);
@@ -185,17 +186,17 @@ test('multiple tasks are processed in order', function () {
 
     // Process first task
     $task1 = $taskManager->getNextTask();
-    expect($task1['description'])->toBe('Task 1');
+    expect($task1->description)->toBe('Task 1');
     $taskManager->completeCurrentTask();
 
     // Process second task
     $task2 = $taskManager->getNextTask();
-    expect($task2['description'])->toBe('Task 2');
+    expect($task2->description)->toBe('Task 2');
     $taskManager->completeCurrentTask();
 
     // Process third task
     $task3 = $taskManager->getNextTask();
-    expect($task3['description'])->toBe('Task 3');
+    expect($task3->description)->toBe('Task 3');
     $taskManager->completeCurrentTask();
 
     // No more tasks
@@ -212,7 +213,7 @@ test('countByStatus returns correct counts', function () {
         ['description' => 'Task 4'],
     ]);
 
-    $taskIds = array_column($taskManager->getTasks(), 'id');
+    $taskIds = array_map(fn ($task) => $task->id, $taskManager->getTasks());
 
     // Plan two tasks
     $taskManager->planTask($taskIds[0], 'Plan 1', []);
@@ -243,7 +244,7 @@ test('task ids are unique', function () {
     ]);
 
     $tasks = $taskManager->getTasks();
-    $ids = array_column($tasks, 'id');
+    $ids = array_map(fn ($task) => $task->id, $tasks);
 
     expect($ids)->toHaveCount(3)
         ->and(array_unique($ids))->toHaveCount(3); // All IDs are unique
@@ -260,6 +261,6 @@ test('task created_at timestamps are set', function () {
 
     $task = $taskManager->getTasks()[0];
 
-    expect($task['created_at'])->toBeGreaterThanOrEqual($startTime)
-        ->and($task['created_at'])->toBeLessThanOrEqual(time());
+    expect($task->createdAt->getTimestamp())->toBeGreaterThanOrEqual($startTime)
+        ->and($task->createdAt->getTimestamp())->toBeLessThanOrEqual(time());
 });

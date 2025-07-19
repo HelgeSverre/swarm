@@ -172,13 +172,13 @@ test('agent extracts tasks for implementation requests without tools', function 
     // Verify tasks were created and planned
     $tasks = $taskManager->getTasks();
     expect($tasks)->toHaveCount(3)
-        ->and($tasks[0]['description'])->toBe('Eat an apple')
-        ->and($tasks[0]['status'])->toBe('completed')
-        ->and($tasks[0]['plan'])->toContain('apple')
-        ->and($tasks[1]['description'])->toBe('Eat a banana')
-        ->and($tasks[1]['status'])->toBe('completed')
-        ->and($tasks[2]['description'])->toBe('Eat grapes')
-        ->and($tasks[2]['status'])->toBe('completed');
+        ->and($tasks[0]->description)->toBe('Eat an apple')
+        ->and($tasks[0]->status->value)->toBe('completed')
+        ->and($tasks[0]->plan)->toContain('apple')
+        ->and($tasks[1]->description)->toBe('Eat a banana')
+        ->and($tasks[1]->status->value)->toBe('completed')
+        ->and($tasks[2]->description)->toBe('Eat grapes')
+        ->and($tasks[2]->status->value)->toBe('completed');
 });
 
 test('agent handles conversation when implementation request has no tasks', function () {

@@ -15,6 +15,7 @@ class ToolExecutor
 
     protected array $executionLog = [];
 
+    /** @var callable|null */
     protected $progressCallback = null;
 
     public function __construct(

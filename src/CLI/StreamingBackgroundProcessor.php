@@ -11,6 +11,7 @@ use Psr\Log\LoggerInterface;
  */
 class StreamingBackgroundProcessor
 {
+    /** @var resource|false|null */
     protected $process = null;
 
     protected array $pipes = [];

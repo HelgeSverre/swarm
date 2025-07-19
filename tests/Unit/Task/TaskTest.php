@@ -38,12 +38,13 @@ test('task can be converted to array', function () {
     $task = Task::create('Test task');
     $array = $task->toArray();
 
-    expect($array)->toHaveKeys(['id', 'description', 'status', 'plan', 'steps', 'created_at'])
+    expect($array)->toHaveKeys(['id', 'description', 'status', 'plan', 'steps', 'created_at', 'completed_at'])
         ->and($array['description'])->toBe('Test task')
         ->and($array['status'])->toBe('pending')
         ->and($array['plan'])->toBeNull()
         ->and($array['steps'])->toBe([])
-        ->and($array['created_at'])->toBeInt();
+        ->and($array['created_at'])->toBeInt()
+        ->and($array['completed_at'])->toBeNull();
 });
 
 test('task immutability - withPlan creates new instance', function () {
@@ -134,4 +135,69 @@ test('task preserves all properties through transitions', function () {
         expect($version->plan)->toBe('Implement in phases')
             ->and($version->steps)->toBe(['Design', 'Code', 'Test']);
     }
+});
+
+test('completed task has completedAt timestamp', function () {
+    $task = Task::create('Test task');
+
+    // Initial task should not have completedAt
+    expect($task->completedAt)->toBeNull();
+
+    // Complete the task
+    $completed = $task->complete();
+
+    expect($completed->completedAt)->toBeInstanceOf(DateTimeImmutable::class)
+        ->and($completed->completedAt->getTimestamp())->toBeGreaterThan(0)
+        ->and($completed->completedAt->getTimestamp())->toBeLessThanOrEqual(time());
+
+    // Verify it's in the array format
+    $array = $completed->toArray();
+    expect($array['completed_at'])->toBeInt()
+        ->and($array['completed_at'])->toBe($completed->completedAt->getTimestamp());
+});
+
+test('completedAt is preserved through state transitions', function () {
+    $completedTime = new DateTimeImmutable('2024-01-01 12:00:00');
+
+    // Create a completed task with specific timestamp
+    $task = new Task(
+        id: 'test_123',
+        description: 'Test',
+        status: TaskStatus::Completed,
+        plan: 'Plan',
+        steps: ['Step 1'],
+        createdAt: new DateTimeImmutable('2024-01-01 10:00:00'),
+        completedAt: $completedTime
+    );
+
+    // Transition to planned (shouldn't happen in real life, but testing preservation)
+    $planned = $task->withPlan('New plan', ['New step']);
+
+    expect($planned->completedAt)->toBe($completedTime)
+        ->and($planned->completedAt->format('Y-m-d H:i:s'))->toBe('2024-01-01 12:00:00');
+});
+
+test('task can be created from array with completedAt', function () {
+    $createdTime = time() - 3600;
+    $completedTime = time() - 1800;
+
+    $data = [
+        'id' => 'task_123',
+        'description' => 'Completed task',
+        'status' => 'completed',
+        'plan' => 'Test plan',
+        'steps' => ['Step 1'],
+        'created_at' => $createdTime,
+        'completed_at' => $completedTime,
+    ];
+
+    $task = Task::fromArray($data);
+
+    expect($task->completedAt)->toBeInstanceOf(DateTimeImmutable::class)
+        ->and($task->completedAt->getTimestamp())->toBe($completedTime)
+        ->and($task->createdAt->getTimestamp())->toBe($createdTime);
+
+    // Verify execution time can be calculated
+    $executionTime = $task->completedAt->getTimestamp() - $task->createdAt->getTimestamp();
+    expect($executionTime)->toBe(1800); // 30 minutes
 });

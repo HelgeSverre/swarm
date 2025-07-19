@@ -2,10 +2,14 @@
 
 namespace HelgeSverre\Swarm\Agent;
 
+use Closure;
 use Exception;
 use HelgeSverre\Swarm\Core\ToolExecutor;
+use HelgeSverre\Swarm\Enums\Agent\RequestType;
 use HelgeSverre\Swarm\Prompts\PromptTemplates;
+use HelgeSverre\Swarm\Task\Task;
 use HelgeSverre\Swarm\Task\TaskManager;
+use HelgeSverre\Swarm\Task\TaskStatus;
 use OpenAI;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
@@ -14,7 +18,7 @@ class CodingAgent
 {
     protected array $conversationHistory = [];
 
-    protected $progressCallback = null;
+    protected ?Closure $progressCallback = null;
 
     public function __construct(
         protected readonly ToolExecutor $toolExecutor,
@@ -43,17 +47,17 @@ class CodingAgent
         $classification = $this->classifyRequest($userInput);
 
         // Handle demonstration requests without tools
-        if ($classification['request_type'] === 'demonstration' && ! $classification['requires_tools']) {
+        if ($classification['request_type'] === RequestType::Demonstration && ! $classification['requires_tools']) {
             return $this->handleDemonstration($userInput);
         }
 
         // Handle explanation requests without tools
-        if ($classification['request_type'] === 'explanation') {
+        if ($classification['request_type'] === RequestType::Explanation) {
             return $this->handleExplanation($userInput);
         }
 
         // Check if request requires tools first
-        if ($classification['requires_tools'] || $classification['request_type'] === 'implementation') {
+        if ($classification['requires_tools'] || $classification['request_type'] === RequestType::Implementation) {
             $this->reportProgress('extracting_tasks', ['message' => 'Identifying tasks to complete...']);
             $tasks = $this->extractTasks($userInput);
 
@@ -62,10 +66,10 @@ class CodingAgent
 
                 // Plan each task
                 foreach ($this->taskManager->getTasks() as $task) {
-                    if ($task['status'] === 'pending') {
+                    if ($task->status === TaskStatus::Pending) {
                         $this->reportProgress('planning_task', [
-                            'message' => 'Planning: ' . $task['description'],
-                            'task_id' => $task['id'],
+                            'message' => 'Planning: ' . $task->description,
+                            'task_id' => $task->id,
                         ]);
                         $this->planTask($task);
                     }
@@ -75,12 +79,12 @@ class CodingAgent
                 $taskResults = [];
                 while ($currentTask = $this->taskManager->getNextTask()) {
                     $this->reportProgress('executing_task', [
-                        'message' => 'Executing: ' . $currentTask['description'],
-                        'task_id' => $currentTask['id'],
+                        'message' => 'Executing: ' . $currentTask->description,
+                        'task_id' => $currentTask->id,
                     ]);
                     $this->executeTask($currentTask);
                     $this->taskManager->completeCurrentTask();
-                    $taskResults[] = $currentTask['description'];
+                    $taskResults[] = $currentTask->description;
                 }
 
                 // Generate a summary of what was done
@@ -92,7 +96,7 @@ class CodingAgent
         }
 
         // Handle general queries or conversations without tools
-        if ($classification['request_type'] === 'query' || $classification['request_type'] === 'conversation') {
+        if ($classification['request_type'] === RequestType::Query || $classification['request_type'] === RequestType::Conversation) {
             return $this->handleConversation($userInput);
         }
 
@@ -103,9 +107,17 @@ class CodingAgent
     public function getStatus(): array
     {
         return [
-            'tasks' => $this->taskManager->getTasks(),
+            'tasks' => array_map(fn ($task) => $task->toArray(), $this->taskManager->getTasks()),
             'current_task' => $this->taskManager->currentTask?->toArray(),
         ];
+    }
+
+    /**
+     * Get the task manager instance
+     */
+    public function getTaskManager(): TaskManager
+    {
+        return $this->taskManager;
     }
 
     /**
@@ -238,7 +250,7 @@ class CodingAgent
                             'properties' => [
                                 'request_type' => [
                                     'type' => 'string',
-                                    'enum' => ['demonstration', 'implementation', 'explanation', 'query', 'conversation'],
+                                    'enum' => RequestType::values(),
                                     'description' => 'Type of request: demonstration (show example code), implementation (create/modify files), explanation (explain concept), query (ask for information), conversation (general chat)',
                                 ],
                                 'requires_tools' => [
@@ -269,8 +281,15 @@ class CodingAgent
                 throw new RuntimeException('Invalid classification response');
             }
 
+            // Convert request_type string to enum
+            $requestType = RequestType::fromString($classification['request_type']);
+            if ($requestType === null) {
+                throw new RuntimeException('Invalid request type: ' . $classification['request_type']);
+            }
+            $classification['request_type'] = $requestType;
+
             $this->logger?->info('Request classified', [
-                'type' => $classification['request_type'],
+                'type' => $classification['request_type']->value,
                 'requires_tools' => $classification['requires_tools'],
                 'confidence' => $classification['confidence'],
             ]);
@@ -284,7 +303,7 @@ class CodingAgent
 
             // Default to implementation if classification fails
             return [
-                'request_type' => 'implementation',
+                'request_type' => RequestType::Implementation,
                 'requires_tools' => true,
                 'confidence' => 0.5,
                 'reasoning' => 'Classification failed, defaulting to implementation',
@@ -498,9 +517,9 @@ class CodingAgent
         }
     }
 
-    protected function planTask(array $task): void
+    protected function planTask(Task $task): void
     {
-        $this->logger?->info('Planning task', ['task_id' => $task['id'], 'description' => $task['description']]);
+        $this->logger?->info('Planning task', ['task_id' => $task->id, 'description' => $task->description]);
 
         $context = $this->buildContext();
 
@@ -508,7 +527,7 @@ class CodingAgent
             $systemPrompt = PromptTemplates::planningSystem();
 
             $messages = $this->buildMessagesWithHistory(
-                PromptTemplates::planTask($task['description'], $context),
+                PromptTemplates::planTask($task->description, $context),
                 $systemPrompt
             );
 
@@ -581,23 +600,23 @@ class CodingAgent
                 return $step['description'];
             }, $planData['steps']);
 
-            $this->taskManager->planTask($task['id'], $planData['plan_summary'], $steps);
+            $this->taskManager->planTask($task->id, $planData['plan_summary'], $steps);
 
             $this->logger?->debug('Task planned with structured output', [
-                'task_id' => $task['id'],
+                'task_id' => $task->id,
                 'steps_count' => count($steps),
                 'complexity' => $planData['estimated_complexity'] ?? 'unknown',
             ]);
         } catch (Exception $e) {
             $this->logger?->error('Structured task planning failed, falling back', [
                 'error' => $e->getMessage(),
-                'task_id' => $task['id'],
+                'task_id' => $task->id,
             ]);
 
             // Fallback to regular planning
-            $prompt = PromptTemplates::planTaskFallback($task['description'], $context);
+            $prompt = PromptTemplates::planTaskFallback($task->description, $context);
             $planResponse = $this->callOpenAI($prompt);
-            $this->taskManager->planTask($task['id'], $planResponse, []);
+            $this->taskManager->planTask($task->id, $planResponse, []);
         }
     }
 
@@ -619,12 +638,12 @@ class CodingAgent
         }, $recent));
     }
 
-    protected function executeTask(array $task): void
+    protected function executeTask(Task $task): void
     {
         $maxIterations = 10;
         $iteration = 0;
 
-        $this->logger?->info("Executing task: {$task['description']}");
+        $this->logger?->info("Executing task: {$task->description}");
 
         while ($iteration < $maxIterations) {
             $context = $this->buildContext();
@@ -653,7 +672,7 @@ class CodingAgent
                     'exception' => get_class($e),
                     'tool' => $toolCall['name'],
                     'params' => $toolCall['arguments'],
-                    'task' => $task['description'],
+                    'task' => $task->description,
                     'iteration' => $iteration,
                     'trace' => $e->getTraceAsString(),
                 ]);
@@ -665,7 +684,7 @@ class CodingAgent
         }
 
         $this->logger?->info('Task execution completed', [
-            'task' => $task['description'],
+            'task' => $task->description,
             'iterations' => $iteration,
             'max_iterations' => $maxIterations,
         ]);

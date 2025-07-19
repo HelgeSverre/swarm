@@ -7,18 +7,6 @@ namespace HelgeSverre\Swarm\Enums\CLI;
  */
 enum BoxCharacter: string
 {
-    case Horizontal = 'horizontal';
-    case Vertical = 'vertical';
-    case TopLeft = 'top_left';
-    case TopRight = 'top_right';
-    case BottomLeft = 'bottom_left';
-    case BottomRight = 'bottom_right';
-    case Cross = 'cross';
-    case TeeDown = 'tee_down';
-    case TeeUp = 'tee_up';
-    case TeeRight = 'tee_right';
-    case TeeLeft = 'tee_left';
-
     /**
      * Get the Unicode character for this box element
      */
@@ -38,4 +26,15 @@ enum BoxCharacter: string
             self::TeeLeft => '┤',
         };
     }
+    case Horizontal = 'horizontal';
+    case Vertical = 'vertical';
+    case TopLeft = 'top_left';
+    case TopRight = 'top_right';
+    case BottomLeft = 'bottom_left';
+    case BottomRight = 'bottom_right';
+    case Cross = 'cross';
+    case TeeDown = 'tee_down';
+    case TeeUp = 'tee_up';
+    case TeeRight = 'tee_right';
+    case TeeLeft = 'tee_left';
 }

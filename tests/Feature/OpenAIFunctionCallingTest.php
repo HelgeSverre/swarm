@@ -121,12 +121,12 @@ test('agent executes task with function calling', function () {
     $method = $reflection->getMethod('executeTask');
     $method->setAccessible(true);
 
-    $task = [
+    $task = HelgeSverre\Swarm\Task\Task::fromArray([
         'id' => '1',
         'description' => 'Read the test file',
         'plan' => 'Read file contents',
         'status' => 'pending',
-    ];
+    ]);
 
     $method->invoke($agent, $task);
 

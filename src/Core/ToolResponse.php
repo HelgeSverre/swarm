@@ -28,6 +28,11 @@ class ToolResponse
         return $instance;
     }
 
+    public function isError(): bool
+    {
+        return ! $this->success;
+    }
+
     public function isSuccess(): bool
     {
         return $this->success;

@@ -133,9 +133,9 @@ test('full task lifecycle from extraction to completion', function () {
     // Verify task was completed
     $tasks = $taskManager->getTasks();
     expect($tasks)->toHaveCount(1)
-        ->and($tasks[0]['status'])->toBe('completed')
-        ->and($tasks[0]['description'])->toBe('Create a test file')
-        ->and($tasks[0]['plan'])->toContain('test file');
+        ->and($tasks[0]->status->value)->toBe('completed')
+        ->and($tasks[0]->description)->toBe('Create a test file')
+        ->and($tasks[0]->plan)->toContain('test file');
 
     // Verify file was created
     $testFile = sys_get_temp_dir() . '/test_lifecycle.txt';
@@ -309,8 +309,8 @@ test('multiple tasks are processed sequentially', function () {
     // Verify both tasks were completed
     $tasks = $taskManager->getTasks();
     expect($tasks)->toHaveCount(2)
-        ->and($tasks[0]['status'])->toBe('completed')
-        ->and($tasks[1]['status'])->toBe('completed');
+        ->and($tasks[0]->status->value)->toBe('completed')
+        ->and($tasks[1]->status->value)->toBe('completed');
 
     // Verify files were created
     $file1 = sys_get_temp_dir() . '/file1.txt';
@@ -479,5 +479,5 @@ test('task execution handles errors gracefully', function () {
     // Task should still be marked as completed (even if tool failed)
     $tasks = $taskManager->getTasks();
     expect($tasks)->toHaveCount(1)
-        ->and($tasks[0]['status'])->toBe('completed');
+        ->and($tasks[0]->status->value)->toBe('completed');
 });

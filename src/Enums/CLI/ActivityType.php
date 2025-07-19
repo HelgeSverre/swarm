@@ -7,12 +7,6 @@ namespace HelgeSverre\Swarm\Enums\CLI;
  */
 enum ActivityType: string
 {
-    case Agent = 'agent';
-    case User = 'user';
-    case Tool = 'tool';
-    case Error = 'error';
-    case Notification = 'notification';
-
     /**
      * Get the display color for this activity type
      */
@@ -56,4 +50,9 @@ enum ActivityType: string
     {
         return self::tryFrom($value) ?? self::Agent;
     }
+    case Agent = 'agent';
+    case User = 'user';
+    case Tool = 'tool';
+    case Error = 'error';
+    case Notification = 'notification';
 }

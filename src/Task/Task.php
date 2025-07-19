@@ -16,6 +16,7 @@ readonly class Task
         public ?string $plan = null,
         public array $steps = [],
         public ?DateTimeImmutable $createdAt = null,
+        public ?DateTimeImmutable $completedAt = null,
     ) {}
 
     /**
@@ -47,6 +48,9 @@ readonly class Task
             createdAt: isset($data['created_at'])
                 ? (new DateTimeImmutable)->setTimestamp($data['created_at'])
                 : new DateTimeImmutable,
+            completedAt: isset($data['completed_at'])
+                ? (new DateTimeImmutable)->setTimestamp($data['completed_at'])
+                : null,
         );
     }
 
@@ -62,6 +66,7 @@ readonly class Task
             'plan' => $this->plan,
             'steps' => $this->steps,
             'created_at' => $this->createdAt->getTimestamp(),
+            'completed_at' => $this->completedAt?->getTimestamp(),
         ];
     }
 
@@ -77,6 +82,7 @@ readonly class Task
             plan: $plan,
             steps: $steps,
             createdAt: $this->createdAt,
+            completedAt: $this->completedAt,
         );
     }
 
@@ -92,6 +98,7 @@ readonly class Task
             plan: $this->plan,
             steps: $this->steps,
             createdAt: $this->createdAt,
+            completedAt: $this->completedAt,
         );
     }
 
@@ -107,6 +114,7 @@ readonly class Task
             plan: $this->plan,
             steps: $this->steps,
             createdAt: $this->createdAt,
+            completedAt: new DateTimeImmutable,
         );
     }
 

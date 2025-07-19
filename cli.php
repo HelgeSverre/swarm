@@ -13,7 +13,7 @@ define('SWARM_VERSION', '1.0.0');
 
 require __DIR__ . '/vendor/autoload.php';
 
-use HelgeSverre\Swarm\CLI\SwarmCLI;
+use HelgeSverre\Swarm\CLI\Swarm;
 use HelgeSverre\Swarm\Core\ExceptionHandler;
 use Monolog\Handler\RotatingFileHandler;
 use Monolog\Level;
@@ -57,7 +57,7 @@ $exceptionHandler->register();
 
 // Create and run the CLI
 try {
-    $cli = new SwarmCLI;
+    $cli = Swarm::createFromEnvironment();
     $cli->run();
 } catch (Throwable $e) {
     // Let the exception handler deal with it

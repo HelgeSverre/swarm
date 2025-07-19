@@ -4,9 +4,9 @@ namespace HelgeSverre\Swarm\Agent;
 
 class AgentResponse
 {
-    protected $message;
+    protected ?string $message = null;
 
-    protected $success;
+    protected bool $success = false;
 
     public static function success(string $message): self
     {

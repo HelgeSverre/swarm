@@ -9,8 +9,8 @@ describe('PromptTemplates', function () {
             $prompt = PromptTemplates::defaultSystem($tools);
 
             expect($prompt)
-                ->toContain('helpful coding assistant')
-                ->toContain('Available tools are: read_file, write_file, bash')
+                ->toContain('AI coding assistant')
+                ->toContain('You have access to these tools: read_file, write_file, bash')
                 ->toContain('terminal/command line operations');
         });
 
@@ -18,7 +18,7 @@ describe('PromptTemplates', function () {
             $prompt = PromptTemplates::defaultSystem([]);
 
             expect($prompt)
-                ->toContain('helpful coding assistant')
+                ->toContain('AI coding assistant')
                 ->toContain('various coding tools');
         });
 
@@ -118,10 +118,12 @@ describe('PromptTemplates', function () {
         });
 
         test('executeTask includes all task details', function () {
-            $task = [
+            $task = HelgeSverre\Swarm\Task\Task::fromArray([
+                'id' => 'test-id',
                 'description' => 'Implement login functionality',
                 'plan' => 'Create controller, add routes, implement validation',
-            ];
+                'status' => 'executing',
+            ]);
             $context = 'Laravel application';
             $toolLog = '{"tool": "write_file", "result": "success"}';
 
@@ -129,8 +131,8 @@ describe('PromptTemplates', function () {
 
             expect($prompt)
                 ->toContain('Execute this task step by step')
-                ->toContain($task['description'])
-                ->toContain($task['plan'])
+                ->toContain($task->description)
+                ->toContain($task->plan)
                 ->toContain($context)
                 ->toContain($toolLog)
                 ->toContain('Decide what to do next');

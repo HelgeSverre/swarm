@@ -7,15 +7,6 @@ namespace HelgeSverre\Swarm\Enums\CLI;
  */
 enum ThemeColor: string
 {
-    case Border = 'border';
-    case Header = 'header';
-    case Accent = 'accent';
-    case Success = 'success';
-    case Error = 'error';
-    case Warning = 'warning';
-    case Info = 'info';
-    case Muted = 'muted';
-
     /**
      * Get the ANSI color for this theme color
      */
@@ -40,5 +31,12 @@ enum ThemeColor: string
     {
         return $this->getAnsiColor()->toEscapeCode();
     }
-
+    case Border = 'border';
+    case Header = 'header';
+    case Accent = 'accent';
+    case Success = 'success';
+    case Error = 'error';
+    case Warning = 'warning';
+    case Info = 'info';
+    case Muted = 'muted';
 }

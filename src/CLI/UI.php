@@ -5,6 +5,16 @@
 namespace HelgeSverre\Swarm\CLI;
 
 use HelgeSverre\Swarm\Agent\AgentResponse;
+use HelgeSverre\Swarm\CLI\Activity\ActivityEntry;
+use HelgeSverre\Swarm\CLI\Activity\ConversationEntry;
+use HelgeSverre\Swarm\CLI\Activity\NotificationEntry;
+use HelgeSverre\Swarm\CLI\Activity\ToolCallEntry;
+use HelgeSverre\Swarm\Core\ToolResponse;
+use HelgeSverre\Swarm\Enums\CLI\AnsiColor;
+use HelgeSverre\Swarm\Enums\CLI\BoxCharacter;
+use HelgeSverre\Swarm\Enums\CLI\NotificationType;
+use HelgeSverre\Swarm\Enums\CLI\StatusIcon;
+use HelgeSverre\Swarm\Enums\CLI\ThemeColor;
 
 /**
  * Rich Terminal User Interface for Swarm CLI
@@ -12,80 +22,13 @@ use HelgeSverre\Swarm\Agent\AgentResponse;
  * Uses ANSI escape codes for colors, positioning, and formatting
  * Provides a real-time updating interface similar to modern CLI tools
  */
-class TUIRenderer
+class UI
 {
-    /** @var array<string, string> ANSI Color codes */
-    protected const array COLORS = [
-        'reset' => "\033[0m",
-        'bold' => "\033[1m",
-        'dim' => "\033[2m",
-        'red' => "\033[31m",
-        'green' => "\033[32m",
-        'yellow' => "\033[33m",
-        'blue' => "\033[34m",
-        'magenta' => "\033[35m",
-        'cyan' => "\033[36m",
-        'white' => "\033[37m",
-        'gray' => "\033[90m",
-        'dark_gray' => "\033[90m",
-        'light_gray' => "\033[37m",
-        'bright_red' => "\033[91m",
-        'bright_green' => "\033[92m",
-        'bright_yellow' => "\033[93m",
-        'bright_blue' => "\033[94m",
-        'bright_magenta' => "\033[95m",
-        'bright_cyan' => "\033[96m",
-        'bright_white' => "\033[97m",
-    ];
-
-    /** @var array<string, string> Theme colors */
-    protected const THEME = [
-        'border' => 'dark_gray',
-        'header' => 'bright_white',
-        'accent' => 'bright_blue',
-        'success' => 'bright_green',
-        'error' => 'bright_red',
-        'warning' => 'bright_yellow',
-        'info' => 'bright_cyan',
-        'muted' => 'gray',
-    ];
-
-    /** @var array<string, string> Box drawing characters */
-    protected const array BOX = [
-        'horizontal' => '─',
-        'vertical' => '│',
-        'top_left' => '┌',
-        'top_right' => '┐',
-        'bottom_left' => '└',
-        'bottom_right' => '┘',
-        'cross' => '┼',
-        'tee_down' => '┬',
-        'tee_up' => '┴',
-        'tee_right' => '├',
-        'tee_left' => '┤',
-    ];
-
-    /** @var array<string, string> Status icons */
-    protected const array ICONS = [
-        'pending' => '⏸',
-        'planned' => '📋',
-        'executing' => '⏳',
-        'running' => '⏳',
-        'completed' => '✓',
-        'failed' => '✗',
-        'robot' => '🤖',
-        'tool' => '🔧',
-        'task' => '🎯',
-        'error' => '❌',
-        'success' => '✅',
-        'info' => 'ℹ',
-        'warning' => '⚠',
-    ];
-
     protected int $terminalWidth;
 
     protected int $terminalHeight;
 
+    /** @var ActivityEntry[] */
     protected array $history = [];
 
     protected int $maxHistoryLines = 20;
@@ -120,18 +63,18 @@ class TUIRenderer
         $leftPadding = str_repeat(' ', (int) (($this->terminalWidth - $boxWidth) / 2));
 
         echo "\n\n";
-        echo $leftPadding . $this->colorize('┌' . str_repeat('─', $boxWidth - 2) . '┐', self::THEME['border']) . "\n";
-        echo $leftPadding . $this->colorize('│', self::THEME['border']) .
-            $this->colorize(mb_str_pad('Swarm CLI v1.0', $boxWidth - 2, ' ', STR_PAD_BOTH), self::THEME['header'], 'bold') .
-            $this->colorize('│', self::THEME['border']) . "\n";
-        echo $leftPadding . $this->colorize('│', self::THEME['border']) .
-            $this->colorize(mb_str_pad('AI-Powered Coding Assistant', $boxWidth - 2, ' ', STR_PAD_BOTH), self::THEME['muted']) .
-            $this->colorize('│', self::THEME['border']) . "\n";
-        echo $leftPadding . $this->colorize('└' . str_repeat('─', $boxWidth - 2) . '┘', self::THEME['border']) . "\n";
+        echo $leftPadding . $this->colorize(BoxCharacter::TopLeft->getChar() . str_repeat(BoxCharacter::Horizontal->getChar(), $boxWidth - 2) . BoxCharacter::TopRight->getChar(), ThemeColor::Border) . "\n";
+        echo $leftPadding . $this->colorize(BoxCharacter::Vertical->getChar(), ThemeColor::Border) .
+            $this->colorize(mb_str_pad('Swarm CLI v1.0', $boxWidth - 2, ' ', STR_PAD_BOTH), ThemeColor::Header, 'bold') .
+            $this->colorize(BoxCharacter::Vertical->getChar(), ThemeColor::Border) . "\n";
+        echo $leftPadding . $this->colorize(BoxCharacter::Vertical->getChar(), ThemeColor::Border) .
+            $this->colorize(mb_str_pad('AI-Powered Coding Assistant', $boxWidth - 2, ' ', STR_PAD_BOTH), ThemeColor::Muted) .
+            $this->colorize(BoxCharacter::Vertical->getChar(), ThemeColor::Border) . "\n";
+        echo $leftPadding . $this->colorize(BoxCharacter::BottomLeft->getChar() . str_repeat(BoxCharacter::Horizontal->getChar(), $boxWidth - 2) . BoxCharacter::BottomRight->getChar(), ThemeColor::Border) . "\n";
         echo "\n";
-        echo $this->colorize('  🤖 Ready to help with your coding tasks!', self::THEME['success']) . "\n";
-        echo $this->colorize('  💡 Try: "Create a Laravel migration for users"', self::THEME['warning']) . "\n";
-        echo $this->colorize("  📝 Type 'help' for commands or 'exit' to quit", self::THEME['muted']) . "\n";
+        echo $this->colorize('  🤖 Ready to help with your coding tasks!', ThemeColor::Success) . "\n";
+        echo $this->colorize('  💡 Try: "Create a Laravel migration for users"', ThemeColor::Warning) . "\n";
+        echo $this->colorize("  📝 Type 'help' for commands or 'exit' to quit", ThemeColor::Muted) . "\n";
         echo "\n";
 
         $this->waitForKeypress();
@@ -144,9 +87,9 @@ class TUIRenderer
         $this->moveCursor($inputStartRow, 1);
 
         // Draw input box
-        echo $this->drawBoxTop('', self::THEME['border']);
-        echo $this->drawBoxLine('', self::THEME['border']); // Empty line for input
-        echo $this->drawBoxBottom(self::THEME['border']);
+        echo $this->drawBoxTop('', ThemeColor::Border);
+        echo $this->drawBoxLine('', ThemeColor::Border); // Empty line for input
+        echo $this->drawBoxBottom(ThemeColor::Border);
 
         // Position cursor inside the box for the prompt
         $this->moveCursor($inputStartRow + 1, 3);
@@ -156,7 +99,7 @@ class TUIRenderer
 
         // Use protected input handler that prevents erasing the prompt
         $promptWithSpace = $message . ' ';
-        $input = InputHandler::readLine($promptWithSpace, self::COLORS[self::THEME['accent']]);
+        $input = InputHandler::readLine($promptWithSpace, ThemeColor::Accent->toEscapeCode());
 
         // Add to command history if not empty
         if (trim($input) !== '') {
@@ -178,7 +121,9 @@ class TUIRenderer
         // Also remove multiple spaces
         $cleanMessage = preg_replace('/\s+/', ' ', $cleanMessage);
 
-        $this->addToHistory('agent', $cleanMessage, 'white');
+        // Create a conversation entry
+        $entry = new ConversationEntry('assistant', $cleanMessage, time());
+        $this->addToHistory($entry);
         // Don't show notification as it disrupts the UI flow
         // The response will be shown in the next refresh cycle
     }
@@ -231,7 +176,7 @@ class TUIRenderer
         // Show current operation if set
         $message = $this->currentOperation ?: $this->processingMessage;
 
-        echo $this->colorize("{$spinner}  {$message}... ({$elapsed}s)", self::THEME['warning']);
+        echo $this->colorize("{$spinner}  {$message}... ({$elapsed}s)", ThemeColor::Warning);
 
         // Flush output immediately for real-time updates
         if (ob_get_level() > 0) {
@@ -252,22 +197,12 @@ class TUIRenderer
 
     public function showNotification(string $message, string $type = 'info'): void
     {
-        $color = match ($type) {
-            'error' => self::THEME['error'],
-            'success' => self::THEME['success'],
-            'warning' => self::THEME['warning'],
-            default => self::THEME['info']
-        };
+        $notificationType = NotificationType::fromString($type);
+        $icon = $notificationType->getIcon();
 
-        // Add notification to history instead of overwriting the UI
-        $icon = match ($type) {
-            'error' => '❌',
-            'success' => '✅',
-            'warning' => '⚠️',
-            default => 'ℹ️'
-        };
-
-        $this->addToHistory('notification', "{$icon} {$message}", $color);
+        // Create notification entry with icon included in message
+        $entry = new NotificationEntry("{$icon} {$message}", $notificationType, time());
+        $this->addToHistory($entry);
         // Immediately refresh to show the notification
         $this->refresh([]);
     }
@@ -276,17 +211,29 @@ class TUIRenderer
     {
         // Clean the error message of newlines for history
         $cleanError = str_replace(["\r\n", "\r", "\n"], ' ', $error);
-        $this->addToHistory('error', $cleanError, 'bright_red');
-        $this->showNotification('❌ Error: ' . mb_substr($cleanError, 0, 50) . '...', 'red');
+
+        // Create an error conversation entry
+        $entry = new ConversationEntry('error', $cleanError, time());
+        $this->addToHistory($entry);
+
+        // Also show as notification
+        $this->showNotification('Error: ' . mb_substr($cleanError, 0, 50) . '...', 'error');
     }
 
     public function displayToolCall(string $tool, array $params, $result): void
     {
-        $message = "🔧 {$tool}(" . $this->formatParams($params) . ')';
-        if ($result) {
-            $message .= ' → ' . $this->summarizeResult($result);
+        // Convert result to ToolResponse if it's an array
+        $toolResponse = null;
+        if ($result instanceof ToolResponse) {
+            $toolResponse = $result;
+        } elseif (is_array($result) && isset($result['success'])) {
+            $toolResponse = $result['success']
+                ? ToolResponse::success($result['data'] ?? [])
+                : ToolResponse::error($result['error'] ?? 'Unknown error');
         }
-        $this->addToHistory('tool', $message, 'cyan');
+
+        $entry = new ToolCallEntry($tool, $params, $toolResponse, time());
+        $this->addToHistory($entry);
         $this->refresh([]); // Quick refresh to show the tool call
     }
 
@@ -319,7 +266,7 @@ class TUIRenderer
 
         // Ensure terminal is in normal mode
         $this->restoreNormalMode();
-        echo self::COLORS['reset'];
+        echo AnsiColor::Reset->toEscapeCode();
 
         // Clear screen and show cursor
         $this->clearScreen();
@@ -397,15 +344,30 @@ class TUIRenderer
         // Terminal modes are managed per-operation
     }
 
-    protected function colorize(string $text, string $color, ?string $style = null): string
+    protected function colorize(string $text, string|AnsiColor|ThemeColor $color, ?string $style = null): string
     {
         $codes = [];
-        if ($style) {
-            $codes[] = self::COLORS[$style] ?? '';
-        }
-        $codes[] = self::COLORS[$color] ?? '';
 
-        return implode('', $codes) . $text . self::COLORS['reset'];
+        if ($style) {
+            $styleColor = AnsiColor::tryFrom($style);
+            if ($styleColor) {
+                $codes[] = $styleColor->toEscapeCode();
+            }
+        }
+
+        if ($color instanceof ThemeColor) {
+            $codes[] = $color->toEscapeCode();
+        } elseif ($color instanceof AnsiColor) {
+            $codes[] = $color->toEscapeCode();
+        } else {
+            // String fallback for backwards compatibility
+            $ansiColor = AnsiColor::tryFrom($color);
+            if ($ansiColor) {
+                $codes[] = $ansiColor->toEscapeCode();
+            }
+        }
+
+        return implode('', $codes) . $text . AnsiColor::Reset->toEscapeCode();
     }
 
     protected function waitForKeypress(): void
@@ -425,14 +387,9 @@ class TUIRenderer
         echo "\033[{$row};{$col}H";
     }
 
-    protected function addToHistory(string $type, string $message, string $color = 'white'): void
+    protected function addToHistory(ActivityEntry $entry): void
     {
-        $this->history[] = [
-            'type' => $type,
-            'message' => $message,
-            'color' => $color,
-            'timestamp' => time(),
-        ];
+        $this->history[] = $entry;
 
         // Keep history manageable
         if (count($this->history) > $this->maxHistoryLines) {
@@ -479,17 +436,17 @@ class TUIRenderer
         $time = date('H:i:s');
 
         // Use the new helper with theme colors
-        $leftPart = $this->colorize(self::BOX['top_left'] . self::BOX['horizontal'] . ' ', self::THEME['border']);
-        $titlePart = $this->colorize($title, self::THEME['header'], 'bold');
-        $timePart = $this->colorize($time, self::THEME['muted']);
-        $rightPart = $this->colorize(' ' . self::BOX['top_right'], self::THEME['border']);
+        $leftPart = $this->colorize(BoxCharacter::TopLeft->getChar() . BoxCharacter::Horizontal->getChar() . ' ', ThemeColor::Border);
+        $titlePart = $this->colorize($title, ThemeColor::Header, 'bold');
+        $timePart = $this->colorize($time, ThemeColor::Muted);
+        $rightPart = $this->colorize(' ' . BoxCharacter::TopRight->getChar(), ThemeColor::Border);
 
         $titleLength = mb_strlen($title);
         $timeLength = mb_strlen($time);
         $remainingWidth = $this->terminalWidth - $titleLength - $timeLength - 6;
 
         echo $leftPart . $titlePart .
-            $this->colorize(str_repeat(' ', $remainingWidth), self::THEME['border']) .
+            $this->colorize(str_repeat(' ', $remainingWidth), ThemeColor::Border) .
             $timePart . $rightPart . "\n";
     }
 
@@ -501,9 +458,9 @@ class TUIRenderer
 
         if (empty($tasks) && ! $currentTask) {
             if ($operation) {
-                echo $this->drawBoxLine('⚡ ' . ucfirst($operation), self::THEME['border'], self::THEME['accent']);
+                echo $this->drawBoxLine('⚡ ' . ucfirst($operation), ThemeColor::Border, ThemeColor::Accent);
             } else {
-                echo $this->drawBoxLine('🎯  No active tasks', self::THEME['border'], self::THEME['muted']);
+                echo $this->drawBoxLine('🎯  No active tasks', ThemeColor::Border, ThemeColor::Muted);
             }
 
             return;
@@ -512,20 +469,20 @@ class TUIRenderer
         if ($currentTask) {
             $currentDescription = $currentTask['description'] ?? '';
             $content = '🎯  Current: ' . $currentDescription;
-            echo $this->drawBoxLine($content, self::THEME['border'], self::THEME['accent']);
+            echo $this->drawBoxLine($content, ThemeColor::Border, ThemeColor::Accent);
 
             // Show plan if available
             if (! empty($currentTask['plan'])) {
                 $planLines = explode("\n", $currentTask['plan']);
                 $firstLine = $this->truncate($planLines[0], $this->terminalWidth - 10);
-                echo $this->drawBoxLine('    📋 ' . $firstLine, self::THEME['border'], self::THEME['muted']);
+                echo $this->drawBoxLine('    📋 ' . $firstLine, ThemeColor::Border, ThemeColor::Muted);
             }
 
             // Show steps if available
             if (! empty($currentTask['steps']) && is_array($currentTask['steps'])) {
                 $stepCount = count($currentTask['steps']);
                 $stepText = $stepCount === 1 ? '1 step' : $stepCount . ' steps';
-                echo $this->drawBoxLine('    📝 ' . $stepText . ' planned', self::THEME['border'], self::THEME['muted']);
+                echo $this->drawBoxLine('    📝 ' . $stepText . ' planned', ThemeColor::Border, ThemeColor::Muted);
             }
         }
 
@@ -533,17 +490,17 @@ class TUIRenderer
         $maxTasks = min(5, count($tasks));
         for ($i = 0; $i < $maxTasks; $i++) {
             $task = $tasks[$i];
-            $icon = self::ICONS[$task['status']] ?? '?';
+            $icon = StatusIcon::forTaskStatus($task['status'])->getIcon();
             $color = $this->getStatusColor($task['status']);
             $description = $task['description'] ?? '';
 
             $content = "  {$icon}  {$description}";
-            echo $this->drawBoxLine($content, self::THEME['border'], $color);
+            echo $this->drawBoxLine($content, ThemeColor::Border, $color);
         }
 
         if (count($tasks) > $maxTasks) {
             $moreText = '  ... and ' . (count($tasks) - $maxTasks) . ' more';
-            echo $this->drawBoxLine($moreText, self::THEME['border'], self::THEME['muted']);
+            echo $this->drawBoxLine($moreText, ThemeColor::Border, ThemeColor::Muted);
         }
     }
 
@@ -559,43 +516,30 @@ class TUIRenderer
     protected function getStatusColor(string $status): string
     {
         return match ($status) {
-            'completed' => self::THEME['success'],
-            'running', 'executing' => self::THEME['warning'],
-            'failed' => self::THEME['error'],
-            'pending' => self::THEME['muted'],
-            default => 'white'
-        };
-    }
-
-    protected function getActivityColor(string $type): string
-    {
-        return match ($type) {
-            'agent' => 'white',
-            'user' => 'bright_white',
-            'tool' => 'cyan',
-            'error' => 'bright_red',
-            'notification' => 'bright_cyan',
+            'completed' => 'bright_green',
+            'running', 'executing' => 'bright_yellow',
+            'failed' => 'bright_red',
+            'pending' => 'gray',
             default => 'white'
         };
     }
 
     protected function drawRecentActivity(array $status = []): void
     {
-        echo $this->drawBoxSeparator('Recent Activity', self::THEME['border']);
+        echo $this->drawBoxSeparator('Recent Activity', ThemeColor::Border);
 
         // Combine conversation history and tool log from synced state
+        /** @var ActivityEntry[] $activity */
         $activity = [];
 
         // Add conversation history
         if (isset($status['conversation_history'])) {
             foreach ($status['conversation_history'] as $entry) {
-                $type = $entry['role'] === 'user' ? 'user' : 'agent';
-                $activity[] = [
-                    'type' => $type,
-                    'message' => $entry['content'],
-                    'timestamp' => $entry['timestamp'] ?? time(),
-                    'color' => $this->getActivityColor($type),
-                ];
+                $role = $entry['role'] ?? 'assistant';
+                $content = $entry['content'] ?? '';
+                $timestamp = $entry['timestamp'] ?? time();
+
+                $activity[] = new ConversationEntry($role, $content, $timestamp);
             }
         }
 
@@ -603,18 +547,23 @@ class TUIRenderer
         if (isset($status['tool_log'])) {
             foreach ($status['tool_log'] as $log) {
                 if ($log['status'] === 'completed' && isset($log['tool'])) {
-                    $activity[] = [
-                        'type' => 'tool',
-                        'message' => "🔧 {$log['tool']}" . (isset($log['params']['path']) ? ": {$log['params']['path']}" : ''),
-                        'timestamp' => $log['timestamp'] ?? time(),
-                        'color' => $this->getActivityColor('tool'),
-                    ];
+                    $toolResponse = null;
+                    if (isset($log['response']) && is_array($log['response'])) {
+                        $toolResponse = ToolResponse::success($log['response']);
+                    }
+
+                    $activity[] = new ToolCallEntry(
+                        $log['tool'],
+                        $log['params'] ?? [],
+                        $toolResponse,
+                        $log['timestamp'] ?? time()
+                    );
                 }
             }
         }
 
         // Sort by timestamp and get recent items
-        usort($activity, fn ($a, $b) => $a['timestamp'] - $b['timestamp']);
+        usort($activity, fn ($a, $b) => $a->timestamp - $b->timestamp);
         $recentActivity = array_slice($activity, -8);
 
         // Fallback to internal history if no synced data
@@ -623,19 +572,14 @@ class TUIRenderer
         }
 
         if (empty($recentActivity)) {
-            echo $this->drawBoxLine('No recent activity', self::THEME['border'], self::THEME['muted']);
+            echo $this->drawBoxLine('No recent activity', ThemeColor::Border, ThemeColor::Muted);
         } else {
             $availableWidth = $this->terminalWidth - 4; // Account for borders and padding
 
             foreach ($recentActivity as $entry) {
-                $icon = match ($entry['type']) {
-                    'tool' => '🔧',
-                    'error' => '❌',
-                    'notification' => '',  // No icon for notifications, they have their own
-                    'agent' => '🤖',
-                    default => '💬'
-                };
-                $message = $entry['message'] ?? '';
+                $message = $entry->getMessage();
+                $icon = $entry->getIcon();
+                $color = $entry->getColor();
 
                 // First, handle any newlines by replacing them with spaces
                 $cleanMessage = str_replace(["\r\n", "\r", "\n"], ' ', $message);
@@ -645,19 +589,19 @@ class TUIRenderer
 
                 // Display first line with icon
                 if (! empty($wrappedLines)) {
-                    // For notifications, don't add an icon (they already have one in the message)
-                    if ($entry['type'] === 'notification') {
-                        $firstLine = $wrappedLines[0];
-                    } else {
+                    // Check if entry has icon (notifications have icons in their message)
+                    if ($entry->hasIcon() && ! empty($icon)) {
                         $firstLine = "{$icon}  " . $wrappedLines[0];
+                    } else {
+                        $firstLine = $wrappedLines[0];
                     }
-                    echo $this->drawBoxLine($firstLine, self::THEME['border'], $entry['color'] ?? 'white');
+                    echo $this->drawBoxLine($firstLine, ThemeColor::Border, $color);
 
                     // Display subsequent lines with indentation
                     for ($i = 1; $i < count($wrappedLines); $i++) {
-                        $indentSpaces = ($entry['type'] === 'notification') ? '  ' : '    '; // Less indent for notifications
+                        $indentSpaces = $entry->hasIcon() ? '    ' : '  '; // Less indent for no icon
                         $continuationLine = $indentSpaces . $wrappedLines[$i];
-                        echo $this->drawBoxLine($continuationLine, self::THEME['border'], $entry['color'] ?? 'white');
+                        echo $this->drawBoxLine($continuationLine, ThemeColor::Border, $color);
                     }
                 }
             }
@@ -666,8 +610,8 @@ class TUIRenderer
 
     protected function drawFooter(): void
     {
-        echo $this->drawBoxBottom(self::THEME['border']);
-        echo $this->colorize('💡  Commands: help | exit | clear', self::THEME['muted']) . "\n";
+        echo $this->drawBoxBottom(ThemeColor::Border);
+        echo $this->colorize('💡  Commands: help | exit | clear', ThemeColor::Muted) . "\n";
     }
 
     protected function restoreNormalMode(): void
@@ -680,14 +624,14 @@ class TUIRenderer
 
     // Helper methods for drawing UI elements
 
-    protected function drawBoxTop(string $title = '', string $borderColor = 'gray'): string
+    protected function drawBoxTop(string $title = '', string|AnsiColor|ThemeColor $borderColor = 'gray'): string
     {
-        $leftCorner = $this->colorize(self::BOX['top_left'], $borderColor);
-        $rightCorner = $this->colorize(self::BOX['top_right'], $borderColor);
-        $horizontal = self::BOX['horizontal'];
+        $leftCorner = $this->colorize(BoxCharacter::TopLeft->getChar(), $borderColor);
+        $rightCorner = $this->colorize(BoxCharacter::TopRight->getChar(), $borderColor);
+        $horizontal = BoxCharacter::Horizontal->getChar();
 
         if ($title) {
-            $titleFormatted = $this->colorize(" {$title} ", self::THEME['accent']);
+            $titleFormatted = $this->colorize(" {$title} ", ThemeColor::Accent);
             $titleLength = mb_strlen($title) + 2;
             $remainingWidth = $this->terminalWidth - $titleLength - 4;
             $line = $leftCorner . $this->colorize($horizontal, $borderColor) . $titleFormatted .
@@ -699,19 +643,19 @@ class TUIRenderer
         return $line . "\n";
     }
 
-    protected function drawBoxBottom(string $borderColor = 'gray'): string
+    protected function drawBoxBottom(string|AnsiColor|ThemeColor $borderColor = 'gray'): string
     {
-        $leftCorner = $this->colorize(self::BOX['bottom_left'], $borderColor);
-        $rightCorner = $this->colorize(self::BOX['bottom_right'], $borderColor);
-        $horizontal = $this->colorize(str_repeat(self::BOX['horizontal'], $this->terminalWidth - 2), $borderColor);
+        $leftCorner = $this->colorize(BoxCharacter::BottomLeft->getChar(), $borderColor);
+        $rightCorner = $this->colorize(BoxCharacter::BottomRight->getChar(), $borderColor);
+        $horizontal = $this->colorize(str_repeat(BoxCharacter::Horizontal->getChar(), $this->terminalWidth - 2), $borderColor);
 
         return $leftCorner . $horizontal . $rightCorner . "\n";
     }
 
-    protected function drawBoxLine(string $content, string $borderColor = 'gray', string $contentColor = 'white'): string
+    protected function drawBoxLine(string $content, string|AnsiColor|ThemeColor $borderColor = 'gray', string|AnsiColor|ThemeColor $contentColor = 'white'): string
     {
-        $leftBorder = $this->colorize(self::BOX['vertical'] . ' ', $borderColor);
-        $rightBorder = $this->colorize(' ' . self::BOX['vertical'], $borderColor);
+        $leftBorder = $this->colorize(BoxCharacter::Vertical->getChar() . ' ', $borderColor);
+        $rightBorder = $this->colorize(' ' . BoxCharacter::Vertical->getChar(), $borderColor);
 
         // Calculate available width for content (accounting for borders and padding)
         $availableWidth = $this->terminalWidth - 4;
@@ -726,14 +670,14 @@ class TUIRenderer
         return $leftBorder . $this->colorize($displayContent, $contentColor) . $padding . $rightBorder . "\n";
     }
 
-    protected function drawBoxSeparator(string $title = '', string $borderColor = 'gray'): string
+    protected function drawBoxSeparator(string $title = '', string|AnsiColor|ThemeColor $borderColor = 'gray'): string
     {
-        $leftTee = $this->colorize(self::BOX['tee_right'], $borderColor);
-        $rightTee = $this->colorize(self::BOX['tee_left'], $borderColor);
-        $horizontal = self::BOX['horizontal'];
+        $leftTee = $this->colorize(BoxCharacter::TeeRight->getChar(), $borderColor);
+        $rightTee = $this->colorize(BoxCharacter::TeeLeft->getChar(), $borderColor);
+        $horizontal = BoxCharacter::Horizontal->getChar();
 
         if ($title) {
-            $titleFormatted = $this->colorize(" {$title} ", self::THEME['accent']);
+            $titleFormatted = $this->colorize(" {$title} ", ThemeColor::Accent);
             $titleLength = mb_strlen($title) + 2;
             $remainingWidth = $this->terminalWidth - $titleLength - 4;
             $line = $leftTee . $this->colorize($horizontal, $borderColor) . $titleFormatted .
@@ -768,7 +712,7 @@ class TUIRenderer
         $activityLines = 0;
 
         foreach ($recentHistory as $entry) {
-            $message = $entry['message'] ?? '';
+            $message = $entry->getMessage();
             $cleanMessage = str_replace(["\r\n", "\r", "\n"], ' ', $message);
             $wrappedLines = $this->wrapText($cleanMessage, $availableWidth);
             $activityLines += count($wrappedLines);

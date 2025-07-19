@@ -30,6 +30,7 @@
     "psy/psysh": "^0.12.9",
     "spatie/async": "^1.7",
     "spatie/ray": "^1.42",
+    "crwlr/html-2-text": "^0.1",
     "symfony/http-client": "^7.3",
     "vlucas/phpdotenv": "^5.6"
   },
@@ -57,8 +58,9 @@
   ],
   "scripts": {
     "swarm": "@php cli.php",
-    "test": "vendor/bin/pest",
-    "check": "vendor/bin/phpstan analyse src --level=5",
+    "test": "vendor/bin/pest --no-coverage",
+    "coverage": "herd coverage vendor/bin/pest --coverage",
+    "check": "vendor/bin/phpstan analyse src --level=6",
     "format": "vendor/bin/pint",
     "post-install-cmd": [
       "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""

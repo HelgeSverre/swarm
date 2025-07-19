@@ -180,9 +180,9 @@ test('planTask sends correct prompt and updates task manager', function () {
 
     // Check that task was planned
     $updatedTask = $taskManager->getTasks()[0];
-    expect($updatedTask['plan'])->toBe('I will complete this task by implementing in three steps')
-        ->and($updatedTask['steps'])->toBe(['First step', 'Second step', 'Third step'])
-        ->and($updatedTask['status'])->toBe('planned');
+    expect($updatedTask->plan)->toBe('I will complete this task by implementing in three steps')
+        ->and($updatedTask->steps)->toBe(['First step', 'Second step', 'Third step'])
+        ->and($updatedTask->status->value)->toBe('planned');
 });
 
 test('executeTask processes tool calls until completion', function () {
@@ -233,12 +233,12 @@ test('executeTask processes tool calls until completion', function () {
         0.7
     );
 
-    $task = [
+    $task = HelgeSverre\Swarm\Task\Task::fromArray([
         'id' => 'test-id',
         'description' => 'Create test file',
         'plan' => 'Create a file',
         'status' => 'executing',
-    ];
+    ]);
 
     $reflection = new ReflectionClass($agent);
     $method = $reflection->getMethod('executeTask');
@@ -293,12 +293,12 @@ test('executeTask stops after max iterations', function () {
         0.7
     );
 
-    $task = [
+    $task = HelgeSverre\Swarm\Task\Task::fromArray([
         'id' => 'test-id',
         'description' => 'Never-ending task',
         'plan' => 'Keep going',
         'status' => 'executing',
-    ];
+    ]);
 
     $reflection = new ReflectionClass($agent);
     $method = $reflection->getMethod('executeTask');

@@ -72,7 +72,7 @@ src/
 │   └── AgentResponse.php # Response wrapper
 ├── CLI/                   # Command-line interface
 │   ├── SwarmCLI.php      # Main CLI entry point
-│   ├── TUIRenderer.php   # Terminal UI rendering
+│   ├── UI.php   # Terminal UI rendering
 │   ├── InputHandler.php  # Readline input handling
 │   └── AsyncProcessor.php # Async task processing
 ├── Core/                  # Core functionality
