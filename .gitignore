@@ -40,4 +40,7 @@ coverage/
 # Swarm state file
 .swarm.json
 
+# Node.js (for playwright)
 /node_modules/
+package-lock.json
+yarn.lock
