@@ -102,7 +102,7 @@ class WebFetch extends Tool
     protected function extractPdfText(string $pdfContent): string
     {
         try {
-            $tempDir = (new TemporaryDirectory)->create();
+            $tempDir = TemporaryDirectory::make();
             $pdfPath = $tempDir->path('document.pdf');
 
             file_put_contents($pdfPath, $pdfContent);
