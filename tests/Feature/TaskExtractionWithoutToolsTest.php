@@ -1,7 +1,6 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
@@ -9,8 +8,7 @@ use OpenAI\Testing\ClientFake;
 use Psr\Log\NullLogger;
 
 test('agent extracts tasks for implementation requests without tools', function () {
-    $executor = new ToolExecutor(new NullLogger);
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -182,7 +180,7 @@ test('agent extracts tasks for implementation requests without tools', function 
 });
 
 test('agent handles conversation when implementation request has no tasks', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([

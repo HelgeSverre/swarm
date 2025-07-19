@@ -5,6 +5,10 @@ namespace HelgeSverre\Swarm\Core;
 use Exception;
 use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
+use HelgeSverre\Swarm\Tools\Grep;
+use HelgeSverre\Swarm\Tools\ReadFile;
+use HelgeSverre\Swarm\Tools\Terminal;
+use HelgeSverre\Swarm\Tools\WriteFile;
 use Psr\Log\LoggerInterface;
 
 class ToolExecutor
@@ -23,6 +27,22 @@ class ToolExecutor
     ) {}
 
     /**
+     * Create a ToolExecutor instance with all default tools registered
+     */
+    public static function createWithDefaultTools(?LoggerInterface $logger = null): self
+    {
+        $executor = new self($logger);
+
+        // Register all default tools
+        $executor->register(new ReadFile);
+        $executor->register(new WriteFile);
+        $executor->register(new Terminal);
+        $executor->register(new Grep);
+
+        return $executor;
+    }
+
+    /**
      * Set a callback to report progress during tool execution
      */
     public function setProgressCallback(callable $callback): void
@@ -34,7 +54,7 @@ class ToolExecutor
     {
         $this->tools[$name] = $handler;
 
-        $this->logger?->info('Tool registered', ['tool' => $name]);
+        $this->logger?->debug('Tool registered', ['tool' => $name]);
 
         return $this;
     }
@@ -45,7 +65,7 @@ class ToolExecutor
         $this->tools[$name] = $tool->toCallable();
         $this->toolInstances[$name] = $tool;
 
-        $this->logger?->info('Tool registered', ['tool' => $name]);
+        $this->logger?->debug('Tool registered', ['tool' => $name]);
 
         return $this;
     }

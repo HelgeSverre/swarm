@@ -143,7 +143,7 @@ class CodingAgent
     /**
      * Truncate content for display purposes
      */
-    protected function truncateContent(string $content, int $maxLength = 200): string
+    protected function truncateContent(string $content, int $maxLength = 2000): string
     {
         if (mb_strlen($content) <= $maxLength) {
             return $content;

@@ -1,11 +1,9 @@
 <?php
 
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 
 test('toolchain registers all tools correctly', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $registeredTools = $executor->getRegisteredTools();
 
@@ -16,8 +14,7 @@ test('toolchain registers all tools correctly', function () {
 });
 
 test('tool schemas are generated dynamically for all tools', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $schemas = $executor->getToolSchemas();
 
@@ -32,8 +29,7 @@ test('tool schemas are generated dynamically for all tools', function () {
 });
 
 test('tool schemas have proper structure for OpenAI', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $schemas = $executor->getToolSchemas();
 
@@ -51,8 +47,7 @@ test('tool schemas have proper structure for OpenAI', function () {
 });
 
 test('tools can be executed through executor', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Create a test file
     $testFile = sys_get_temp_dir() . '/test_integration.txt';
@@ -68,8 +63,7 @@ test('tools can be executed through executor', function () {
 });
 
 test('tool executor logs execution history', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Execute a command
     $executor->dispatch('bash', ['command' => 'echo test']);

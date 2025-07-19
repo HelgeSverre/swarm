@@ -1,11 +1,9 @@
 <?php
 
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 
 test('function calling schemas are properly formatted', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $schemas = $executor->getToolSchemas();
 
@@ -32,8 +30,7 @@ test('function calling schemas are properly formatted', function () {
 });
 
 test('tools execute correctly with function call parameters', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Test bash tool execution
     $result = $executor->dispatch('bash', [
@@ -65,8 +62,7 @@ test('tools execute correctly with function call parameters', function () {
 });
 
 test('function parameters are validated and defaults applied', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Test write_file with default backup parameter
     $testFile = sys_get_temp_dir() . '/test_defaults.txt';
@@ -89,8 +85,7 @@ test('function parameters are validated and defaults applied', function () {
 });
 
 test('search tools work with function parameters', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Create test files
     $testDir = sys_get_temp_dir() . '/test_search_' . uniqid();

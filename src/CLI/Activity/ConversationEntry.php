@@ -87,13 +87,28 @@ class ConversationEntry extends ActivityEntry
             return $this->formatPlan($this->parsedContent);
         }
 
+        // Handle task extraction results
+        if (isset($this->parsedContent['tasks']) && is_array($this->parsedContent['tasks'])) {
+            return $this->formatTasks($this->parsedContent['tasks']);
+        }
+
+        // Handle classification results
+        if (isset($this->parsedContent['request_type'])) {
+            return $this->formatClassification($this->parsedContent);
+        }
+
         // Handle arrays (like file lists)
         if (is_array($this->parsedContent) && isset($this->parsedContent[0]) && is_string($this->parsedContent[0])) {
             return $this->formatList($this->parsedContent);
         }
 
-        // Default to truncated JSON
-        return mb_substr($this->content, 0, 100) . '...';
+        // Handle simple objects with common patterns
+        if (is_array($this->parsedContent)) {
+            return $this->formatGenericObject($this->parsedContent);
+        }
+
+        // Default to raw content (no truncation for better display)
+        return $this->content;
     }
 
     /**
@@ -199,5 +214,81 @@ class ConversationEntry extends ActivityEntry
         }
 
         return 'pattern';
+    }
+
+    /**
+     * Format task extraction results
+     */
+    private function formatTasks(array $tasks): string
+    {
+        $count = count($tasks);
+        if ($count === 0) {
+            return '📋 No tasks found';
+        }
+
+        $taskDescriptions = array_map(function ($task) {
+            return is_array($task) ? ($task['description'] ?? 'Unknown task') : (string) $task;
+        }, array_slice($tasks, 0, 3));
+
+        $preview = implode("\n• ", $taskDescriptions);
+        if ($count > 3) {
+            $preview .= sprintf("\n... and %d more tasks", $count - 3);
+        }
+
+        return sprintf("📋 Extracted %d task%s:\n• %s", $count, $count === 1 ? '' : 's', $preview);
+    }
+
+    /**
+     * Format classification results
+     */
+    private function formatClassification(array $classification): string
+    {
+        $type = $classification['request_type'] ?? 'unknown';
+        $confidence = isset($classification['confidence']) ? sprintf(' (%.0f%% confident)', $classification['confidence'] * 100) : '';
+        $requiresTools = $classification['requires_tools'] ?? false;
+
+        $icon = match ($type) {
+            'demonstration' => '📖',
+            'implementation' => '🔨',
+            'explanation' => '💡',
+            'query' => '❓',
+            'conversation' => '💬',
+            default => '📝',
+        };
+
+        $toolsText = $requiresTools ? ' [requires tools]' : '';
+
+        return sprintf('%s Classified as: %s%s%s', $icon, $type, $confidence, $toolsText);
+    }
+
+    /**
+     * Format generic objects
+     */
+    private function formatGenericObject(array $object): string
+    {
+        // Try to identify common patterns
+        if (isset($object['success']) && isset($object['message'])) {
+            $icon = $object['success'] ? '✅' : '❌';
+            return sprintf('%s %s', $icon, $object['message']);
+        }
+
+        if (isset($object['error'])) {
+            return sprintf('❌ Error: %s', $object['error']);
+        }
+
+        if (isset($object['result']) || isset($object['data'])) {
+            $data = $object['result'] ?? $object['data'];
+            if (is_string($data)) {
+                return $data;
+            }
+        }
+
+        // For complex objects, show a summary
+        $keys = array_keys($object);
+        return sprintf('📄 Data with %d field%s: %s',
+            count($keys),
+            count($keys) === 1 ? '' : 's',
+            implode(', ', array_slice($keys, 0, 5))
+        );
     }
 }

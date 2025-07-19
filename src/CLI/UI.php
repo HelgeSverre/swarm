@@ -114,15 +114,8 @@ class UI
 
     public function displayResponse(AgentResponse $response): void
     {
-        // Clean the response message of newlines for history
-        $message = $response->getMessage();
-        $cleanMessage = trim(str_replace(["\r\n", "\r", "\n"], ' ', $message));
+        $entry = new ConversationEntry('assistant', $response->getMessage(), time());
 
-        // Also remove multiple spaces
-        $cleanMessage = preg_replace('/\s+/', ' ', $cleanMessage);
-
-        // Create a conversation entry
-        $entry = new ConversationEntry('assistant', $cleanMessage, time());
         $this->addToHistory($entry);
         // Don't show notification as it disrupts the UI flow
         // The response will be shown in the next refresh cycle
@@ -581,11 +574,19 @@ class UI
                 $icon = $entry->getIcon();
                 $color = $entry->getColor();
 
-                // First, handle any newlines by replacing them with spaces
-                $cleanMessage = str_replace(["\r\n", "\r", "\n"], ' ', $message);
+                // Split message by newlines first to preserve formatting
+                $messageLines = explode("\n", str_replace(["\r\n", "\r"], "\n", $message));
+                $wrappedLines = [];
 
-                // Wrap the text to fit within the box
-                $wrappedLines = $this->wrapText($cleanMessage, $availableWidth);
+                // Wrap each line individually
+                foreach ($messageLines as $line) {
+                    if (empty($line)) {
+                        $wrappedLines[] = '';  // Preserve empty lines
+                    } else {
+                        $wrapped = $this->wrapText($line, $availableWidth);
+                        $wrappedLines = array_merge($wrappedLines, $wrapped);
+                    }
+                }
 
                 // Display first line with icon
                 if (! empty($wrappedLines)) {
@@ -713,9 +714,16 @@ class UI
 
         foreach ($recentHistory as $entry) {
             $message = $entry->getMessage();
-            $cleanMessage = str_replace(["\r\n", "\r", "\n"], ' ', $message);
-            $wrappedLines = $this->wrapText($cleanMessage, $availableWidth);
-            $activityLines += count($wrappedLines);
+            // Split by newlines first to preserve formatting
+            $messageLines = explode("\n", str_replace(["\r\n", "\r"], "\n", $message));
+            foreach ($messageLines as $line) {
+                if (empty($line)) {
+                    $activityLines++; // Count empty lines
+                } else {
+                    $wrappedLines = $this->wrapText($line, $availableWidth);
+                    $activityLines += count($wrappedLines);
+                }
+            }
         }
 
         $lines += max(1, $activityLines); // At least 1 line for "No recent activity"
@@ -726,8 +734,8 @@ class UI
 
     protected function wrapText(string $text, int $maxWidth): array
     {
-        // Account for icon and spacing (about 4 characters)
-        $effectiveWidth = $maxWidth - 4;
+        // Use full available width for wrapping
+        $effectiveWidth = $maxWidth;
 
         if (mb_strlen($text) <= $effectiveWidth) {
             return [$text];

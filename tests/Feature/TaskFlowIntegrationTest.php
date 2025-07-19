@@ -1,7 +1,6 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
@@ -9,8 +8,7 @@ use OpenAI\Testing\ClientFake;
 use Psr\Log\NullLogger;
 
 test('full task lifecycle from extraction to completion', function () {
-    $executor = new ToolExecutor(new NullLogger);
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -147,8 +145,7 @@ test('full task lifecycle from extraction to completion', function () {
 });
 
 test('multiple tasks are processed sequentially', function () {
-    $executor = new ToolExecutor(new NullLogger);
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -327,7 +324,7 @@ test('multiple tasks are processed sequentially', function () {
 });
 
 test('agent handles conversation when no tasks extracted', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -377,7 +374,7 @@ test('agent handles conversation when no tasks extracted', function () {
 });
 
 test('task execution handles errors gracefully', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([

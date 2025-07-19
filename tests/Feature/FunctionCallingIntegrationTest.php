@@ -1,7 +1,6 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
@@ -9,8 +8,7 @@ use OpenAI\Testing\ClientFake;
 use Psr\Log\NullLogger;
 
 test('agent correctly extracts tasks using function calling', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager;
 
@@ -60,8 +58,7 @@ test('agent correctly extracts tasks using function calling', function () {
 });
 
 test('agent selects correct tool based on task description', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $testCases = [
         [
@@ -130,8 +127,7 @@ test('agent selects correct tool based on task description', function () {
 });
 
 test('agent handles function call responses correctly', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager;
 
@@ -185,7 +181,7 @@ test('agent handles function call responses correctly', function () {
 });
 
 test('agent handles no function call response correctly', function () {
-    $executor = new ToolExecutor;
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager;
 
     // Mock a regular response without function call

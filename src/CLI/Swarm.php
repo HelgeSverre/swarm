@@ -7,7 +7,6 @@ namespace HelgeSverre\Swarm\CLI;
 use Dotenv\Dotenv;
 use Exception;
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Enums\Core\LogLevel;
 use HelgeSverre\Swarm\Task\TaskManager;
@@ -31,7 +30,7 @@ class Swarm
 
     protected readonly CodingAgent $agent;
 
-    protected readonly UI $tui;
+    protected readonly UI $ui;
 
     protected readonly LoggerInterface $logger;
 
@@ -53,11 +52,11 @@ class Swarm
      */
     public function __construct(
         CodingAgent $agent,
-        ?UI $tui = null,
+        ?UI $ui = null,
         ?LoggerInterface $logger = null
     ) {
         $this->agent = $agent;
-        $this->tui = $tui ?? new UI;
+        $this->ui = $ui ?? new UI;
         $this->logger = $logger ?? new NullLogger;
 
         // Register shutdown handler for saving state
@@ -114,16 +113,15 @@ class Swarm
         }
 
         // Create dependencies
-        $toolExecutor = new ToolExecutor($logger);
-        Toolchain::registerAll($toolExecutor);
+        $toolExecutor = ToolExecutor::createWithDefaultTools($logger);
 
         $taskManager = new TaskManager($logger);
         $llmClient = OpenAI::client($apiKey);
 
         $agent = new CodingAgent($toolExecutor, $taskManager, $llmClient, $logger, $model, $temperature);
-        $tui = new UI;
+        $ui = new UI;
 
-        return new self($agent, $tui, $logger);
+        return new self($agent, $ui, $logger);
     }
 
     public function run(): void
@@ -158,7 +156,7 @@ class Swarm
         $this->saveState();
 
         // Cleanup TUI
-        $this->tui->cleanup();
+        $this->ui->cleanup();
 
         exit(0);
     }
@@ -166,9 +164,9 @@ class Swarm
     protected function runWithBackgroundProcessing(): void
     {
         while (true) {
-            $this->tui->refresh($this->syncedState);
+            $this->ui->refresh($this->syncedState);
 
-            $input = $this->tui->prompt('>');
+            $input = $this->ui->prompt('>');
 
             // Handle built-in commands
             if ($this->handleCommand($input)) {
@@ -190,7 +188,7 @@ class Swarm
                 $this->runWithStreamingProcessor($input);
             } catch (Exception $e) {
                 // Stop processing animation on error too
-                $this->tui->stopProcessing();
+                $this->ui->stopProcessing();
 
                 $this->logger->error('Request processing failed', [
                     'error' => $e->getMessage(),
@@ -202,12 +200,12 @@ class Swarm
                 ]);
 
                 // Display error but continue running
-                $this->tui->displayError($e->getMessage());
+                $this->ui->displayError($e->getMessage());
 
                 // Check if this was a timeout and if retry is enabled
                 if (str_contains($e->getMessage(), 'timed out') &&
                     ($_ENV['SWARM_TIMEOUT_RETRY_ENABLED'] ?? true)) {
-                    $this->tui->showNotification(
+                    $this->ui->showNotification(
                         'The request timed out. You can retry with a longer timeout or simplify your request.',
                         'warning'
                     );
@@ -254,7 +252,7 @@ class Swarm
 
     protected function handleHelp(): bool
     {
-        $this->tui->showNotification('Commands: exit, quit, clear, save, clear-state, help, test-error', 'info');
+        $this->ui->showNotification('Commands: exit, quit, clear, save, clear-state, help, test-error', 'info');
 
         return true;
     }
@@ -262,7 +260,7 @@ class Swarm
     protected function handleSave(): bool
     {
         $this->saveState();
-        $this->tui->showNotification('State saved to ' . self::STATE_FILE, 'success');
+        $this->ui->showNotification('State saved to ' . self::STATE_FILE, 'success');
 
         return true;
     }
@@ -276,13 +274,13 @@ class Swarm
                     throw new RuntimeException('Failed to delete state file');
                 }
                 $this->resetState();
-                $this->tui->showNotification('State cleared', 'success');
+                $this->ui->showNotification('State cleared', 'success');
             } else {
-                $this->tui->showNotification('No saved state found', 'info');
+                $this->ui->showNotification('No saved state found', 'info');
             }
         } catch (Exception $e) {
             $this->logger->error('Failed to clear state', ['error' => $e->getMessage()]);
-            $this->tui->showNotification('Failed to clear state: ' . $e->getMessage(), 'error');
+            $this->ui->showNotification('Failed to clear state: ' . $e->getMessage(), 'error');
         }
 
         return true;
@@ -291,7 +289,7 @@ class Swarm
     protected function handleTestError(): bool
     {
         $this->logger->info('Test error command invoked');
-        $this->tui->showNotification('Throwing test exception...', 'warning');
+        $this->ui->showNotification('Throwing test exception...', 'warning');
 
         // This should be caught by the exception handler
         throw new RuntimeException('Test exception to verify error logging');
@@ -321,7 +319,7 @@ class Swarm
             $processor->launch($input);
 
             // Start processing animation
-            $this->tui->startProcessing();
+            $this->ui->startProcessing();
 
             $lastUpdate = microtime(true);
             // Get timeout from environment or use default of 10 minutes
@@ -344,7 +342,7 @@ class Swarm
 
                 // Update animation periodically
                 if ($now - $lastUpdate > self::ANIMATION_INTERVAL) {
-                    $this->tui->showProcessing();
+                    $this->ui->showProcessing();
                     $lastUpdate = $now;
                 }
 
@@ -365,7 +363,7 @@ class Swarm
             }
         } catch (Exception $e) {
             // Stop processing animation on error
-            $this->tui->stopProcessing();
+            $this->ui->stopProcessing();
 
             $this->logger->error('Streaming process failed', [
                 'error' => $e->getMessage(),
@@ -373,7 +371,7 @@ class Swarm
                 'input' => $input,
             ]);
 
-            $this->tui->displayError($e->getMessage());
+            $this->ui->displayError($e->getMessage());
         } finally {
             // Always cleanup
             $processor->cleanup();
@@ -452,7 +450,7 @@ class Swarm
                 rename($stateFile, $backupFile);
                 $this->logger->info('Corrupt state file backed up', ['backup' => $backupFile]);
 
-                $this->tui->showNotification('State file was corrupt, starting fresh', 'warning');
+                $this->ui->showNotification('State file was corrupt, starting fresh', 'warning');
 
                 return;
             }
@@ -485,7 +483,7 @@ class Swarm
                 'history' => count($state['conversation_history'] ?? []),
                 'task_history' => count($state['task_history'] ?? []),
             ]);
-            $this->tui->showNotification('Restored previous session', 'success');
+            $this->ui->showNotification('Restored previous session', 'success');
         }
     }
 
@@ -539,7 +537,7 @@ class Swarm
 
     protected function handleProgressUpdate(array $update): bool
     {
-        $this->tui->updateProcessingMessage($update['message'] ?? '');
+        $this->ui->updateProcessingMessage($update['message'] ?? '');
 
         return false;
     }
@@ -547,7 +545,7 @@ class Swarm
     protected function handleStateSyncUpdate(array $update): bool
     {
         $this->syncedState = array_merge($this->syncedState, $update['data'] ?? []);
-        $this->tui->refresh($this->syncedState);
+        $this->ui->refresh($this->syncedState);
 
         return false;
     }
@@ -558,7 +556,7 @@ class Swarm
         $taskStatus = $update['status'] ?? [];
         $this->syncedState['tasks'] = $taskStatus['tasks'] ?? [];
         $this->syncedState['current_task'] = $taskStatus['current_task'] ?? null;
-        $this->tui->refresh($this->syncedState);
+        $this->ui->refresh($this->syncedState);
 
         return false;
     }
@@ -583,14 +581,23 @@ class Swarm
     protected function handleCompletedStatus(array $update): void
     {
         // Stop processing animation
-        $this->tui->stopProcessing();
+        $this->ui->stopProcessing();
 
         // Display response
         $responseData = $update['response'] ?? [];
         $response = \HelgeSverre\Swarm\Agent\AgentResponse::success(
             $responseData['message'] ?? ''
         );
-        $this->tui->displayResponse($response);
+        $this->ui->displayResponse($response);
+
+        // Add assistant response to conversation history
+        if (! empty($responseData['message'])) {
+            $this->syncedState['conversation_history'][] = [
+                'role' => 'assistant',
+                'content' => $responseData['message'],
+                'timestamp' => time(),
+            ];
+        }
 
         // Clear completed tasks and update history
         $taskManager = $this->agent->getTaskManager();
@@ -603,7 +610,7 @@ class Swarm
         $this->syncedState['operation'] = '';
 
         // Manually trigger refresh to show response with cleared tasks
-        $this->tui->refresh($this->syncedState);
+        $this->ui->refresh($this->syncedState);
 
         // Save state after successful completion
         $this->saveState();

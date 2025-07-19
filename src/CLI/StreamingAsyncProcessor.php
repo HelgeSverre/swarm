@@ -5,7 +5,6 @@ namespace HelgeSverre\Swarm\CLI;
 use Dotenv\Dotenv;
 use Exception;
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use Monolog\Handler\StreamHandler;
@@ -89,8 +88,7 @@ class StreamingAsyncProcessor
                 'message' => 'Setting up tools and services...',
             ]);
 
-            $toolExecutor = new ToolExecutor($logger);
-            Toolchain::registerAll($toolExecutor);
+            $toolExecutor = ToolExecutor::createWithDefaultTools($logger);
             $taskManager = new TaskManager($logger);
 
             // Setup OpenAI client

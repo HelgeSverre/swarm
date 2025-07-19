@@ -1,11 +1,9 @@
 <?php
 
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 
 test('correct tools are selected for file operations', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Create test file
     $testFile = sys_get_temp_dir() . '/test_tool_selection.txt';
@@ -32,8 +30,7 @@ test('correct tools are selected for file operations', function () {
 });
 
 test('correct tools are selected for search operations', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Create test directory with files
     $testDir = sys_get_temp_dir() . '/test_search_' . uniqid();
@@ -67,8 +64,7 @@ test('correct tools are selected for search operations', function () {
 });
 
 test('correct tools are selected for terminal operations', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Test bash command scenario
     $result = $executor->dispatch('bash', [
@@ -79,8 +75,7 @@ test('correct tools are selected for terminal operations', function () {
 });
 
 test('all expected tools are registered', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $registeredTools = $executor->getRegisteredTools();
 
@@ -102,8 +97,7 @@ test('all expected tools are registered', function () {
 });
 
 test('tools handle edge cases correctly', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     // Test non-existent file
     $result = $executor->dispatch('read_file', [
@@ -121,8 +115,7 @@ test('tools handle edge cases correctly', function () {
 });
 
 test('tool schemas contain required fields', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $schemas = $executor->getToolSchemas();
 

@@ -1,15 +1,13 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
 use OpenAI\Testing\ClientFake;
 
 test('agent extracts tasks using function calling', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager;
 
@@ -68,8 +66,7 @@ test('agent extracts tasks using function calling', function () {
 });
 
 test('agent executes task with function calling', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager;
 
@@ -185,8 +182,7 @@ test('agent handles no function call response', function () {
 });
 
 test('agent correctly passes tool schemas to OpenAI', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager;
 

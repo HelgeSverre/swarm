@@ -1,6 +1,5 @@
 <?php
 
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Tools\Grep;
 use HelgeSverre\Swarm\Tools\ReadFile;
@@ -8,8 +7,7 @@ use HelgeSverre\Swarm\Tools\Terminal;
 use HelgeSverre\Swarm\Tools\WriteFile;
 
 test('tool schemas are properly formatted for OpenAI function calling', function () {
-    $executor = new ToolExecutor;
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $schemas = $executor->getToolSchemas();
 
@@ -67,7 +65,7 @@ test('required parameters are correctly defined in schemas', function () {
 });
 
 test('tools can be dispatched with function call parameters', function () {
-    $executor = new ToolExecutor;
+    $executor = ToolExecutor::createWithDefaultTools();
     $executor->register(new Terminal);
 
     // Simulate function call parameters from OpenAI
@@ -82,7 +80,7 @@ test('tools can be dispatched with function call parameters', function () {
 });
 
 test('default parameters work correctly when not provided in function call', function () {
-    $executor = new ToolExecutor;
+    $executor = ToolExecutor::createWithDefaultTools();
     $executor->register(new WriteFile);
 
     $testFile = sys_get_temp_dir() . '/test_defaults.txt';
@@ -102,7 +100,7 @@ test('default parameters work correctly when not provided in function call', fun
 });
 
 test('search tool parameter mapping works with router dependency', function () {
-    $executor = new ToolExecutor;
+    $executor = ToolExecutor::createWithDefaultTools();
     $executor->register(new Grep);
 
     $schemas = $executor->getToolSchemas();

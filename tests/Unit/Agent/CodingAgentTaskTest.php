@@ -1,7 +1,6 @@
 <?php
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Toolchain;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
@@ -9,7 +8,7 @@ use OpenAI\Testing\ClientFake;
 use Psr\Log\NullLogger;
 
 test('extractTasks successfully extracts tasks from function call', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -57,7 +56,7 @@ test('extractTasks successfully extracts tasks from function call', function () 
 });
 
 test('extractTasks returns empty array when no function call', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -92,7 +91,7 @@ test('extractTasks returns empty array when no function call', function () {
 });
 
 test('extractTasks handles malformed JSON gracefully', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -131,7 +130,7 @@ test('extractTasks handles malformed JSON gracefully', function () {
 });
 
 test('planTask sends correct prompt and updates task manager', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $planResponse = json_encode([
@@ -186,8 +185,7 @@ test('planTask sends correct prompt and updates task manager', function () {
 });
 
 test('executeTask processes tool calls until completion', function () {
-    $executor = new ToolExecutor(new NullLogger);
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -256,8 +254,7 @@ test('executeTask processes tool calls until completion', function () {
 });
 
 test('executeTask stops after max iterations', function () {
-    $executor = new ToolExecutor(new NullLogger);
-    Toolchain::registerAll($executor);
+    $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager(new NullLogger);
 
@@ -314,7 +311,7 @@ test('executeTask stops after max iterations', function () {
 });
 
 test('generateTaskSummary creates meaningful summary', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
@@ -355,7 +352,7 @@ test('generateTaskSummary creates meaningful summary', function () {
 });
 
 test('conversation history is maintained', function () {
-    $executor = new ToolExecutor(new NullLogger);
+    $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
     $client = new ClientFake([
