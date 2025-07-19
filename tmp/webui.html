@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swarm - AI Coding Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a1a;
+            color: #d4d4d4;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #0a0a0a;
+            padding: 8px 16px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            color: #fff;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-title::before {
+            content: '◉';
+            color: #4ade80;
+        }
+
+        .status {
+            color: #666;
+            font-size: 11px;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .activity-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+        }
+
+        .panel-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #333;
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+
+        .activity-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .activity-entry {
+            margin-bottom: 12px;
+            font-family: inherit;
+        }
+
+        .timestamp {
+            color: #666;
+            font-size: 11px;
+            margin-bottom: 2px;
+        }
+
+        .user-message {
+            color: #4ade80;
+            margin-bottom: 8px;
+        }
+
+        .user-message::before {
+            content: '$ ';
+            color: #666;
+        }
+
+        .agent-message {
+            color: #d4d4d4;
+            margin-bottom: 8px;
+        }
+
+        .tool-call {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+
+        .tool-name {
+            color: #fbbf24;
+        }
+
+        .tool-params {
+            color: #888;
+        }
+
+        .tool-result {
+            color: #4ade80;
+            margin-top: 4px;
+            font-size: 11px;
+        }
+
+        .notification {
+            background: #0a0a0a;
+            border-left: 3px solid #3b82f6;
+            padding: 8px 12px;
+            margin: 8px 0;
+            color: #888;
+        }
+
+        .task-panel {
+            width: 350px;
+            background: #0f0f0f;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .task-queue {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .task-item {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .task-item:hover {
+            border-color: #555;
+            background: #222;
+        }
+
+        .task-item.active {
+            border-color: #4ade80;
+        }
+
+        .task-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-pending {
+            background: #6b7280;
+        }
+
+        .status-planned {
+            background: #fbbf24;
+        }
+
+        .status-executing {
+            background: #3b82f6;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-completed {
+            background: #4ade80;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .task-description {
+            color: #d4d4d4;
+            margin-bottom: 4px;
+        }
+
+        .task-meta {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .progress-bar {
+            height: 2px;
+            background: #333;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            transition: width 0.3s ease;
+        }
+
+        .command-input {
+            background: #0a0a0a;
+            border-top: 1px solid #333;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .prompt {
+            color: #4ade80;
+            flex-shrink: 0;
+        }
+
+        .input-field {
+            flex: 1;
+            background: none;
+            border: none;
+            color: #d4d4d4;
+            font-family: inherit;
+            font-size: inherit;
+            outline: none;
+        }
+
+        .input-field::placeholder {
+            color: #666;
+        }
+
+        .no-activity {
+            color: #666;
+            font-style: italic;
+        }
+
+        .context-panel {
+            width: 300px;
+            background: #0f0f0f;
+            border-left: 1px solid #333;
+            display: none;
+            flex-direction: column;
+            padding: 16px;
+        }
+
+        .context-panel.visible {
+            display: flex;
+        }
+
+        .context-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #333;
+        }
+
+        .context-title {
+            color: #d4d4d4;
+            font-weight: 500;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+        }
+
+        .close-btn:hover {
+            color: #d4d4d4;
+        }
+
+        .context-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .context-section {
+            margin-bottom: 16px;
+        }
+
+        .context-label {
+            color: #666;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .context-value {
+            color: #d4d4d4;
+        }
+
+        .notes-header {
+            color: #fbbf24;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .notes-content {
+            color: #888;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="header-title">Swarm - AI Coding Assistant</div>
+    <div class="status" id="status">Ready</div>
+</div>
+
+<div class="main-container">
+    <div class="activity-panel">
+        <div class="panel-header">Recent Activity</div>
+        <div class="activity-content" id="activity">
+            <div class="no-activity">No recent activity</div>
+        </div>
+        <div class="command-input">
+            <span class="prompt">❯</span>
+            <input type="text" class="input-field" id="command-input"
+                   placeholder="Commands: help | exit | clear | save | clear-state" autocomplete="off">
+        </div>
+    </div>
+
+    <div class="task-panel">
+        <div class="panel-header">Task Queue</div>
+        <div class="task-queue" id="task-queue">
+            <div class="no-activity">No active tasks</div>
+        </div>
+    </div>
+
+    <div class="context-panel" id="context-panel">
+        <div class="context-header">
+            <div class="context-title">Context</div>
+            <button class="close-btn" onclick="closeContext()">×</button>
+        </div>
+        <div class="context-content" id="context-content">
+            <!-- Dynamic content -->
+        </div>
+    </div>
+</div>
+
+<script>
+    // State management
+    var state = {
+        tasks: [],
+        activity: [],
+        connected: false,
+        ws: null
+    };
+
+    // DOM elements
+    var activityEl = document.getElementById('activity');
+    var taskQueueEl = document.getElementById('task-queue');
+    var commandInput = document.getElementById('command-input');
+    var statusEl = document.getElementById('status');
+    var contextPanel = document.getElementById('context-panel');
+    var contextContent = document.getElementById('context-content');
+
+    // WebSocket connection
+    function connect() {
+        state.ws = new WebSocket('ws://localhost:8080');
+
+        state.ws.onopen = function () {
+            state.connected = true;
+            updateStatus('Connected');
+        };
+
+        state.ws.onmessage = function (event) {
+            var data = JSON.parse(event.data);
+            handleMessage(data);
+        };
+
+        state.ws.onclose = function () {
+            state.connected = false;
+            updateStatus('Disconnected - Reconnecting...');
+            setTimeout(connect, 3000);
+        };
+
+        state.ws.onerror = function (error) {
+            console.error('WebSocket error:', error);
+            updateStatus('Connection error');
+        };
+    }
+
+    // Handle incoming messages
+    function handleMessage(data) {
+        switch (data.type) {
+            case 'initial_state':
+                state.tasks = data.data.tasks || [];
+                state.activity = data.data.activity || [];
+                renderAll();
+                break;
+
+            case 'activity':
+                addActivity(data.entry);
+                break;
+
+            case 'task_update':
+                updateTask(data.task);
+                break;
+
+            case 'progress':
+                updateStatus(data.message);
+                break;
+
+            case 'status':
+                if (data.status === 'completed') {
+                    addActivity({
+                        type: 'notification',
+                        timestamp: Date.now(),
+                        message: 'Task completed successfully',
+                        level: 'success'
+                    });
+                }
+                break;
+        }
+    }
+
+    // Send command to backend
+    function sendCommand(command) {
+        if (state.connected && state.ws) {
+            state.ws.send(JSON.stringify({
+                type: 'command',
+                command: command
+            }));
+        }
+    }
+
+    // Add activity entry
+    function addActivity(entry) {
+        state.activity.push(entry);
+        renderActivity();
+        activityEl.scrollTop = activityEl.scrollHeight;
+    }
+
+    // Update task
+    function updateTask(task) {
+        var index = state.tasks.findIndex(function (t) {
+            return t.id === task.id;
+        });
+        if (index >= 0) {
+            state.tasks[index] = task;
+        } else {
+            state.tasks.push(task);
+        }
+        renderTasks();
+    }
+
+    // Render functions
+    function renderAll() {
+        renderActivity();
+        renderTasks();
+    }
+
+    function renderActivity() {
+        if (state.activity.length === 0) {
+            activityEl.innerHTML = '<div class="no-activity">No recent activity</div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < state.activity.length; i++) {
+            var entry = state.activity[i];
+            var timestamp = new Date(entry.timestamp).toLocaleTimeString();
+
+            if (entry.type === 'conversation') {
+                var msgClass = entry.role === 'user' ? 'user-message' : 'agent-message';
+                html += '<div class="activity-entry">';
+                html += '<div class="timestamp">[' + timestamp + ']</div>';
+                html += '<div class="' + msgClass + '">';
+                html += escapeHtml(entry.content);
+                html += '</div></div>';
+            } else if (entry.type === 'tool') {
+                html += '<div class="activity-entry">';
+                html += '<div class="timestamp">[' + timestamp + ']</div>';
+                html += '<div class="tool-call">';
+                html += '<span class="tool-name">' + entry.tool + '</span>';
+                html += '<span class="tool-params">(' + JSON.stringify(entry.params) + ')</span>';
+                html += '<div class="tool-result">→ ' + (entry.status || 'executing...') + '</div>';
+                html += '</div></div>';
+            } else if (entry.type === 'notification') {
+                html += '<div class="activity-entry">';
+                html += '<div class="timestamp">[' + timestamp + ']</div>';
+                html += '<div class="notification">' + escapeHtml(entry.message) + '</div>';
+                html += '</div>';
+            }
+        }
+        activityEl.innerHTML = html;
+    }
+
+    function renderTasks() {
+        if (state.tasks.length === 0) {
+            taskQueueEl.innerHTML = '<div class="no-activity">No active tasks</div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < state.tasks.length; i++) {
+            var task = state.tasks[i];
+            var statusClass = 'status-' + task.status;
+            var progress = task.progress || 0;
+            var activeClass = task.selected ? 'active' : '';
+
+            html += '<div class="task-item ' + activeClass + '" onclick="selectTask(\'' + task.id + '\')">';
+            html += '<div class="task-status">';
+            html += '<div class="status-indicator ' + statusClass + '"></div>';
+            html += '<span style="color: #888; font-size: 11px;">' + task.status + '</span>';
+            html += '</div>';
+            html += '<div class="task-description">' + escapeHtml(task.description) + '</div>';
+            html += '<div class="task-meta">ID: ' + task.id + '</div>';
+
+            if (task.status === 'executing') {
+                html += '<div class="progress-bar">';
+                html += '<div class="progress-fill" style="width: ' + progress + '%"></div>';
+                html += '</div>';
+            }
+
+            html += '</div>';
+        }
+        taskQueueEl.innerHTML = html;
+    }
+
+    // Utility functions
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function updateStatus(message) {
+        statusEl.textContent = message;
+    }
+
+    function selectTask(taskId) {
+        var task = state.tasks.find(function (t) {
+            return t.id === taskId;
+        });
+        if (task) {
+            state.tasks.forEach(function (t) {
+                t.selected = false;
+            });
+            task.selected = true;
+            renderTasks();
+            showContext(task);
+        }
+    }
+
+    function showContext(task) {
+        contextPanel.classList.add('visible');
+
+        var html = '';
+        html += '<div class="context-section">';
+        html += '<div class="context-label">Task ID</div>';
+        html += '<div class="context-value">' + task.id + '</div>';
+        html += '</div>';
+
+        html += '<div class="context-section">';
+        html += '<div class="context-label">Description</div>';
+        html += '<div class="context-value">' + escapeHtml(task.description) + '</div>';
+        html += '</div>';
+
+        html += '<div class="context-section">';
+        html += '<div class="context-label">Status</div>';
+        html += '<div class="context-value">' + task.status + '</div>';
+        html += '</div>';
+
+        html += '<div class="context-section">';
+        html += '<div class="context-label">Created</div>';
+        html += '<div class="context-value">' + new Date(task.created_at).toLocaleString() + '</div>';
+        html += '</div>';
+
+        if (task.completed_at) {
+            html += '<div class="context-section">';
+            html += '<div class="context-label">Completed</div>';
+            html += '<div class="context-value">' + new Date(task.completed_at).toLocaleString() + '</div>';
+            html += '</div>';
+
+            html += '<div class="context-section">';
+            html += '<div class="context-label">Execution Time</div>';
+            html += '<div class="context-value">' + task.execution_time + 's</div>';
+            html += '</div>';
+        }
+
+        if (task.plan) {
+            html += '<div class="notes-header">Plan:</div>';
+            html += '<div class="notes-content">' + escapeHtml(task.plan) + '</div>';
+        }
+
+        contextContent.innerHTML = html;
+    }
+
+    function closeContext() {
+        contextPanel.classList.remove('visible');
+        state.tasks.forEach(function (t) {
+            t.selected = false;
+        });
+        renderTasks();
+    }
+
+    // Command input handling
+    commandInput.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            var command = commandInput.value.trim();
+            if (command) {
+                // Handle special commands locally
+                if (command === 'clear') {
+                    state.activity = [];
+                    renderActivity();
+                } else if (command === 'help') {
+                    addActivity({
+                        type: 'notification',
+                        timestamp: Date.now(),
+                        message: 'Available commands: help | exit | clear | save | clear-state'
+                    });
+                } else {
+                    // Send to backend
+                    addActivity({
+                        type: 'conversation',
+                        timestamp: Date.now(),
+                        role: 'user',
+                        content: command
+                    });
+                    sendCommand(command);
+                }
+                commandInput.value = '';
+            }
+        }
+    });
+
+    // Auto-focus command input
+    commandInput.focus();
+
+    // Initialize
+    connect();
+</script>
+</body>
+</html>

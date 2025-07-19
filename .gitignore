@@ -24,9 +24,6 @@ Thumbs.db
 # AI Tooling
 .claude
 
-# Miscellaneous
-tmp/
-
 # Testing
 .phpunit.cache/
 .phpunit.result.cache
