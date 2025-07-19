@@ -76,7 +76,8 @@
     },
     "optimize-autoloader": true,
     "sort-packages": true,
-    "preferred-install": "dist"
+    "preferred-install": "dist",
+    "process-timeout": 0
   },
   "minimum-stability": "stable",
   "prefer-stable": true

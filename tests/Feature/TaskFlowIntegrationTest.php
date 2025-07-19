@@ -446,6 +446,17 @@ test('task execution handles errors gracefully', function () {
                 ],
             ],
         ]),
+        // Response after tool error (agent continues after error)
+        CreateResponse::fake([
+            'choices' => [
+                [
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => 'The file could not be read because it does not exist.',
+                    ],
+                ],
+            ],
+        ]),
         // Summary after error
         CreateResponse::fake([
             'choices' => [
