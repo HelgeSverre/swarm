@@ -1,4 +1,4 @@
-# Swarm 💮
+# Swarm 📨
 
 AI-powered coding agent written in PHP that helps with development tasks through natural language.
 
@@ -206,6 +206,10 @@ All prompts are centralized in `PromptTemplates` class:
 - Task-related prompts (extraction, planning, execution)
 - Code assistance prompts (explain, refactor, debug, review, generate, document, test)
 - Dynamic tool list integration
+
+## Tasks
+
+- [ ] Write a poem
 
 ## Contributing
 

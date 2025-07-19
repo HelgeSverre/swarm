@@ -232,6 +232,7 @@ class Swarm
             'help' => $this->handleHelp(),
             'save' => $this->handleSave(),
             'clear-state' => $this->handleClearState(),
+            'test-error' => $this->handleTestError(),
             default => false
         };
     }
@@ -253,7 +254,7 @@ class Swarm
 
     protected function handleHelp(): bool
     {
-        $this->tui->showNotification('Commands: exit, quit, clear, save, clear-state, help', 'info');
+        $this->tui->showNotification('Commands: exit, quit, clear, save, clear-state, help, test-error', 'info');
 
         return true;
     }
@@ -285,6 +286,15 @@ class Swarm
         }
 
         return true;
+    }
+
+    protected function handleTestError(): bool
+    {
+        $this->logger->info('Test error command invoked');
+        $this->tui->showNotification('Throwing test exception...', 'warning');
+
+        // This should be caught by the exception handler
+        throw new RuntimeException('Test exception to verify error logging');
     }
 
     protected function resetState(): void
