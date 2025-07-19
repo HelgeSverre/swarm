@@ -19,13 +19,14 @@ test('tool schemas are generated dynamically for all tools', function () {
     $schemas = $executor->getToolSchemas();
 
     expect($schemas)->toBeArray()
-        ->and($schemas)->toHaveCount(4);
+        ->and($schemas)->toHaveCount(5);
 
     $toolNames = array_column($schemas, 'name');
     expect($toolNames)->toContain('read_file')
         ->and($toolNames)->toContain('write_file')
         ->and($toolNames)->toContain('bash')
-        ->and($toolNames)->toContain('grep');
+        ->and($toolNames)->toContain('grep')
+        ->and($toolNames)->toContain('web_fetch');
 });
 
 test('tool schemas have proper structure for OpenAI', function () {

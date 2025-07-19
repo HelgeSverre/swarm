@@ -385,7 +385,7 @@ class CodingAgent
 
         // Log the request at debug level
         $this->logger?->debug('OpenAI request', [
-            'prompt_preview' => mb_substr($prompt, 0, 200) . (mb_strlen($prompt) > 200 ? '...' : ''),
+            'prompt_preview' => mb_substr($prompt, 0, 500) . (mb_strlen($prompt) > 500 ? '...' : ''),
             'prompt_length' => mb_strlen($prompt),
             'model' => $this->model,
             'temperature' => $this->temperature,
@@ -411,7 +411,7 @@ class CodingAgent
                 'prompt_tokens' => $result->usage->promptTokens ?? 0,
                 'completion_tokens' => $result->usage->completionTokens ?? 0,
                 'total_tokens' => $result->usage->totalTokens ?? 0,
-                'response_preview' => mb_substr($response, 0, 200) . (mb_strlen($response) > 200 ? '...' : ''),
+                'response_preview' => mb_substr($response, 0, 500) . (mb_strlen($response) > 500 ? '...' : ''),
                 'response_length' => mb_strlen($response),
                 'finish_reason' => $result->choices[0]->finishReason ?? 'unknown',
             ]);
@@ -447,7 +447,7 @@ class CodingAgent
         $messages = $this->buildMessagesWithHistory($prompt, $systemPrompt);
 
         $this->logger?->debug('OpenAI function call request', [
-            'prompt_preview' => mb_substr($prompt, 0, 200) . (mb_strlen($prompt) > 200 ? '...' : ''),
+            'prompt_preview' => mb_substr($prompt, 0, 500) . (mb_strlen($prompt) > 500 ? '...' : ''),
             'prompt_length' => mb_strlen($prompt),
             'model' => $this->model,
             'temperature' => $this->temperature,

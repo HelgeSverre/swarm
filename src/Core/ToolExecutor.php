@@ -8,6 +8,7 @@ use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
 use HelgeSverre\Swarm\Tools\Grep;
 use HelgeSverre\Swarm\Tools\ReadFile;
 use HelgeSverre\Swarm\Tools\Terminal;
+use HelgeSverre\Swarm\Tools\WebFetch;
 use HelgeSverre\Swarm\Tools\WriteFile;
 use Psr\Log\LoggerInterface;
 
@@ -38,6 +39,7 @@ class ToolExecutor
         $executor->register(new WriteFile);
         $executor->register(new Terminal);
         $executor->register(new Grep);
+        $executor->register(new WebFetch);
 
         return $executor;
     }

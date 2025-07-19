@@ -210,7 +210,7 @@ class UI
         $this->addToHistory($entry);
 
         // Also show as notification
-        $this->showNotification('Error: ' . mb_substr($cleanError, 0, 50) . '...', 'error');
+        $this->showNotification('Error: ' . mb_substr($cleanError, 0, 100) . '...', 'error');
     }
 
     public function displayToolCall(string $tool, array $params, $result): void
@@ -397,8 +397,8 @@ class UI
                 '%s: %s',
                 $key,
                 json_encode(
-                    is_string($value) && mb_strlen($value) > 20
-                        ? mb_substr($value, 0, 17) . '...'
+                    is_string($value) && mb_strlen($value) > 50
+                        ? mb_substr($value, 0, 47) . '...'
                         : $value
                 )
             ),
@@ -467,7 +467,7 @@ class UI
             // Show plan if available
             if (! empty($currentTask['plan'])) {
                 $planLines = explode("\n", $currentTask['plan']);
-                $firstLine = $this->truncate($planLines[0], $this->terminalWidth - 10);
+                $firstLine = $this->truncate($planLines[0], $this->terminalWidth - 6);
                 echo $this->drawBoxLine('    📋 ' . $firstLine, ThemeColor::Border, ThemeColor::Muted);
             }
 
@@ -661,14 +661,13 @@ class UI
         // Calculate available width for content (accounting for borders and padding)
         $availableWidth = $this->terminalWidth - 4;
 
-        // Truncate content if needed
-        $displayContent = $this->truncate($content, $availableWidth);
-        $contentLength = mb_strlen($displayContent);
+        // Don't truncate content - let it use full available width
+        $contentLength = mb_strlen($content);
 
         // Pad with spaces to fill the line
         $padding = str_repeat(' ', max(0, $availableWidth - $contentLength));
 
-        return $leftBorder . $this->colorize($displayContent, $contentColor) . $padding . $rightBorder . "\n";
+        return $leftBorder . $this->colorize($content, $contentColor) . $padding . $rightBorder . "\n";
     }
 
     protected function drawBoxSeparator(string $title = '', string|AnsiColor|ThemeColor $borderColor = 'gray'): string

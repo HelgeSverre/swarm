@@ -47,8 +47,8 @@ class ToolCallEntry extends ActivityEntry
         $summary = [];
 
         foreach ($this->params as $key => $value) {
-            if (is_string($value) && mb_strlen($value) > 20) {
-                $value = mb_substr($value, 0, 17) . '...';
+            if (is_string($value) && mb_strlen($value) > 50) {
+                $value = mb_substr($value, 0, 47) . '...';
             }
             $summary[] = "{$key}: " . json_encode($value);
         }
@@ -100,8 +100,8 @@ class ToolCallEntry extends ActivityEntry
         $command = $this->params['command'] ?? 'command';
 
         // Truncate long commands
-        if (mb_strlen($command) > 50) {
-            $command = mb_substr($command, 0, 47) . '...';
+        if (mb_strlen($command) > 80) {
+            $command = mb_substr($command, 0, 77) . '...';
         }
 
         return "⚡ bash: {$command}";

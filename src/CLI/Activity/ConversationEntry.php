@@ -146,7 +146,7 @@ class ConversationEntry extends ActivityEntry
         $stepCount = isset($plan['steps']) ? count($plan['steps']) : 0;
 
         return sprintf('📋 Plan: %s (%d steps)',
-            mb_substr($summary, 0, 50) . (mb_strlen($summary) > 50 ? '...' : ''),
+            mb_substr($summary, 0, 100) . (mb_strlen($summary) > 100 ? '...' : ''),
             $stepCount
         );
     }
@@ -198,7 +198,7 @@ class ConversationEntry extends ActivityEntry
         if (is_array($args) && isset($args['command'])) {
             $cmd = $args['command'];
 
-            return mb_strlen($cmd) > 40 ? mb_substr($cmd, 0, 37) . '...' : $cmd;
+            return mb_strlen($cmd) > 80 ? mb_substr($cmd, 0, 77) . '...' : $cmd;
         }
 
         return 'command';
@@ -267,8 +267,9 @@ class ConversationEntry extends ActivityEntry
     private function formatGenericObject(array $object): string
     {
         // Try to identify common patterns
-        if (isset($object['success']) && isset($object['message'])) {
+        if (isset($object['success'], $object['message'])) {
             $icon = $object['success'] ? '✅' : '❌';
+
             return sprintf('%s %s', $icon, $object['message']);
         }
 
@@ -285,6 +286,7 @@ class ConversationEntry extends ActivityEntry
 
         // For complex objects, show a summary
         $keys = array_keys($object);
+
         return sprintf('📄 Data with %d field%s: %s',
             count($keys),
             count($keys) === 1 ? '' : 's',
