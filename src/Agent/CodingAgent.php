@@ -39,12 +39,21 @@ class CodingAgent
 
     public function processRequest(string $userInput): AgentResponse
     {
-        $this->logger?->info('Processing user request', ['input_length' => mb_strlen($userInput)]);
+        $this->logger?->info('Processing user request', [
+            'input_length' => mb_strlen($userInput),
+            'conversation_length' => count($this->conversationHistory),
+        ]);
         $this->addToHistory('user', $userInput);
 
         // First, classify the request
         $this->reportProgress('classifying', ['message' => 'Analyzing request type...']);
         $classification = $this->classifyRequest($userInput);
+
+        $this->logger?->debug('Request classified', [
+            'type' => $classification['request_type']->value,
+            'requires_tools' => $classification['requires_tools'],
+            'confidence' => $classification['confidence'],
+        ]);
 
         // Handle demonstration requests without tools
         if ($classification['request_type'] === RequestType::Demonstration && ! $classification['requires_tools']) {
@@ -62,6 +71,7 @@ class CodingAgent
             $tasks = $this->extractTasks($userInput);
 
             if (! empty($tasks)) {
+                $this->logger?->info('Tasks extracted', ['count' => count($tasks)]);
                 $this->taskManager->addTasks($tasks);
 
                 // Plan each task
@@ -138,6 +148,14 @@ class CodingAgent
             // Include user, assistant messages, but not tool or error messages
             return in_array($entry['role'], ['user', 'assistant']);
         }));
+    }
+
+    /**
+     * Set conversation history (for restoring from saved state)
+     */
+    public function setConversationHistory(array $history): void
+    {
+        $this->conversationHistory = $history;
     }
 
     /**
@@ -227,7 +245,10 @@ class CodingAgent
 
     protected function classifyRequest(string $input): array
     {
-        $this->logger?->debug('Classifying request', ['input' => $input]);
+        $this->logger?->debug('Classifying request', [
+            'input' => $input,
+            'input_length' => mb_strlen($input),
+        ]);
 
         try {
             $systemPrompt = PromptTemplates::classificationSystem();
@@ -236,6 +257,8 @@ class CodingAgent
                 "Classify this request: \"{$input}\"",
                 $systemPrompt
             );
+
+            $startTime = microtime(true);
 
             $result = $this->llmClient->chat()->create([
                 'model' => $this->model,
@@ -275,6 +298,20 @@ class CodingAgent
                 ],
             ]);
 
+            $duration = microtime(true) - $startTime;
+
+            // Log LLM usage
+            if (isset($result->usage)) {
+                $this->logger?->debug('LLM usage', [
+                    'operation' => 'classify_request',
+                    'model' => $this->model,
+                    'prompt_tokens' => $result->usage->promptTokens,
+                    'completion_tokens' => $result->usage->completionTokens,
+                    'total_tokens' => $result->usage->totalTokens,
+                    'duration_ms' => round($duration * 1000, 2),
+                ]);
+            }
+
             $classification = json_decode($result->choices[0]->message->content, true);
 
             if (! $classification || ! isset($classification['request_type'])) {
@@ -292,6 +329,7 @@ class CodingAgent
                 'type' => $classification['request_type']->value,
                 'requires_tools' => $classification['requires_tools'],
                 'confidence' => $classification['confidence'],
+                'reasoning' => $classification['reasoning'],
             ]);
 
             return $classification;
@@ -341,9 +379,14 @@ class CodingAgent
 
         $prompt = PromptTemplates::extractTasks($input);
 
-        $this->logger?->debug('Extracting tasks from input', ['prompt_length' => mb_strlen($prompt)]);
+        $this->logger?->debug('Extracting tasks from input', [
+            'input_length' => mb_strlen($input),
+            'prompt_length' => mb_strlen($prompt),
+        ]);
 
         try {
+            $startTime = microtime(true);
+
             $result = $this->llmClient->chat()->create([
                 'model' => $this->model,
                 'messages' => [
@@ -355,25 +398,44 @@ class CodingAgent
                 'temperature' => $this->temperature,
             ]);
 
+            $duration = microtime(true) - $startTime;
+
+            // Log LLM usage
+            if (isset($result->usage)) {
+                $this->logger?->debug('LLM usage', [
+                    'operation' => 'extract_tasks',
+                    'model' => $this->model,
+                    'prompt_tokens' => $result->usage->promptTokens,
+                    'completion_tokens' => $result->usage->completionTokens,
+                    'total_tokens' => $result->usage->totalTokens,
+                    'duration_ms' => round($duration * 1000, 2),
+                ]);
+            }
+
             $message = $result->choices[0]->message;
 
             if (isset($message->functionCall) && $message->functionCall->name === 'extract_tasks') {
                 $arguments = json_decode($message->functionCall->arguments, true);
                 $tasks = $arguments['tasks'] ?? [];
-                $this->logger?->debug('Tasks extracted', ['task_count' => count($tasks)]);
+
+                $this->logger?->info('Tasks extracted', [
+                    'count' => count($tasks),
+                    'tasks' => array_map(fn ($t) => $t['description'], $tasks),
+                ]);
 
                 return $tasks;
             }
+
+            return [];
         } catch (Exception $e) {
             $this->logger?->error('Task extraction failed', [
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
                 'input' => $input,
-                'trace' => $e->getTraceAsString(),
             ]);
-        }
 
-        return [];
+            return [];
+        }
     }
 
     protected function callOpenAI(string $prompt, ?string $systemPrompt = null): string
@@ -643,17 +705,32 @@ class CodingAgent
         $maxIterations = 10;
         $iteration = 0;
 
-        $this->logger?->info("Executing task: {$task->description}");
+        $this->logger?->info('Executing task', [
+            'task_id' => $task->id,
+            'description' => $task->description,
+            'status' => $task->status->value,
+        ]);
 
         while ($iteration < $maxIterations) {
+            $this->logger?->debug('Task iteration', ['iteration' => $iteration + 1]);
+
             $context = $this->buildContext();
             $toolLog = $this->getRecentToolLog();
 
             $prompt = PromptTemplates::executeTask($task, $context, $toolLog);
 
+            $startTime = microtime(true);
             $toolCall = $this->callOpenAIWithFunctions($prompt, $this->getToolFunctions());
+            $duration = microtime(true) - $startTime;
+
+            $this->logger?->debug('LLM tool selection', [
+                'task_id' => $task->id,
+                'duration_ms' => round($duration * 1000, 2),
+                'tool_selected' => $toolCall ? $toolCall['name'] : 'none',
+            ]);
 
             if (! $toolCall) {
+                $this->logger?->info('Task completed - no more tools needed');
                 break; // No tool call means task is complete
             }
 
@@ -662,9 +739,16 @@ class CodingAgent
                 $this->logger?->debug('Executing tool', [
                     'tool' => $toolCall['name'],
                     'params' => $toolCall['arguments'],
+                    'iteration' => $iteration + 1,
                 ]);
 
                 $result = $this->toolExecutor->dispatch($toolCall['name'], $toolCall['arguments']);
+
+                $this->logger?->debug('Tool execution complete', [
+                    'tool' => $toolCall['name'],
+                    'success' => $result->isSuccess(),
+                ]);
+
                 $this->addToHistory('tool', "Tool: {$toolCall['name']}\nParams: " . json_encode($toolCall['arguments']) . "\nResult: " . json_encode($result->toArray()));
             } catch (Exception $e) {
                 $this->logger?->error('Tool execution failed during task', [
@@ -674,8 +758,8 @@ class CodingAgent
                     'params' => $toolCall['arguments'],
                     'task' => $task->description,
                     'iteration' => $iteration,
-                    'trace' => $e->getTraceAsString(),
                 ]);
+
                 $this->addToHistory('error', $e->getMessage());
                 break;
             }

@@ -4,9 +4,12 @@ namespace HelgeSverre\Swarm\Core;
 
 use Exception;
 use HelgeSverre\Swarm\Contracts\Tool;
+use HelgeSverre\Swarm\Contracts\Toolkit;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
 use HelgeSverre\Swarm\Tools\Grep;
+use HelgeSverre\Swarm\Tools\Playwright;
 use HelgeSverre\Swarm\Tools\ReadFile;
+use HelgeSverre\Swarm\Tools\Tavily\TavilyToolkit;
 use HelgeSverre\Swarm\Tools\Terminal;
 use HelgeSverre\Swarm\Tools\WebFetch;
 use HelgeSverre\Swarm\Tools\WriteFile;
@@ -40,6 +43,17 @@ class ToolExecutor
         $executor->register(new Terminal);
         $executor->register(new Grep);
         $executor->register(new WebFetch);
+        $executor->register(new Playwright);
+
+        // Register Tavily toolkit if API key is available
+        if (getenv('TAVILY_API_KEY') || isset($_ENV['TAVILY_API_KEY'])) {
+            try {
+                $executor->registerToolkit(new TavilyToolkit);
+            } catch (Exception $e) {
+                // Log the error but don't fail - Tavily is optional
+                $logger?->warning('Failed to register Tavily toolkit', ['error' => $e->getMessage()]);
+            }
+        }
 
         return $executor;
     }
@@ -68,6 +82,23 @@ class ToolExecutor
         $this->toolInstances[$name] = $tool;
 
         $this->logger?->debug('Tool registered', ['tool' => $name]);
+
+        return $this;
+    }
+
+    /**
+     * Register all tools from a toolkit
+     */
+    public function registerToolkit(Toolkit $toolkit): self
+    {
+        foreach ($toolkit->tools() as $tool) {
+            $this->register($tool);
+        }
+
+        $this->logger?->debug('Toolkit registered', [
+            'toolkit' => get_class($toolkit),
+            'tools_count' => count($toolkit->tools()),
+        ]);
 
         return $this;
     }
@@ -123,6 +154,7 @@ class ToolExecutor
                 'tool' => $tool,
                 'available_tools' => $availableTools,
             ]);
+
             throw new ToolNotFoundException("Tool '{$tool}' not found");
         }
 
@@ -154,6 +186,7 @@ class ToolExecutor
                 'log_id' => $logId,
                 'duration_ms' => round($duration * 1000, 2),
                 'success' => $response->isSuccess(),
+                'response_size' => $response->isSuccess() ? mb_strlen(json_encode($response->toArray())) : null,
             ]);
 
             // Log warning for slow operations
@@ -174,7 +207,6 @@ class ToolExecutor
                 'log_id' => $logId,
                 'duration_ms' => round($duration * 1000, 2),
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
 
             throw $e;

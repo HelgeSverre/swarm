@@ -164,7 +164,7 @@ class UI
 
         // Use the stored message and current animation frame
         $spinner = $spinnerChars[$this->animationFrame % count($spinnerChars)];
-        $elapsed = round(microtime(true) - $this->processingStartTime, 1);
+        $elapsed = number_format(microtime(true) - $this->processingStartTime, 1, '.', '');
 
         // Show current operation if set
         $message = $this->currentOperation ?: $this->processingMessage;
@@ -235,7 +235,7 @@ class UI
         $this->clearScreen();
         $this->drawHeader();
         $this->drawTaskStatus($status);
-        echo "\n"; // Add spacing between sections
+        echo $this->drawBoxLine('', ThemeColor::Border); // Add spacing between sections with border
         $this->drawRecentActivity($status);
         $this->drawFooter();
 
@@ -578,12 +578,18 @@ class UI
                 $messageLines = explode("\n", str_replace(["\r\n", "\r"], "\n", $message));
                 $wrappedLines = [];
 
+                // Calculate effective width accounting for icon on first line
+                $hasIcon = $entry->hasIcon() && ! empty($icon);
+                $iconWidth = $hasIcon ? 4 : 0; // icon + 2 spaces
+
                 // Wrap each line individually
-                foreach ($messageLines as $line) {
+                foreach ($messageLines as $index => $line) {
                     if (empty($line)) {
                         $wrappedLines[] = '';  // Preserve empty lines
                     } else {
-                        $wrapped = $this->wrapText($line, $availableWidth);
+                        // First line needs to account for icon width
+                        $lineWidth = ($index === 0) ? $availableWidth - $iconWidth : $availableWidth - 4; // Subsequent lines have indent
+                        $wrapped = $this->wrapText($line, $lineWidth);
                         $wrappedLines = array_merge($wrappedLines, $wrapped);
                     }
                 }
@@ -661,8 +667,12 @@ class UI
         // Calculate available width for content (accounting for borders and padding)
         $availableWidth = $this->terminalWidth - 4;
 
-        // Don't truncate content - let it use full available width
+        // Truncate content if it's too long to prevent breaking the border
         $contentLength = mb_strlen($content);
+        if ($contentLength > $availableWidth) {
+            $content = mb_substr($content, 0, $availableWidth);
+            $contentLength = $availableWidth;
+        }
 
         // Pad with spaces to fill the line
         $padding = str_repeat(' ', max(0, $availableWidth - $contentLength));

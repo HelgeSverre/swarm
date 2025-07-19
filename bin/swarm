@@ -1,9 +1,9 @@
 #!/usr/bin/env php
 <?php
 
-// Find and load the autoloader
 use Dotenv\Dotenv;
 
+// Find and load the autoloader
 $possibleAutoloaders = [
     __DIR__ . '/../vendor/autoload.php',     // Local development
     __DIR__ . '/../../../autoload.php',      // Installed as dependency
@@ -20,7 +20,7 @@ foreach ($possibleAutoloaders as $autoloader) {
 }
 
 if (!$autoloaderFound) {
-    die("Could not find autoloader. Please run 'composer install' first.\n");
+    exit("Could not find autoloader. Please run 'composer install' first.\n");
 }
 
 // Define the project root directory
@@ -50,10 +50,10 @@ try {
 } catch (Throwable $e) {
     // Try to use our exception handler if available
     if (class_exists('HelgeSverre\Swarm\Core\ExceptionHandler')) {
-        $handler = new HelgeSverre\Swarm\Core\ExceptionHandler();
+        $handler = new HelgeSverre\Swarm\Core\ExceptionHandler;
         exit($handler->handle($e));
     }
-    
+
     // Fallback to basic error display
     fwrite(STDERR, "\033[31mError: " . $e->getMessage() . "\033[0m\n");
     exit(1);

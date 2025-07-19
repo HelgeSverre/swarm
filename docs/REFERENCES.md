@@ -15,6 +15,47 @@
 - https://www.promptingguide.ai/techniques/tot
 - https://python.langchain.com/docs/integrations/tools/
 
+----
+
 # Literature on AI Agents and LLMs
 
+- https://arize.com/ai-agents/
+- https://arize.com/ai-product-manager/
 - https://apphp.gitbook.io/artificial-intelligence-with-php/llms.txt
+- https://dev.to/jamesli/react-vs-plan-and-execute-a-practical-comparison-of-llm-agent-patterns-4gh9
+- https://dev.to/jamesli/langgraph-state-machines-managing-complex-agent-task-flows-in-production-36f4
+- https://dev.to/jamesli/agent-task-orchestration-system-from-design-to-production-1kof
+- https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/
+- https://dev.to/callebknox/agent-architectures-that-scale-53of
+
+----
+
+# Useful, but more "Abstract" Concepts/Ideas.
+
+## Model Context Protocol (MCP)
+
+https://modelcontextprotocol.io/docs/concepts/architecture
+
+MCP (Model Context Protocol) is a standard way for AI applications and agents to connect to and work with your data
+sources (e.g. local files, databases, or content repositories) and tools (e.g. GitHub, Google Maps, or Puppeteer).
+
+## DAG - Task Model (Directed Acyclic Graph, aka Task object with all the necessary things to do the task)
+
+> A DAG is a model that encapsulates everything needed to execute a workflow. Some DAG attributes include the following:
+> - Schedule: When the workflow should run.
+> - Tasks: tasks are discrete units of work that are run on workers.
+> - Task Dependencies: The order and conditions under which tasks execute.
+> - Callbacks: Actions to take when the entire workflow completes.
+> - Additional Parameters: And many other operational details.
+>
+> https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html
+>
+> _The term “DAG” comes from the mathematical concept “directed acyclic graph”, but the meaning in Airflow has evolved
+well beyond just the literal data structure associated with the mathematical DAG concept._
+
+## Database Diagram for Apache Airflow (Task orchestration) system)
+
+> Apache Airflow® is a platform created by the community to programmatically author, schedule and monitor workflows.
+
+- Image: https://airflow.apache.org/docs/apache-airflow/stable/_images/airflow_erd.svg
+- Web: https://airflow.apache.org/docs/apache-airflow/stable/database-erd-ref.html

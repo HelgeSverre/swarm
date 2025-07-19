@@ -10,23 +10,29 @@ test('toolchain registers all tools correctly', function () {
     expect($registeredTools)->toContain('read_file')
         ->and($registeredTools)->toContain('write_file')
         ->and($registeredTools)->toContain('bash')
-        ->and($registeredTools)->toContain('grep');
+        ->and($registeredTools)->toContain('grep')
+        ->and($registeredTools)->toContain('web_fetch')
+        ->and($registeredTools)->toContain('playwright');
 });
 
 test('tool schemas are generated dynamically for all tools', function () {
     $executor = ToolExecutor::createWithDefaultTools();
 
     $schemas = $executor->getToolSchemas();
-
-    expect($schemas)->toBeArray()
-        ->and($schemas)->toHaveCount(5);
-
     $toolNames = array_column($schemas, 'name');
+
+    expect($schemas)->toBeArray();
+
+    // Core tools that should always be present
     expect($toolNames)->toContain('read_file')
         ->and($toolNames)->toContain('write_file')
         ->and($toolNames)->toContain('bash')
         ->and($toolNames)->toContain('grep')
-        ->and($toolNames)->toContain('web_fetch');
+        ->and($toolNames)->toContain('web_fetch')
+        ->and($toolNames)->toContain('playwright');
+
+    // At least 6 tools (may have Tavily if API key is set)
+    expect(count($schemas))->toBeGreaterThanOrEqual(6);
 });
 
 test('tool schemas have proper structure for OpenAI', function () {

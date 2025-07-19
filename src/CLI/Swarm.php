@@ -312,6 +312,13 @@ class Swarm
      */
     protected function runWithStreamingProcessor(string $input): void
     {
+        // Add user input to conversation history
+        $this->syncedState['conversation_history'][] = [
+            'role' => 'user',
+            'content' => $input,
+            'timestamp' => time(),
+        ];
+
         $processor = new StreamingBackgroundProcessor($this->logger);
 
         try {
@@ -544,7 +551,38 @@ class Swarm
 
     protected function handleStateSyncUpdate(array $update): bool
     {
-        $this->syncedState = array_merge($this->syncedState, $update['data'] ?? []);
+        $newData = $update['data'] ?? [];
+
+        // Special handling for conversation_history - merge instead of replace
+        if (isset($newData['conversation_history'], $this->syncedState['conversation_history'])) {
+            // Get existing conversation history
+            $existingHistory = $this->syncedState['conversation_history'];
+            $newHistory = $newData['conversation_history'];
+
+            // Create a map of existing messages by timestamp to avoid duplicates
+            $historyMap = [];
+            foreach ($existingHistory as $entry) {
+                $key = $entry['timestamp'] . '_' . $entry['role'] . '_' . md5($entry['content']);
+                $historyMap[$key] = $entry;
+            }
+
+            // Add new messages that don't exist
+            foreach ($newHistory as $entry) {
+                $key = $entry['timestamp'] . '_' . $entry['role'] . '_' . md5($entry['content']);
+                if (! isset($historyMap[$key])) {
+                    $historyMap[$key] = $entry;
+                }
+            }
+
+            // Sort by timestamp and convert back to array
+            $mergedHistory = array_values($historyMap);
+            usort($mergedHistory, fn ($a, $b) => $a['timestamp'] - $b['timestamp']);
+
+            // Update the new data with merged history
+            $newData['conversation_history'] = $mergedHistory;
+        }
+
+        $this->syncedState = array_merge($this->syncedState, $newData);
         $this->ui->refresh($this->syncedState);
 
         return false;

@@ -25,6 +25,7 @@
     "ext-json": "*",
     "ext-mbstring": "*",
     "crwlr/html-2-text": "^0.1",
+    "laravel/prompts": "^0.3.6",
     "monolog/monolog": "^3.0",
     "nyholm/psr7": "^1.8",
     "openai-php/client": "^0.14.0",
@@ -34,6 +35,7 @@
     "spatie/ray": "^1.42",
     "spatie/temporary-directory": "^2.3",
     "symfony/http-client": "^7.3",
+    "symfony/process": "^7.3",
     "vlucas/phpdotenv": "^5.6"
   },
   "require-dev": {
@@ -74,7 +76,8 @@
   "config": {
     "allow-plugins": {
       "pestphp/pest-plugin": true,
-      "php-http/discovery": true
+      "php-http/discovery": true,
+      "tbachert/spi": true
     },
     "optimize-autoloader": true,
     "sort-packages": true,

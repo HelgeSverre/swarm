@@ -15,6 +15,7 @@ enum BoxCharacter: string
         return match ($this) {
             self::Horizontal => '─',
             self::Vertical => '│',
+            self::VerticalHeavy => '┃',
             self::TopLeft => '┌',
             self::TopRight => '┐',
             self::BottomLeft => '└',
@@ -28,6 +29,7 @@ enum BoxCharacter: string
     }
     case Horizontal = 'horizontal';
     case Vertical = 'vertical';
+    case VerticalHeavy = 'vertical_heavy';
     case TopLeft = 'top_left';
     case TopRight = 'top_right';
     case BottomLeft = 'bottom_left';

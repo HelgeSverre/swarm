@@ -51,6 +51,14 @@ class TaskManager
         ]);
     }
 
+    /**
+     * Add a single task by description
+     */
+    public function addTask(string $description): void
+    {
+        $this->addTasks([['description' => $description]]);
+    }
+
     public function planTask(string $taskId, string $plan, array $steps): void
     {
         $this->logger?->info('Planning task', ['task_id' => $taskId]);

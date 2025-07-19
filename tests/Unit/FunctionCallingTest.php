@@ -24,7 +24,7 @@ test('tool schemas are properly formatted for OpenAI function calling', function
         // Each property should have type and description
         foreach ($schema['parameters']['properties'] as $propName => $propDef) {
             expect($propDef)->toHaveKey('type')
-                ->and($propDef['type'])->toBeIn(['string', 'number', 'boolean', 'array', 'object'])
+                ->and($propDef['type'])->toBeIn(['string', 'number', 'integer', 'boolean', 'array', 'object'])
                 ->and($propDef)->toHaveKey('description')
                 ->and($propDef['description'])->toBeString()->not->toBeEmpty();
         }

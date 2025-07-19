@@ -109,6 +109,21 @@ class StreamingAsyncProcessor
                 temperature: (float) ($_ENV['OPENAI_TEMPERATURE'] ?? 0.7)
             );
 
+            // Load conversation history from state file if it exists
+            $stateFile = getcwd() . '/.swarm.json';
+            if (file_exists($stateFile)) {
+                $stateContent = file_get_contents($stateFile);
+                if (! empty(trim($stateContent))) {
+                    $state = json_decode($stateContent, true);
+                    if ($state && isset($state['conversation_history']) && is_array($state['conversation_history'])) {
+                        $agent->setConversationHistory($state['conversation_history']);
+                        $logger?->debug('Restored conversation history', [
+                            'count' => count($state['conversation_history']),
+                        ]);
+                    }
+                }
+            }
+
             // Set progress callback to stream updates
             // Track last heartbeat time and last state sync
             $lastHeartbeat = time();

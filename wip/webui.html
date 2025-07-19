@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swarm - AI Coding Assistant</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --bg-panel: #141414;
+            --bg-hover: #1f1f1f;
+            --border-color: #2a2a2a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #999;
+            --text-dim: #666;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-cyan: #06b6d4;
+            --accent-magenta: #a855f7;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+            font-size: 13px;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Main Area */
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .status-bar {
+            background: var(--bg-panel);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .status-bar .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .status-bar .divider {
+            color: var(--text-dim);
+        }
+
+        .status-bar .task-status {
+            color: var(--accent-green);
+        }
+
+        .status-bar .operation {
+            color: var(--accent-yellow);
+            margin-left: auto;
+        }
+
+        /* Activity Area */
+        .activity-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .activity-item {
+            margin-bottom: 12px;
+            display: flex;
+            gap: 12px;
+            line-height: 1.5;
+            animation: fadeIn 150ms;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .activity-time {
+            color: var(--text-dim);
+            font-size: 11px;
+            min-width: 60px;
+        }
+
+        .activity-icon {
+            min-width: 20px;
+            text-align: center;
+        }
+
+        .activity-content {
+            flex: 1;
+            word-break: break-word;
+        }
+
+        .activity-command {
+            color: var(--accent-blue);
+        }
+
+        .activity-status {
+            color: var(--accent-green);
+        }
+
+        .activity-tool {
+            color: var(--accent-cyan);
+        }
+
+        .activity-error {
+            color: var(--accent-red);
+        }
+
+        .activity-assistant {
+            color: var(--accent-green);
+        }
+
+        .thought-bubble {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 2px solid var(--border-color);
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .thought-bubble:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .thought-bubble.collapsed {
+            max-height: 60px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .thought-bubble.collapsed::after {
+            content: '... (click to expand)';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: var(--bg-panel);
+            padding: 0 8px;
+            color: var(--text-dim);
+        }
+
+        /* Input Area */
+        .input-area {
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border-color);
+            padding: 12px 16px;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .input-prompt {
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        .input-field {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font: inherit;
+            outline: none;
+        }
+
+        .input-hints {
+            margin-top: 4px;
+            color: var(--text-dim);
+            font-size: 11px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            background: var(--bg-panel);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Task Queue */
+        .task-queue {
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px;
+        }
+
+        .section-header {
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .task-stats {
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-bottom: 16px;
+        }
+
+        .task-list {
+            list-style: none;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            cursor: pointer;
+        }
+
+        .task-item:hover {
+            background: var(--bg-hover);
+            margin: 0 -8px;
+            padding: 6px 8px;
+        }
+
+        .task-number {
+            color: var(--text-dim);
+            min-width: 24px;
+        }
+
+        .task-icon {
+            min-width: 16px;
+        }
+
+        .task-completed {
+            color: var(--accent-green);
+        }
+
+        .task-running {
+            color: var(--accent-yellow);
+        }
+
+        .task-pending {
+            color: var(--text-dim);
+        }
+
+        .task-progress {
+            margin-left: auto;
+            color: var(--text-dim);
+            font-size: 11px;
+        }
+
+        /* Context Panel */
+        .context-panel {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .context-section {
+            margin-bottom: 20px;
+        }
+
+        .context-label {
+            color: var(--accent-cyan);
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .context-value {
+            color: var(--text-primary);
+            margin-left: 12px;
+        }
+
+        .context-list {
+            list-style: none;
+            margin-left: 12px;
+        }
+
+        .context-list li {
+            padding: 2px 0;
+            color: var(--text-secondary);
+        }
+
+        .note-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .note-item .delete {
+            color: var(--text-dim);
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .note-item:hover .delete {
+            opacity: 1;
+        }
+
+        .note-input {
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font: inherit;
+            padding: 4px 8px;
+            width: 100%;
+            margin-top: 8px;
+        }
+
+        /* Animations */
+        .typing-indicator {
+            display: inline-block;
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            margin: 0 2px;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-indicator span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+
+        @keyframes typing {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .processing {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="main-area">
+        <div class="status-bar">
+            <div class="logo">
+                <span>💮</span>
+                <span>swarm</span>
+            </div>
+            <span class="divider">│</span>
+            <span class="task-status">
+                    <span id="currentTaskIcon">●</span>
+                    <span id="currentTask">Ready</span>
+                </span>
+            <span class="divider">│</span>
+            <span class="operation" id="operation">idle</span>
+        </div>
+
+        <div class="activity-area" id="activityArea">
+            <!-- Activity items will be added here -->
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <span class="input-prompt">swarm ></span>
+                <input type="text" class="input-field" id="inputField" placeholder="Enter a command or request..."
+                       autofocus>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="task-queue">
+            <h3 class="section-header">Task Queue</h3>
+            <div class="task-stats">
+                <span id="runningCount">0</span> running,
+                <span id="pendingCount">0</span> pending
+            </div>
+            <ul class="task-list" id="taskList">
+                <!-- Tasks will be added here -->
+            </ul>
+        </div>
+
+        <div class="context-panel">
+            <h3 class="section-header">Context</h3>
+
+            <div class="context-section">
+                <div class="context-label">Directory</div>
+                <div class="context-value" id="contextDir">/home/user/project</div>
+            </div>
+
+            <div class="context-section">
+                <div class="context-label">Files</div>
+                <ul class="context-list" id="contextFiles">
+                    <li>src/validators.php</li>
+                    <li>tests/ValidatorTest.php</li>
+                </ul>
+            </div>
+
+            <div class="context-section">
+                <div class="context-label">Notes</div>
+                <ul class="context-list" id="contextNotes">
+                    <li class="note-item">
+                        <span>• Email validation RFC 5322</span>
+                        <span class="delete" onclick="deleteNote(this)">×</span>
+                    </li>
+                </ul>
+                <input type="text" class="note-input" id="noteInput" placeholder="Add a note...">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Mock data
+    const mockTasks = [
+        {id: 1, status: 'completed', description: 'Setup project structure', steps: 3, completedSteps: 3},
+        {id: 2, status: 'running', description: 'Create email validator function', steps: 4, completedSteps: 2},
+        {id: 3, status: 'pending', description: 'Write unit tests', steps: 0, completedSteps: 0},
+        {id: 4, status: 'pending', description: 'Update documentation', steps: 0, completedSteps: 0},
+    ];
+
+    const mockResponses = [
+        {
+            type: 'thinking',
+            thought: 'The user wants to add DNS validation to the email validator. This is a good security practice as it verifies that the email domain actually exists and can receive emails. I should check for MX records primarily, and fall back to A records if no MX records exist.',
+            response: "I'll enhance the email validation function to include DNS record verification for more robust validation."
+        },
+        {
+            type: 'simple',
+            response: "I've successfully added the DNS validation to your email validator. The function now checks for MX records to ensure the domain can receive emails."
+        }
+    ];
+
+    let currentTaskIndex = 1;
+    let isProcessing = false;
+
+    // Initialize
+    updateTaskList();
+    addActivity('system', 'Swarm initialized and ready');
+
+    // Event listeners
+    document.getElementById('inputField').addEventListener('keypress', handleInput);
+    document.getElementById('noteInput').addEventListener('keypress', handleNoteInput);
+
+    function handleInput(e) {
+        if (e.key === 'Enter' && !isProcessing) {
+            const input = e.target.value.trim();
+            if (input) {
+                processCommand(input);
+                e.target.value = '';
+            }
+        }
+    }
+
+    function handleNoteInput(e) {
+        if (e.key === 'Enter') {
+            const note = e.target.value.trim();
+            if (note) {
+                addNote(note);
+                e.target.value = '';
+            }
+        }
+    }
+
+    async function processCommand(command) {
+        isProcessing = true;
+
+        // Add command to activity
+        addActivity('command', command);
+
+        // Update status
+        updateStatus('processing', 'Analyzing request...');
+
+        // Simulate processing steps
+        await simulateProcessing(command);
+
+        isProcessing = false;
+    }
+
+    async function simulateProcessing(command) {
+        const steps = [
+            {delay: 500, action: () => addActivity('status', 'Classifying request...')},
+            {delay: 800, action: () => addActivity('status', 'Extracting tasks...')},
+            {
+                delay: 600, action: () => {
+                    // Update current task
+                    const task = mockTasks[currentTaskIndex];
+                    if (task) {
+                        updateCurrentTask(task.description);
+                        updateTaskProgress(task.id, 3, 4);
+                    }
+                }
+            },
+            {
+                delay: 1000,
+                action: () => addActivity('tool', 'read_file', 'src/validators.php', 'Reading current validator implementation')
+            },
+            {
+                delay: 1200,
+                action: () => addActivity('tool', 'write_file', 'src/validators.php', 'Added DNS validation logic')
+            },
+            {
+                delay: 800, action: () => {
+                    // Complete current task
+                    const task = mockTasks[currentTaskIndex];
+                    if (task) {
+                        task.status = 'completed';
+                        task.completedSteps = task.steps;
+                        updateTaskList();
+
+                        // Move to next task
+                        currentTaskIndex++;
+                        if (currentTaskIndex < mockTasks.length) {
+                            mockTasks[currentTaskIndex].status = 'running';
+                            mockTasks[currentTaskIndex].steps = 5;
+                            mockTasks[currentTaskIndex].completedSteps = 0;
+                        }
+                    }
+                }
+            },
+            {
+                delay: 600, action: () => {
+                    const response = mockResponses[Math.floor(Math.random() * mockResponses.length)];
+                    if (response.type === 'thinking') {
+                        addAssistantResponse(response.response, response.thought);
+                    } else {
+                        addAssistantResponse(response.response);
+                    }
+                    updateStatus('ready', 'idle');
+                    updateCurrentTask('Ready');
+                }
+            }
+        ];
+
+        for (const step of steps) {
+            await sleep(step.delay);
+            step.action();
+        }
+    }
+
+    function addActivity(type, content, params, result) {
+        const activityArea = document.getElementById('activityArea');
+        const item = document.createElement('div');
+        item.className = 'activity-item';
+
+        const time = new Date().toLocaleTimeString('en-US', {hour12: false});
+        let icon, className, contentHtml;
+
+        switch (type) {
+            case 'command':
+                icon = '$';
+                className = 'activity-command';
+                contentHtml = content;
+                break;
+            case 'status':
+                icon = '✓';
+                className = 'activity-status';
+                contentHtml = content;
+                break;
+            case 'tool':
+                icon = '>';
+                className = 'activity-tool';
+                contentHtml = `${content} ${params || ''}`;
+                break;
+            case 'assistant':
+                icon = '●';
+                className = 'activity-assistant';
+                contentHtml = content;
+                break;
+            case 'system':
+                icon = '!';
+                className = 'activity-status';
+                contentHtml = content;
+                break;
+        }
+
+        item.innerHTML = `
+                <span class="activity-time">[${time}]</span>
+                <span class="activity-icon ${className}">${icon}</span>
+                <div class="activity-content">${contentHtml}</div>
+            `;
+
+        activityArea.appendChild(item);
+        activityArea.scrollTop = activityArea.scrollHeight;
+    }
+
+    function addAssistantResponse(message, thought) {
+        const activityArea = document.getElementById('activityArea');
+        const item = document.createElement('div');
+        item.className = 'activity-item';
+
+        const time = new Date().toLocaleTimeString('en-US', {hour12: false});
+
+        let thoughtHtml = '';
+        if (thought) {
+            const isLong = thought.length > 200;
+            thoughtHtml = `
+                    <div class="thought-bubble ${isLong ? 'collapsed' : ''}" onclick="toggleThought(this)">
+                        ${thought}
+                    </div>
+                `;
+        }
+
+        item.innerHTML = `
+                <span class="activity-time">[${time}]</span>
+                <span class="activity-icon activity-assistant">●</span>
+                <div class="activity-content">
+                    ${message}
+                    ${thoughtHtml}
+                </div>
+            `;
+
+        activityArea.appendChild(item);
+        activityArea.scrollTop = activityArea.scrollHeight;
+    }
+
+    function toggleThought(element) {
+        element.classList.toggle('collapsed');
+    }
+
+    function updateStatus(status, operation) {
+        document.getElementById('operation').textContent = operation;
+        if (status === 'processing') {
+            document.getElementById('operation').classList.add('processing');
+        } else {
+            document.getElementById('operation').classList.remove('processing');
+        }
+    }
+
+    function updateCurrentTask(task) {
+        document.getElementById('currentTask').textContent = task;
+    }
+
+    function updateTaskList() {
+        const taskList = document.getElementById('taskList');
+        taskList.innerHTML = '';
+
+        let runningCount = 0;
+        let pendingCount = 0;
+
+        mockTasks.forEach((task, index) => {
+            const li = document.createElement('li');
+            li.className = 'task-item';
+
+            let icon, iconClass;
+            switch (task.status) {
+                case 'completed':
+                    icon = '✓';
+                    iconClass = 'task-completed';
+                    break;
+                case 'running':
+                    icon = '▶';
+                    iconClass = 'task-running';
+                    runningCount++;
+                    break;
+                case 'pending':
+                    icon = '○';
+                    iconClass = 'task-pending';
+                    pendingCount++;
+                    break;
+            }
+
+            let progressHtml = '';
+            if (task.status === 'running' && task.steps > 0) {
+                const percent = Math.round((task.completedSteps / task.steps) * 100);
+                progressHtml = `<span class="task-progress">${percent}%</span>`;
+            }
+
+            li.innerHTML = `
+                    <span class="task-number">${index + 1}.</span>
+                    <span class="task-icon ${iconClass}">${icon}</span>
+                    <span class="task-description">${task.description}</span>
+                    ${progressHtml}
+                `;
+
+            taskList.appendChild(li);
+        });
+
+        document.getElementById('runningCount').textContent = runningCount;
+        document.getElementById('pendingCount').textContent = pendingCount;
+    }
+
+    function updateTaskProgress(taskId, completed, total) {
+        const task = mockTasks.find(t => t.id === taskId);
+        if (task) {
+            task.completedSteps = completed;
+            task.steps = total;
+            updateTaskList();
+        }
+    }
+
+    function addNote(note) {
+        const notesList = document.getElementById('contextNotes');
+        const li = document.createElement('li');
+        li.className = 'note-item';
+        li.innerHTML = `
+                <span>• ${note}</span>
+                <span class="delete" onclick="deleteNote(this)">×</span>
+            `;
+        notesList.insertBefore(li, notesList.lastElementChild);
+        addActivity('system', 'Added context note');
+    }
+
+    function deleteNote(element) {
+        element.parentElement.remove();
+        addActivity('system', 'Removed context note');
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Simulate some initial activity
+    setTimeout(() => {
+        addActivity('command', 'Create a function to validate email addresses');
+        setTimeout(() => {
+            simulateProcessing('Create a function to validate email addresses');
+        }, 500);
+    }, 1000);
+</script>
+</body>
+</html>
