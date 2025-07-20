@@ -241,46 +241,40 @@ Key methods:
 - `getTasksAsArrays()`: Backward compatibility
 
 ### 4. **ToolExecutor** (`src/Core/ToolExecutor.php`)
-- Routes tool calls to implementations
-- Maintains execution log
-- Provides tool descriptions for prompts
-- Progress reporting
-
-### 5. **ToolExecutor** (`src/Core/ToolExecutor.php`)
 - Registers available tools and toolkits
 - Routes tool calls to implementations
 - Maintains execution log
 - Provides tool descriptions for prompts
 - Progress reporting
 
-### 6. **Tool System** (`src/Tools/*`)
+### 5. **Tool System** (`src/Tools/*`)
 - Individual tools: ReadFile, WriteFile, Terminal, Grep, WebFetch, Playwright
 - Toolkit system: TavilyToolkit providing web search and extraction
 - All tools extend abstract Tool class
 - Toolkits implement Toolkit interface
 
-### 7. **UI** (`src/CLI/UI.php`)
+### 6. **UI** (`src/CLI/UI.php`)
 - Terminal UI management with ANSI codes
 - Activity history display with type-safe entries
 - Real-time updates
 - Input handling
 - Progress animations
 
-### 8. **Activity System** (`src/CLI/Activity/*`)
+### 7. **Activity System** (`src/CLI/Activity/*`)
 - Type-safe activity entries (replaced error-prone arrays)
 - Human-readable formatting
 - JSON parsing for function calls
 - Classes: ActivityEntry (base), ConversationEntry, ToolCallEntry, NotificationEntry
 
-### 9. **Task** (`src/Task/Task.php`)
+### 8. **Task** (`src/Task/Task.php`)
 - Immutable value object with readonly properties
 - Status tracking via TaskStatus enum
 - Timestamps for creation and completion
 - Immutable state transitions
 
-### 10. **IPC System** (`src/Core/IPC/*`)
+### 9. **IPC System** (`src/CLI/*`)
 - StreamingBackgroundProcessor: Parent process management
-- StreamingAsyncProcessor: Child process execution
+- StreamingAsyncProcessor: Child process execution  
 - JSON message protocol for communication
 - Real-time progress updates
 
