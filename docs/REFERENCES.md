@@ -17,8 +17,20 @@
 
 ----
 
+## Task Orchestration
+
+## Hierarchical task decomposition
+
+- https://arxiv.org/abs/2308.10393
+- https://www.reddit.com/r/ChatGPTPro/comments/1iphrrb/hierarchical_decomposition_of_tasks_via_prompt/
+- https://medium.com/@KonstantinPM/methods-and-examples-of-task-decomposition-in-product-development-ed578816e4cc
+- https://apxml.com/courses/agentic-llm-memory-architectures/chapter-4-complex-planning-tool-integration/task-decomposition-strategies
+
+----
+
 # Literature on AI Agents and LLMs
 
+- https://blog.jetbrains.com/junie/2025/06/what-is-an-ai-coding-agent/
 - https://docs.swarms.world/en/latest/examples/paper_implementations/
 - https://docs.swarms.world/en/latest/examples/
 - https://arize.com/ai-agents/
@@ -29,6 +41,7 @@
 - https://dev.to/jamesli/agent-task-orchestration-system-from-design-to-production-1kof
 - https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/
 - https://dev.to/callebknox/agent-architectures-that-scale-53of
+- https://apxml.com/courses/prompt-engineering-agentic-workflows
 
 ----
 
@@ -49,6 +62,40 @@
 - https://php.watch/versions/8.1/fibers
 - https://framework-x.org/docs/getting-started/quickstart/
 - https://dev.to/jackmarchant/exploring-async-php-5b68
+
+----
+
+## List of Prompts and carious other code from existing AI Agents for inspriation.
+
+CrewAI
+
+- https://github.com/joaomdmoura/crewAI/blob/main/crewai/tools/agent_tools.py
+- https://github.com/joaomdmoura/crewAI/blob/main/crewai/crew.py
+- https://github.com/joaomdmoura/crewAI/blob/main/crewai/agent.py
+- https://github.com/joaomdmoura/crewAI/blob/main/crewai/prompts.py
+
+LangChain
+
+- https://python.langchain.com/docs/modules/agents/
+- https://python.langchain.com/docs/modules/agents/how_to/custom_llm_agent
+
+AutoGen:
+
+- https://microsoft.github.io/autogen/docs/Getting-Started/
+- https://microsoft.github.io/autogen/docs/Use-Cases/agent_chat
+
+BabyAGI
+
+- https://babyagi.org/
+- https://twitter.com/yoheinakajima/status/1640934493489070080
+
+MemGPT
+
+- https://github.com/cpacker/MemGPT
+
+GPT Engineer
+
+- https://github.com/gpt-engineer-org/gpt-engineer/tree/main/gpt_engineer/preprompts
 
 ----
 
