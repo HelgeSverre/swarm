@@ -79,6 +79,22 @@ class CodingAgent
                 $this->logger?->info('Tasks extracted', ['count' => count($tasks)]);
                 $this->taskManager->addTasks($tasks);
 
+                // Get the actual Task objects from the TaskManager
+                $taskObjects = $this->taskManager->getTasks();
+
+                // Report extracted tasks with full details for UI display
+                $this->reportProgress('extracting_tasks', [
+                    'phase' => 'extraction_complete',
+                    'task_count' => count($taskObjects),
+                    'tasks' => array_map(fn (Task $task) => [
+                        'id' => $task->id,
+                        'description' => $task->description,
+                        'status' => $task->status->value,
+                        'plan' => $task->plan,
+                        'steps' => $task->steps,
+                    ], $taskObjects),
+                ]);
+
                 // Plan each task
                 foreach ($this->taskManager->getTasks() as $task) {
                     if ($task->status === TaskStatus::Pending) {
@@ -94,8 +110,11 @@ class CodingAgent
                 $taskResults = [];
                 while ($currentTask = $this->taskManager->getNextTask()) {
                     $this->reportProgress('executing_task', [
-                        'message' => 'Executing: ' . $currentTask->description,
+                        'message' => 'Starting task execution',
                         'task_id' => $currentTask->id,
+                        'task_description' => $currentTask->description,
+                        'total_steps' => count($currentTask->steps),
+                        'current_step' => 0,
                     ]);
                     $this->executeTask($currentTask);
                     $this->taskManager->completeCurrentTask();
@@ -185,6 +204,29 @@ class CodingAgent
         }
     }
 
+    /**
+     * Get a preview of tool parameters for display
+     */
+    protected function getParamsPreview(array $params): string
+    {
+        if (empty($params)) {
+            return 'No parameters';
+        }
+
+        $preview = [];
+        foreach ($params as $key => $value) {
+            if (is_string($value)) {
+                $preview[$key] = mb_strlen($value) > 50 ? mb_substr($value, 0, 50) . '...' : $value;
+            } elseif (is_array($value)) {
+                $preview[$key] = '[' . count($value) . ' items]';
+            } else {
+                $preview[$key] = $value;
+            }
+        }
+
+        return json_encode($preview);
+    }
+
     protected function getToolFunctions(): array
     {
         // Get schemas dynamically from registered tools
@@ -255,6 +297,13 @@ class CodingAgent
             'input_length' => mb_strlen($input),
         ]);
 
+        // Report we're starting classification
+        $this->reportProgress('classifying', [
+            'message' => 'Analyzing request type...',
+            'phase' => 'understanding_intent',
+            'input_preview' => mb_substr($input, 0, 100) . (mb_strlen($input) > 100 ? '...' : ''),
+        ]);
+
         try {
             $systemPrompt = PromptTemplates::classificationSystem();
 
@@ -262,6 +311,13 @@ class CodingAgent
                 PromptTemplates::classifyRequest($input),
                 $systemPrompt
             );
+
+            // Report we're calling AI
+            $this->reportProgress('classifying', [
+                'message' => 'Asking AI to classify request...',
+                'phase' => 'calling_ai',
+                'context_messages' => count($messages),
+            ]);
 
             $startTime = microtime(true);
 
@@ -345,6 +401,18 @@ class CodingAgent
                 'confidence' => $classification['confidence'],
                 'reasoning' => $classification['reasoning'],
                 'chain_of_thought' => $classification['chain_of_thought'] ?? '',
+            ]);
+
+            // Report classification complete with reasoning
+            $this->reportProgress('classifying', [
+                'message' => 'Classification complete',
+                'phase' => 'classification_complete',
+                'type' => $classification['request_type']->value,
+                'confidence' => $classification['confidence'],
+                'reasoning' => $classification['reasoning'] ?? 'No reasoning provided',
+                'chain_of_thought' => $classification['chain_of_thought'] ?? '',
+                'requires_tools' => $classification['requires_tools'],
+                'elapsed_time' => round($duration, 2),
             ]);
 
             return $classification;
@@ -598,6 +666,15 @@ class CodingAgent
     {
         $this->logger?->info('Planning task', ['task_id' => $task->id, 'description' => $task->description]);
 
+        // Report starting planning
+        $this->reportProgress('planning_task', [
+            'message' => 'Planning: ' . $task->description,
+            'phase' => 'analyzing_requirements',
+            'task_id' => $task->id,
+            'task_description' => $task->description,
+            'complexity_assessment' => 'Determining required tools and steps...',
+        ]);
+
         $context = $this->buildContext();
 
         try {
@@ -607,6 +684,13 @@ class CodingAgent
                 PromptTemplates::planTask($task->description, $context),
                 $systemPrompt
             );
+
+            // Report calling AI for planning
+            $this->reportProgress('planning_task', [
+                'message' => 'Creating execution plan...',
+                'phase' => 'calling_ai',
+                'task_id' => $task->id,
+            ]);
 
             $result = $this->llmClient->chat()->create([
                 'model' => $this->model,
@@ -684,6 +768,17 @@ class CodingAgent
                 'steps_count' => count($steps),
                 'complexity' => $planData['estimated_complexity'] ?? 'unknown',
             ]);
+
+            // Report planning complete
+            $this->reportProgress('planning_task', [
+                'message' => 'Plan created successfully',
+                'phase' => 'plan_complete',
+                'task_id' => $task->id,
+                'plan_summary' => $planData['plan_summary'],
+                'step_count' => count($steps),
+                'estimated_complexity' => $planData['estimated_complexity'] ?? 'unknown',
+                'tools_needed' => array_unique(array_map(fn ($s) => $s['tool_needed'] ?? 'unknown', $planData['steps'])),
+            ]);
         } catch (Exception $e) {
             $this->logger?->error('Structured task planning failed, falling back', [
                 'error' => $e->getMessage(),
@@ -720,10 +815,15 @@ class CodingAgent
         $maxIterations = 10;
         $iteration = 0;
 
+        // Track step progress using task steps or iterations
+        $totalSteps = ! empty($task->steps) ? count($task->steps) : $maxIterations;
+        $currentStepIndex = 0;
+
         $this->logger?->info('Executing task', [
             'task_id' => $task->id,
             'description' => $task->description,
             'status' => $task->status->value,
+            'steps' => $totalSteps,
         ]);
 
         while ($iteration < $maxIterations) {
@@ -749,7 +849,40 @@ class CodingAgent
                 break; // No tool call means task is complete
             }
 
+            // Increment step tracking
+            $currentStepIndex = min($currentStepIndex + 1, $totalSteps);
+
+            // Get step description if available
+            $stepDescription = '';
+            if (! empty($task->steps) && isset($task->steps[$currentStepIndex - 1])) {
+                $stepDescription = $task->steps[$currentStepIndex - 1];
+            } else {
+                // Generate a description based on the tool being used
+                $stepDescription = $this->generateStepDescription($toolCall['name'], $toolCall['arguments']);
+            }
+
+            // Report task execution progress
+            $this->reportProgress('executing_task', [
+                'task_id' => $task->id,
+                'task_description' => $task->description,
+                'current_step' => $currentStepIndex,
+                'total_steps' => $totalSteps,
+                'step_description' => $stepDescription,
+                'current_tool' => $toolCall['name'],
+            ]);
+
             try {
+                // Report tool execution starting
+                $this->reportProgress('executing_tool', [
+                    'message' => "Running {$toolCall['name']}...",
+                    'phase' => 'preparing',
+                    'task_id' => $task->id,
+                    'tool_name' => $toolCall['name'],
+                    'tool_index' => $iteration + 1,
+                    'tool_total' => $maxIterations,
+                    'params_preview' => $this->getParamsPreview($toolCall['arguments']),
+                ]);
+
                 // Execute the tool
                 $this->logger?->debug('Executing tool', [
                     'tool' => $toolCall['name'],
@@ -757,11 +890,23 @@ class CodingAgent
                     'iteration' => $iteration + 1,
                 ]);
 
+                $toolStartTime = microtime(true);
                 $result = $this->toolExecutor->dispatch($toolCall['name'], $toolCall['arguments']);
+                $toolDuration = microtime(true) - $toolStartTime;
 
                 $this->logger?->debug('Tool execution complete', [
                     'tool' => $toolCall['name'],
                     'success' => $result->isSuccess(),
+                ]);
+
+                // Report tool execution complete
+                $this->reportProgress('executing_tool', [
+                    'message' => "Tool {$toolCall['name']} completed",
+                    'phase' => 'completed',
+                    'task_id' => $task->id,
+                    'tool_name' => $toolCall['name'],
+                    'success' => $result->isSuccess(),
+                    'execution_time' => round($toolDuration, 2),
                 ]);
 
                 $this->addToHistory('tool', "Tool: {$toolCall['name']}\nParams: " . json_encode($toolCall['arguments']) . "\nResult: " . json_encode($result->toArray()));
@@ -884,5 +1029,20 @@ class CodingAgent
         }
 
         return AgentResponse::success($response);
+    }
+
+    /**
+     * Generate a user-friendly step description based on tool usage
+     */
+    protected function generateStepDescription(string $toolName, array $arguments): string
+    {
+        return match ($toolName) {
+            'read_file' => 'Reading ' . ($arguments['path'] ?? 'file'),
+            'write_file' => 'Writing to ' . ($arguments['path'] ?? 'file'),
+            'grep' => 'Searching for ' . ($arguments['pattern'] ?? 'pattern'),
+            'find_files' => 'Finding files matching ' . ($arguments['pattern'] ?? 'pattern'),
+            'bash' => 'Running command: ' . ($arguments['command'] ?? 'command'),
+            default => 'Using ' . $toolName,
+        };
     }
 }
