@@ -9,8 +9,12 @@ use HelgeSverre\Swarm\CLI\Activity\ActivityEntry;
 use HelgeSverre\Swarm\CLI\Activity\ConversationEntry;
 use HelgeSverre\Swarm\CLI\Activity\NotificationEntry;
 use HelgeSverre\Swarm\CLI\Activity\ToolCallEntry;
+use HelgeSverre\Swarm\CLI\Terminal\Ansi;
+use HelgeSverre\Swarm\CLI\Terminal\FullTerminalUI;
+use HelgeSverre\Swarm\CLI\Terminal\Renderer;
 use HelgeSverre\Swarm\Core\ToolResponse;
 use HelgeSverre\Swarm\Enums\CLI\NotificationType;
+
 use function Laravel\Prompts\text;
 
 class UI
@@ -27,7 +31,7 @@ class UI
 
     protected bool $showPanels = false;
 
-    protected ?TerminalUI $terminalUI = null;
+    protected ?FullTerminalUI $terminalUI = null;
 
     protected bool $richMode = false;
 
@@ -38,8 +42,8 @@ class UI
             mb_internal_encoding('UTF-8');
         }
 
-        echo Termz::statusLine('💮 ', 'Swarm', 'Ready', '', Termz::GREEN, Termz::WHITE, Termz::DIM);
-        echo Termz::divider(0, '─');
+        echo Ansi::statusLine('💮 ', 'Swarm', 'Ready', '', Ansi::GREEN, Ansi::WHITE, Ansi::DIM);
+        echo Ansi::divider(0, '─');
     }
 
     public function prompt(string $label = '>'): string
@@ -81,16 +85,16 @@ class UI
         $message = $response->getMessage();
 
         if ($response->isSuccess()) {
-            echo Termz::activityLine('info', $message);
+            echo Ansi::activityLine('info', $message);
         } else {
-            echo Termz::activityLine('error', $message);
+            echo Ansi::activityLine('error', $message);
         }
     }
 
     public function displayError(string $errorMessage): void
     {
         $this->addToHistory(new ConversationEntry('error', $errorMessage, time()));
-        echo Termz::activityLine('error', $errorMessage);
+        echo Ansi::activityLine('error', $errorMessage);
     }
 
     public function displayToolCall(string $tool, array $params, $result): void
@@ -113,14 +117,14 @@ class UI
             // Don't show successful tool calls unless they have important output
             if ($tool === 'read_file' || $tool === 'grep') {
                 $path = $params['path'] ?? 'file';
-                echo Termz::activityLine('tool', "Read from {$path}");
+                echo Ansi::activityLine('tool', "Read from {$path}");
             } elseif ($tool === 'write_file') {
                 $path = $params['path'] ?? 'file';
-                echo Termz::activityLine('tool', "Wrote to {$path}");
+                echo Ansi::activityLine('tool', "Wrote to {$path}");
             }
         } else {
             $errorMsg = $toolResponse ? $toolResponse->getError() : 'Unknown error';
-            echo Termz::activityLine('error', "Tool {$tool} failed: {$errorMsg}");
+            echo Ansi::activityLine('error', "Tool {$tool} failed: {$errorMsg}");
         }
     }
 
@@ -130,7 +134,7 @@ class UI
         $this->addToHistory(new NotificationEntry($message, $notificationType, time()));
 
         // Compact notification display
-        echo Termz::activityLine($type, $message);
+        echo Ansi::activityLine($type, $message);
     }
 
     public function startProcessing(): void
@@ -158,7 +162,7 @@ class UI
     public function cleanup(): void
     {
         $this->stopProcessing();
-        echo Termz::activityLine('system', '👋 Goodbye!');
+        echo Ansi::activityLine('system', '👋 Goodbye!');
     }
 
     /**
@@ -181,7 +185,7 @@ class UI
         $this->richMode = ! $this->richMode;
 
         if ($this->richMode && ! $this->terminalUI) {
-            $this->terminalUI = TerminalUI::getInstance();
+            $this->terminalUI = FullTerminalUI::getInstance();
             $this->syncToTerminalUI();
         }
 
@@ -195,7 +199,7 @@ class UI
      */
     public function showHelp(): void
     {
-        echo TermzLayout::helpOverlay();
+        echo Renderer::helpOverlay();
     }
 
     protected function showAgentThinking(array $agentState): void
@@ -216,19 +220,19 @@ class UI
             $message = $this->formatOperationMessage($operation, $phase, $details);
 
             // Compact thinking display
-            echo Termz::activityLine('thinking', "{$message}...");
+            echo Ansi::activityLine('thinking', "{$message}...");
 
             // Show key details inline for certain operations
             if ($operation === 'classifying' && $phase === 'classification_complete' && isset($details['type'])) {
                 $type = $details['type'];
                 $confidence = $details['confidence'];
-                echo Termz::indentedItem("Type: {$type} (confidence: {$confidence})", 1, Termz::ARROW, Termz::DIM);
+                echo Ansi::indentedItem("Type: {$type} (confidence: {$confidence})", 1, Ansi::ARROW, Ansi::DIM);
             }
 
             // Compact task display when tasks are extracted
             if ($operation === 'extracting_tasks' && $phase === 'extraction_complete') {
                 if (isset($details['tasks']) && is_array($details['tasks'])) {
-                    echo Termz::activityLine('task', "Found {$details['task_count']} tasks");
+                    echo Ansi::activityLine('task', "Found {$details['task_count']} tasks");
 
                     foreach ($details['tasks'] as $index => $taskData) {
                         $number = $index + 1;
@@ -236,32 +240,32 @@ class UI
                         $status = $taskData['status'] ?? 'pending';
 
                         // Compact task display
-                        echo '  ' . Termz::taskLine($number, $description, $status);
+                        echo '  ' . Ansi::taskLine($number, $description, $status);
 
                         // Only show step count if available, no extra whitespace
                         if (! empty($taskData['steps']) && is_array($taskData['steps'])) {
                             $stepCount = count($taskData['steps']);
                             $stepText = $stepCount === 1 ? '1 step' : "{$stepCount} steps";
-                            echo '    ' . Termz::colorize("→ {$stepText}", 'dim') . "\n";
+                            echo '    ' . Ansi::colorize("→ {$stepText}", 'dim') . "\n";
                         }
                     }
                 } elseif (isset($details['task_count'])) {
-                    echo Termz::activityLine('task', "Found {$details['task_count']} tasks");
+                    echo Ansi::activityLine('task', "Found {$details['task_count']} tasks");
                 }
             }
 
             if ($operation === 'planning_task' && $phase === 'plan_complete' && isset($details['step_count'])) {
                 $stepCount = $details['step_count'];
-                echo Termz::indentedItem("Plan ready with {$stepCount} steps", 1, Termz::ARROW, Termz::DIM);
+                echo Ansi::indentedItem("Plan ready with {$stepCount} steps", 1, Ansi::ARROW, Ansi::DIM);
             }
 
             if ($operation === 'executing_tool' && isset($details['tool_name'])) {
                 $toolName = $details['tool_name'];
                 if ($phase === 'completed') {
                     $status = $details['success'] ? 'success' : 'error';
-                    echo Termz::activityLine('tool', "Tool {$toolName}", null, $details['success'] ? 'completed' : 'failed');
+                    echo Ansi::activityLine('tool', "Tool {$toolName}", null, $details['success'] ? 'completed' : 'failed');
                 } else {
-                    echo Termz::activityLine('tool', "Running {$toolName}...");
+                    echo Ansi::activityLine('tool', "Running {$toolName}...");
                 }
             }
         }
@@ -315,7 +319,7 @@ class UI
      */
     protected function wordWrap(string $text, int $width): string
     {
-        return Termz::wordWrap($text, $width);
+        return Ansi::wordWrap($text, $width);
     }
 
     /**
@@ -323,7 +327,7 @@ class UI
      */
     protected function getTerminalWidth(): int
     {
-        return Termz::getTerminalWidth();
+        return Ansi::getTerminalWidth();
     }
 
     /**
@@ -331,7 +335,7 @@ class UI
      */
     protected function colorize(string $text, string $style): string
     {
-        return Termz::colorize($text, $style);
+        return Ansi::colorize($text, $style);
     }
 
     /**
@@ -353,7 +357,7 @@ class UI
             $lastStep = $currentStep;
 
             // Enhanced progress display with more details
-            $truncatedDesc = Termz::truncate($taskDesc, 40);
+            $truncatedDesc = Ansi::truncate($taskDesc, 40);
             $taskInfo = [
                 'description' => $taskDesc,
                 'progress' => [
@@ -381,7 +385,7 @@ class UI
 
             // Use expandable section for detailed progress
             $progressDetail = $this->formatTaskProgress($taskInfo);
-            echo TermzLayout::expandableSection(
+            echo Renderer::expandableSection(
                 "task_{$taskId}",
                 $truncatedDesc,
                 $progressDetail,
@@ -434,8 +438,8 @@ class UI
     {
         // This would typically clear and redraw panels
         // For now, just show a divider to indicate panels are active
-        echo Termz::divider(0, '═');
-        echo Termz::DIM . 'Panels: Press ⌥T to toggle task panel' . Termz::RESET . "\n";
+        echo Ansi::divider(0, '═');
+        echo Ansi::DIM . 'Panels: Press ⌥T to toggle task panel' . Ansi::RESET . "\n";
     }
 
     /**
@@ -447,7 +451,7 @@ class UI
 
         // Progress bar
         if (isset($task['progress'])) {
-            $output .= Termz::progressBar(
+            $output .= Ansi::progressBar(
                 $task['progress']['current'],
                 $task['progress']['total'],
                 30,
@@ -457,18 +461,18 @@ class UI
 
         // Current step
         if (isset($task['current_step'])) {
-            $output .= Termz::BOLD . 'Current: ' . Termz::RESET . $task['current_step'] . "\n";
+            $output .= Ansi::BOLD . 'Current: ' . Ansi::RESET . $task['current_step'] . "\n";
         }
 
         // Tool being used
         if (isset($task['tool'])) {
-            $output .= Termz::DIM . 'Using: ' . $task['tool'] . Termz::RESET . "\n";
+            $output .= Ansi::DIM . 'Using: ' . $task['tool'] . Ansi::RESET . "\n";
         }
 
         // Timing (if available)
         if (isset($task['timing'])) {
             $elapsed = $task['timing']['elapsed'] ?? 'calculating...';
-            $output .= Termz::DIM . 'Time: ' . $elapsed . Termz::RESET . "\n";
+            $output .= Ansi::DIM . 'Time: ' . $elapsed . Ansi::RESET . "\n";
         }
 
         return $output;

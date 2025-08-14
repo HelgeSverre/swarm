@@ -2,6 +2,8 @@
 
 namespace HelgeSverre\Swarm\Prompts;
 
+use HelgeSverre\Swarm\Task\Task;
+
 /**
  * Centralized prompt templates for the coding agent.
  *
@@ -13,11 +15,11 @@ class PromptTemplates
     /**
      * Default system prompt for general interactions
      */
-    public static function defaultSystem(array $availableTools = []): string
+    public static function defaultSystem(array $availableTools = [], $agentName = 'Swarm'): string
     {
         $toolList = ! empty($availableTools) ? implode(', ', $availableTools) : 'various coding tools';
 
-        return 'You are an AI coding assistant designed to help with software development tasks. ' .
+        return "You are '{$agentName}', an AI coding assistant designed to help with software development tasks. " .
             "You have access to these tools: {$toolList}. " .
             "\n\nKey principles:\n" .
             "- Be precise and accurate in your responses\n" .
@@ -145,7 +147,7 @@ class PromptTemplates
     /**
      * Prompt for executing a task step by step
      */
-    public static function executeTask(\HelgeSverre\Swarm\Task\Task $task, string $context, string $toolLog): string
+    public static function executeTask(Task $task, string $context, string $toolLog): string
     {
         return "Execute this task step by step:\n\n{$task->description}\n\n" .
             "Plan:\n{$task->plan}\n\n" .

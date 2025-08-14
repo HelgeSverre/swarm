@@ -204,7 +204,7 @@
 
         /* Sidebar */
         .sidebar {
-            width: 300px;
+            width: 350px;
             background: var(--bg-panel);
             display: flex;
             flex-direction: column;
@@ -212,7 +212,7 @@
 
         /* Task Queue */
         .task-queue {
-            border-bottom: 1px solid var(--border-color);
+            /*border-bottom: 1px solid var(--border-color);*/
             padding: 16px;
         }
 
@@ -231,7 +231,8 @@
         }
 
         .task-list {
-            list-style: none;
+            list-style-type: none;
+            font-size: 12px;
         }
 
         .task-item {
@@ -432,33 +433,33 @@
             </ul>
         </div>
 
-        <div class="context-panel">
-            <h3 class="section-header">Context</h3>
+        <!--        <div class="context-panel">-->
+        <!--            <h3 class="section-header">Context</h3>-->
 
-            <div class="context-section">
-                <div class="context-label">Directory</div>
-                <div class="context-value" id="contextDir">/home/user/project</div>
-            </div>
+        <!--            <div class="context-section">-->
+        <!--                <div class="context-label">Directory</div>-->
+        <!--                <div class="context-value" id="contextDir">/home/user/project</div>-->
+        <!--            </div>-->
 
-            <div class="context-section">
-                <div class="context-label">Files</div>
-                <ul class="context-list" id="contextFiles">
-                    <li>src/validators.php</li>
-                    <li>tests/ValidatorTest.php</li>
-                </ul>
-            </div>
+        <!--            <div class="context-section">-->
+        <!--                <div class="context-label">Files</div>-->
+        <!--                <ul class="context-list" id="contextFiles">-->
+        <!--                    <li>src/validators.php</li>-->
+        <!--                    <li>tests/ValidatorTest.php</li>-->
+        <!--                </ul>-->
+        <!--            </div>-->
 
-            <div class="context-section">
-                <div class="context-label">Notes</div>
-                <ul class="context-list" id="contextNotes">
-                    <li class="note-item">
-                        <span>• Email validation RFC 5322</span>
-                        <span class="delete" onclick="deleteNote(this)">×</span>
-                    </li>
-                </ul>
-                <input type="text" class="note-input" id="noteInput" placeholder="Add a note...">
-            </div>
-        </div>
+        <!--            <div class="context-section">-->
+        <!--                <div class="context-label">Notes</div>-->
+        <!--                <ul class="context-list" id="contextNotes">-->
+        <!--                    <li class="note-item">-->
+        <!--                        <span>• Email validation RFC 5322</span>-->
+        <!--                        <span class="delete" onclick="deleteNote(this)">×</span>-->
+        <!--                    </li>-->
+        <!--                </ul>-->
+        <!--                <input type="text" class="note-input" id="noteInput" placeholder="Add a note...">-->
+        <!--            </div>-->
+        <!--        </div>-->
     </div>
 </div>
 
@@ -718,8 +719,10 @@
                 progressHtml = `<span class="task-progress">${percent}%</span>`;
             }
 
+            li.attributes['data-task-id'] = task.id;
+            li.attributes['data-task-index'] = index;
+
             li.innerHTML = `
-                    <span class="task-number">${index + 1}.</span>
                     <span class="task-icon ${iconClass}">${icon}</span>
                     <span class="task-description">${task.description}</span>
                     ${progressHtml}
