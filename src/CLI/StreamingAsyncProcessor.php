@@ -131,22 +131,47 @@ class StreamingAsyncProcessor
             $lastStateSync = 0;
             $stateSyncThrottle = 0.1; // 100ms throttle for state updates
 
-            $agent->setProgressCallback(function (string $operation, array $details) use (&$lastHeartbeat, &$lastStateSync, $heartbeatInterval, $stateSyncThrottle, $agent, $toolExecutor) {
-                $message = match ($operation) {
-                    'classifying' => 'Analyzing request type...',
-                    'extracting_tasks' => 'Identifying tasks to complete...',
-                    'planning_task' => 'Planning: ' . ($details['task_description'] ?? ''),
-                    'executing_task' => 'Executing: ' . ($details['task_description'] ?? ''),
-                    'calling_openai' => 'Calling AI model...',
-                    'generating_summary' => 'Generating summary...',
-                    default => ucfirst(str_replace('_', ' ', $operation)) . '...',
-                };
+            // Track operation start times
+            $operationStartTimes = [];
+            $lastClassification = null;
+            $activePlan = null;
+
+            $agent->setProgressCallback(function (string $operation, array $details) use (&$lastHeartbeat, &$lastStateSync, $heartbeatInterval, $stateSyncThrottle, $agent, $toolExecutor, &$operationStartTimes, &$lastClassification, &$activePlan) {
+                // Track operation start time
+                if (! isset($operationStartTimes[$operation])) {
+                    $operationStartTimes[$operation] = microtime(true);
+                }
+
+                // Store classification results
+                if ($operation === 'classifying' && ($details['phase'] ?? '') === 'classification_complete') {
+                    $lastClassification = $details;
+                }
+
+                // Store active plan
+                if ($operation === 'planning_task' && ($details['phase'] ?? '') === 'plan_complete') {
+                    $activePlan = $details;
+                }
+
+                // Create detailed message based on operation and phase
+                $message = self::getDetailedMessage($operation, $details);
+
+                // Enhanced progress details
+                $enrichedDetails = array_merge($details, [
+                    'timestamp' => microtime(true),
+                    'memory_usage' => memory_get_usage(true),
+                    'operation_id' => uniqid($operation . '_'),
+                ]);
 
                 self::sendUpdate([
                     'type' => 'progress',
                     'operation' => $operation,
                     'message' => $message,
-                    'details' => $details,
+                    'details' => $enrichedDetails,
+                    'context' => [
+                        'conversation_length' => count($agent->getConversationHistory()),
+                        'task_queue_size' => count($agent->getTaskManager()->getTasks()),
+                        'tools_available' => count($toolExecutor->getRegisteredTools()),
+                    ],
                 ]);
 
                 // Send comprehensive state sync with throttling
@@ -156,12 +181,23 @@ class StreamingAsyncProcessor
                     self::sendUpdate([
                         'type' => 'state_sync',
                         'data' => [
+                            'agent_state' => [
+                                'operation' => $operation,
+                                'phase' => $details['phase'] ?? 'processing',
+                                'details' => $details,
+                                'start_time' => $operationStartTimes[$operation] ?? microtime(true),
+                            ],
                             'tasks' => $status['tasks'],
                             'current_task' => $status['current_task'],
                             'conversation_history' => $agent->getConversationHistory(),
                             'tool_log' => array_slice($toolExecutor->getExecutionLog(), -10), // Last 10 tool executions
                             'operation' => $operation,
                             'operation_details' => $details,
+                            'decision_context' => [
+                                'last_classification' => $lastClassification,
+                                'active_plan' => $activePlan,
+                                'pending_operations' => array_keys($operationStartTimes),
+                            ],
                         ],
                     ]);
                     $lastStateSync = $now;
@@ -214,6 +250,49 @@ class StreamingAsyncProcessor
                 'error' => 'An unexpected error occurred: ' . $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Get detailed message for operation
+     */
+    protected static function getDetailedMessage(string $operation, array $details): string
+    {
+        $phase = $details['phase'] ?? '';
+
+        return match ($operation) {
+            'classifying' => match ($phase) {
+                'understanding_intent' => 'Analyzing your request...',
+                'calling_ai' => 'Consulting AI to understand intent...',
+                'classification_complete' => "Classified as {$details['type']} (confidence: {$details['confidence']})",
+                default => 'Analyzing request type...'
+            },
+            'extracting_tasks' => match ($phase) {
+                'analyzing_request' => 'Breaking down your request into tasks...',
+                'calling_ai' => 'Asking AI to identify specific tasks...',
+                'extraction_complete' => "Found {$details['task_count']} tasks to complete",
+                default => 'Identifying tasks to complete...'
+            },
+            'planning_task' => match ($phase) {
+                'analyzing_requirements' => "Analyzing requirements for: {$details['task_description']}",
+                'calling_ai' => 'Creating execution plan...',
+                'plan_complete' => "Plan ready with {$details['step_count']} steps",
+                default => 'Planning: ' . ($details['task_description'] ?? '')
+            },
+            'executing_task' => 'Executing: ' . ($details['task_description'] ?? ''),
+            'executing_tool' => match ($phase) {
+                'preparing' => "Preparing to run {$details['tool_name']}...",
+                'completed' => "Tool {$details['tool_name']} completed" . ($details['success'] ? ' successfully' : ' with errors'),
+                default => "Running {$details['tool_name']}..."
+            },
+            'calling_openai' => match ($phase) {
+                'preparing_request' => 'Preparing AI request...',
+                'sending_request' => "Sending to {$details['model']} model...",
+                'processing_response' => 'Processing AI response...',
+                default => 'Thinking...'
+            },
+            'generating_summary' => 'Generating summary of completed work...',
+            default => ucfirst(str_replace('_', ' ', $operation)) . '...'
+        };
     }
 
     /**
