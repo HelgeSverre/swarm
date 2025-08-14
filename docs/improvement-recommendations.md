@@ -1,365 +1,343 @@
-# Swarm Agent System - Improvement Recommendations
+# Swarm Agent System - Focused Improvement Recommendations
 
-Based on a comprehensive review of the codebase, here are recommended improvements organized by priority and impact.
+This document outlines specific improvements to enhance the agent's decision-making transparency and real-time state visualization.
 
-## High Priority Improvements
+## Primary Goal
 
-### 1. Parallel Tool Execution
-**Current State**: Tools execute sequentially, even when independent.
-**Improvement**: Leverage the existing AsyncProcessor infrastructure to run independent tools in parallel.
-**Implementation**:
+Make the agent's decision-making process completely transparent and provide real-time visibility into what the agent is thinking, planning, and executing at every moment.
+
+## High Priority: Decision Loop Transparency
+
+### 1. Enhanced Progress Reporting Granularity
+
+**Current State**: Progress updates are limited to high-level operations (classifying, planning, executing).
+
+**Improvement**: Add detailed progress callbacks throughout the decision process.
+
+**Implementation in CodingAgent**:
 ```php
-// Detect independent tool calls in task planning
-// Execute them concurrently using process pool
-$results = $asyncProcessor->executeParallel([
-    ['tool' => 'read_file', 'params' => ['path' => 'config.json']],
-    ['tool' => 'grep', 'params' => ['pattern' => 'TODO', 'path' => './src']]
-]);
-```
-**Impact**: 2-5x performance improvement for multi-tool tasks.
-
-### 2. Retry Logic with Exponential Backoff
-**Current State**: No retry on transient failures (network, API rate limits).
-**Improvement**: Add configurable retry mechanism.
-**Implementation**:
-```php
-class RetryableToolExecutor extends ToolExecutor {
-    protected function executeWithRetry(Tool $tool, array $params): ToolResponse {
-        $attempts = 0;
-        $maxAttempts = 3;
-        $baseDelay = 1000; // milliseconds
-        
-        while ($attempts < $maxAttempts) {
-            $response = $tool->execute($params);
-            
-            if ($response->success || !$this->isRetryable($response->error)) {
-                return $response;
-            }
-            
-            $delay = $baseDelay * pow(2, $attempts);
-            usleep($delay * 1000);
-            $attempts++;
-        }
-        
-        return $response;
-    }
-}
-```
-**Impact**: Improved reliability, especially for web-based tools.
-
-### 3. Comprehensive Test Suite
-**Current State**: Limited test coverage.
-**Improvement**: Add unit and integration tests.
-**Structure**:
-```
-tests/
-├── Unit/
-│   ├── Agent/
-│   │   ├── CodingAgentTest.php
-│   │   └── TaskManagerTest.php
-│   ├── Tools/
-│   │   ├── GrepToolTest.php
-│   │   └── WebFetchToolTest.php
-│   └── Core/
-│       └── ToolExecutorTest.php
-├── Integration/
-│   ├── AgentFlowTest.php
-│   └── ToolChainTest.php
-└── Fixtures/
-    └── MockOpenAIClient.php
-```
-**Impact**: Catch regressions, enable confident refactoring.
-
-## Medium Priority Improvements
-
-### 4. Task Dependency Management
-**Current State**: Tasks execute linearly without dependency awareness.
-**Improvement**: DAG-based task execution.
-**Implementation**:
-```php
-class TaskGraph {
-    public function addTask(Task $task, array $dependencies = []): void;
-    public function getExecutionOrder(): array;
-    public function canExecute(Task $task): bool;
-}
-
-// Usage in task planning
-$graph = new TaskGraph();
-$graph->addTask($readConfigTask);
-$graph->addTask($processDataTask, [$readConfigTask]);
-$graph->addTask($writeResultTask, [$processDataTask]);
-```
-**Impact**: Smarter execution order, parallel execution of independent tasks.
-
-### 5. Tool Result Caching
-**Current State**: Identical tool calls execute repeatedly.
-**Improvement**: Cache tool results with TTL.
-**Implementation**:
-```php
-class CachedToolExecutor extends ToolExecutor {
-    private CacheInterface $cache;
+// Add progress reporting for AI calls
+protected function callOpenAI(array $messages, ?array $responseFormat = null): string
+{
+    $this->reportProgress('calling_openai', [
+        'message' => 'Thinking...',
+        'model' => $this->model,
+        'message_count' => count($messages),
+        'has_tools' => !empty($tools),
+        'phase' => 'preparing_request'
+    ]);
     
-    public function dispatch(string $name, array $params): ToolResponse {
-        $cacheKey = $this->getCacheKey($name, $params);
-        
-        if ($cached = $this->cache->get($cacheKey)) {
-            $this->logger->debug('Cache hit for tool', ['tool' => $name]);
-            return $cached;
+    // Show what we're asking the AI
+    $this->reportProgress('calling_openai', [
+        'phase' => 'sending_request',
+        'context_tokens' => $this->estimateTokens($messages),
+        'temperature' => $this->temperature
+    ]);
+    
+    $response = $this->client->chat()->create([...]);
+    
+    $this->reportProgress('calling_openai', [
+        'phase' => 'processing_response',
+        'response_tokens' => $response->usage->completionTokens ?? 0,
+        'finish_reason' => $response->choices[0]->finishReason
+    ]);
+}
+
+// Add progress for classification reasoning
+protected function classifyRequest(string $input): array
+{
+    $this->reportProgress('classifying', [
+        'message' => 'Analyzing request type...',
+        'phase' => 'understanding_intent'
+    ]);
+    
+    // After getting classification
+    $this->reportProgress('classifying', [
+        'phase' => 'classification_complete',
+        'type' => $classification['request_type'],
+        'confidence' => $classification['confidence'],
+        'reasoning' => $classification['reasoning'] ?? 'No reasoning provided'
+    ]);
+}
+
+// Add progress for each tool call
+protected function executeTask(Task $task): void
+{
+    while (!$allToolCallsComplete) {
+        foreach ($toolCalls as $index => $toolCall) {
+            $this->reportProgress('executing_tool', [
+                'message' => "Running {$toolCall['function']['name']}...",
+                'task_id' => $task->id,
+                'tool_index' => $index + 1,
+                'tool_total' => count($toolCalls),
+                'tool_name' => $toolCall['function']['name'],
+                'phase' => 'preparing'
+            ]);
+            
+            $result = $this->toolExecutor->dispatch(...);
+            
+            $this->reportProgress('executing_tool', [
+                'phase' => 'completed',
+                'tool_name' => $toolCall['function']['name'],
+                'success' => $result->success,
+                'execution_time' => $executionTime
+            ]);
         }
-        
-        $response = parent::dispatch($name, $params);
-        
-        if ($response->success && $this->isCacheable($name)) {
-            $this->cache->set($cacheKey, $response, $this->getTTL($name));
-        }
-        
-        return $response;
     }
 }
 ```
-**Impact**: Reduced API calls, faster repeated operations.
 
-### 6. Cost Tracking and Optimization
-**Current State**: No visibility into API costs.
-**Improvement**: Track token usage and costs.
-**Implementation**:
+### 2. Real-Time Agent State Display
+
+**Current State**: UI shows tasks and activity but not the agent's current thinking process.
+
+**Improvement**: Add dedicated agent state visualization.
+
+**New UI Component**:
 ```php
-class CostTracker {
-    private array $modelCosts = [
-        'gpt-4' => ['input' => 0.03, 'output' => 0.06],
-        'gpt-4o-mini' => ['input' => 0.00015, 'output' => 0.0006],
+// In UI.php
+protected function drawAgentState(array $status): void
+{
+    $agentState = $status['agent_state'] ?? [];
+    $operation = $agentState['operation'] ?? '';
+    $phase = $agentState['phase'] ?? '';
+    $details = $agentState['details'] ?? [];
+    
+    echo $this->drawBoxSeparator('🧠 Agent Thinking Process', ThemeColor::Border);
+    
+    // Show decision flow visualization
+    $this->drawDecisionFlow($operation, $phase);
+    
+    // Show current operation details
+    if ($operation) {
+        $icon = $this->getOperationIcon($operation);
+        $message = $this->formatOperationMessage($operation, $phase, $details);
+        echo $this->drawBoxLine("$icon $message", ThemeColor::Border, ThemeColor::Accent);
+        
+        // Show sub-details
+        if ($operation === 'classifying' && isset($details['reasoning'])) {
+            echo $this->drawBoxLine("   → {$details['reasoning']}", ThemeColor::Border, ThemeColor::Muted);
+        }
+        
+        if ($operation === 'executing_tool' && isset($details['tool_name'])) {
+            $progress = "{$details['tool_index']}/{$details['tool_total']}";
+            echo $this->drawBoxLine("   → Tool: {$details['tool_name']} [$progress]", ThemeColor::Border, ThemeColor::Info);
+        }
+        
+        // Show timing
+        if (isset($agentState['start_time'])) {
+            $elapsed = round(microtime(true) - $agentState['start_time'], 1);
+            echo $this->drawBoxLine("   ⏱ {$elapsed}s", ThemeColor::Border, ThemeColor::Muted);
+        }
+    }
+}
+
+protected function drawDecisionFlow(string $currentOp, string $phase): void
+{
+    $flow = [
+        'classifying' => ['icon' => '🔍', 'label' => 'Classify'],
+        'extracting_tasks' => ['icon' => '📋', 'label' => 'Extract'],
+        'planning_task' => ['icon' => '📐', 'label' => 'Plan'],
+        'executing_task' => ['icon' => '⚡', 'label' => 'Execute'],
+        'generating_summary' => ['icon' => '📝', 'label' => 'Summarize']
     ];
     
-    public function trackUsage(string $model, int $inputTokens, int $outputTokens): void {
-        $cost = $this->calculateCost($model, $inputTokens, $outputTokens);
-        $this->storage->increment('total_cost', $cost);
-        $this->storage->increment('total_requests');
-    }
-    
-    public function getReport(): array {
-        return [
-            'total_cost' => $this->storage->get('total_cost'),
-            'total_requests' => $this->storage->get('total_requests'),
-            'average_cost_per_request' => $this->calculateAverage(),
-        ];
-    }
-}
-```
-**Impact**: Cost awareness, optimization opportunities.
-
-### 7. State Management Improvements
-**Current State**: Single JSON file that can grow unbounded.
-**Improvement**: SQLite-based state management.
-**Implementation**:
-```php
-class SqliteStateManager implements StateManager {
-    private \PDO $db;
-    
-    public function __construct(string $dbPath) {
-        $this->db = new \PDO("sqlite:$dbPath");
-        $this->initSchema();
-    }
-    
-    public function saveTask(Task $task): void {
-        $stmt = $this->db->prepare(
-            'INSERT INTO tasks (id, description, status, created_at) VALUES (?, ?, ?, ?)'
-        );
-        $stmt->execute([
-            $task->id,
-            $task->description,
-            $task->status->value,
-            $task->createdAt->format('Y-m-d H:i:s')
-        ]);
-    }
-    
-    public function getRecentTasks(int $limit = 100): array {
-        return $this->db->query(
-            "SELECT * FROM tasks ORDER BY created_at DESC LIMIT $limit"
-        )->fetchAll(\PDO::FETCH_ASSOC);
-    }
-}
-```
-**Impact**: Better performance, queryable history, automatic cleanup.
-
-## Low Priority Improvements
-
-### 8. Plugin System
-**Current State**: Tools must be compiled into the application.
-**Improvement**: Dynamic tool loading.
-**Implementation**:
-```php
-class PluginLoader {
-    public function loadFromDirectory(string $dir): array {
-        $tools = [];
+    $flowLine = '';
+    foreach ($flow as $op => $info) {
+        $isActive = ($op === $currentOp);
+        $isPast = $this->isOperationComplete($op, $currentOp);
         
-        foreach (glob("$dir/*.php") as $file) {
-            $class = $this->getClassFromFile($file);
-            
-            if (is_subclass_of($class, Tool::class)) {
-                $tools[] = new $class($this->logger);
-            }
+        if ($isActive) {
+            $flowLine .= $this->colorize("[{$info['icon']} {$info['label']}]", ThemeColor::Accent);
+        } elseif ($isPast) {
+            $flowLine .= $this->colorize("{$info['icon']} {$info['label']}", ThemeColor::Success);
+        } else {
+            $flowLine .= $this->colorize("{$info['icon']} {$info['label']}", ThemeColor::Muted);
         }
         
-        return $tools;
+        if ($op !== 'generating_summary') {
+            $flowLine .= ' → ';
+        }
     }
-}
-
-// Usage
-$pluginTools = $pluginLoader->loadFromDirectory('./plugins');
-foreach ($pluginTools as $tool) {
-    $executor->register($tool);
+    
+    echo $this->drawBoxLine($flowLine, ThemeColor::Border);
 }
 ```
-**Impact**: Easier extension, community contributions.
 
-### 9. Web API Interface
-**Current State**: CLI only.
-**Improvement**: Add HTTP API.
-**Implementation**:
+### 3. Enhanced State Synchronization
+
+**Current State**: State updates are throttled and lack detail.
+
+**Improvement**: Rich state updates with operation context.
+
+**Implementation in StreamingAsyncProcessor**:
 ```php
-// Using Slim or similar
-$app = new \Slim\App();
-
-$app->post('/api/request', function ($request, $response) {
-    $input = $request->getParsedBody();
+$agent->setProgressCallback(function (string $operation, array $details) use (...) {
+    // Enhanced progress message
+    $enrichedDetails = array_merge($details, [
+        'timestamp' => microtime(true),
+        'memory_usage' => memory_get_usage(true),
+        'operation_id' => uniqid($operation . '_')
+    ]);
     
-    $agent = $this->get('agent');
-    $result = $agent->processRequest($input['message']);
+    // Always send detailed progress
+    self::sendUpdate([
+        'type' => 'progress',
+        'operation' => $operation,
+        'message' => $this->getDetailedMessage($operation, $details),
+        'details' => $enrichedDetails,
+        'context' => [
+            'conversation_length' => count($agent->getConversationHistory()),
+            'task_queue_size' => count($agent->getTaskManager()->getTasks()),
+            'tools_available' => count($toolExecutor->getRegisteredTools())
+        ]
+    ]);
     
-    return $response->withJson([
-        'response' => $result->message,
-        'type' => $result->type->value,
-        'tools_used' => $result->toolsUsed ?? []
+    // Enhanced state sync with agent thinking state
+    self::sendUpdate([
+        'type' => 'state_sync',
+        'data' => [
+            'agent_state' => [
+                'operation' => $operation,
+                'phase' => $details['phase'] ?? 'processing',
+                'details' => $details,
+                'start_time' => $operationStartTimes[$operation] ?? microtime(true)
+            ],
+            'tasks' => $status['tasks'],
+            'current_task' => $status['current_task'],
+            'conversation_history' => $agent->getConversationHistory(),
+            'tool_log' => array_slice($toolExecutor->getExecutionLog(), -10),
+            'decision_context' => [
+                'last_classification' => $lastClassification ?? null,
+                'active_plan' => $activePlan ?? null,
+                'pending_operations' => $pendingOps ?? []
+            ]
+        ]
     ]);
 });
-
-$app->get('/api/tasks', function ($request, $response) {
-    $tasks = $this->get('taskManager')->getTaskHistory();
-    return $response->withJson($tasks);
-});
 ```
-**Impact**: Enable web interfaces, API integrations.
 
-### 10. Observability with OpenTelemetry
-**Current State**: Basic file logging.
-**Improvement**: Full observability stack.
+### 4. Tool Execution Visualization
+
+**Current State**: Tool calls shown after completion.
+
+**Improvement**: Real-time tool execution status.
+
 **Implementation**:
 ```php
-use OpenTelemetry\SDK\Trace\TracerProvider;
-use OpenTelemetry\SDK\Trace\SpanProcessor\SimpleSpanProcessor;
-
-class InstrumentedCodingAgent extends CodingAgent {
-    private Tracer $tracer;
+// In ToolExecutor
+public function dispatch(string $toolName, array $params): ToolResponse
+{
+    $executionId = uniqid('exec_');
     
-    public function processRequest(string $request): AgentResponse {
-        $span = $this->tracer->spanBuilder('agent.process_request')
-            ->setAttribute('request.length', strlen($request))
-            ->startSpan();
+    $this->progressCallback?->__invoke('tool_execution', [
+        'phase' => 'starting',
+        'tool' => $toolName,
+        'execution_id' => $executionId,
+        'params_preview' => $this->getParamsPreview($params)
+    ]);
+    
+    try {
+        $startTime = microtime(true);
+        $result = $tool->execute($params);
+        $duration = microtime(true) - $startTime;
         
-        try {
-            $response = parent::processRequest($request);
-            $span->setAttribute('response.type', $response->type->value);
-            return $response;
-        } finally {
-            $span->end();
-        }
+        $this->progressCallback?->__invoke('tool_execution', [
+            'phase' => 'completed',
+            'tool' => $toolName,
+            'execution_id' => $executionId,
+            'duration' => round($duration, 3),
+            'success' => $result->success,
+            'result_preview' => $this->getResultPreview($result)
+        ]);
+        
+        return $result;
+    } catch (Exception $e) {
+        $this->progressCallback?->__invoke('tool_execution', [
+            'phase' => 'failed',
+            'tool' => $toolName,
+            'execution_id' => $executionId,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
     }
 }
 ```
-**Impact**: Production monitoring, performance insights.
 
-## Architecture Patterns to Adopt
+## Medium Priority: Decision Context Display
 
-### Event-Driven Architecture
+### 5. Classification Reasoning Display
+
+Show why the agent classified a request a certain way:
+
 ```php
-interface EventDispatcher {
-    public function dispatch(Event $event): void;
-    public function subscribe(string $eventType, callable $handler): void;
+// In UI, when displaying classification results
+if ($agentState['operation'] === 'classifying' && $agentState['phase'] === 'complete') {
+    echo $this->drawBoxLine("📊 Classification Result:", ThemeColor::Border);
+    echo $this->drawBoxLine("   Type: {$details['type']}", ThemeColor::Border, ThemeColor::Info);
+    echo $this->drawBoxLine("   Confidence: {$details['confidence']}%", ThemeColor::Border);
+    echo $this->drawBoxLine("   Reasoning: {$details['reasoning']}", ThemeColor::Border, ThemeColor::Muted);
 }
-
-// Usage
-$dispatcher->subscribe(TaskCompleted::class, function($event) {
-    $this->notifier->notify("Task {$event->task->id} completed");
-});
 ```
 
-### Command-Query Separation
+### 6. Task Planning Visualization
+
+Show the agent's planning process:
+
 ```php
-// Commands (change state)
-class CreateTaskCommand {
-    public function __construct(
-        public readonly string $description,
-        public readonly array $metadata = []
-    ) {}
-}
+// When planning tasks
+$this->reportProgress('planning_task', [
+    'phase' => 'analyzing_requirements',
+    'task_description' => $task->description,
+    'complexity_assessment' => 'Determining required tools and steps...'
+]);
 
-// Queries (read state)
-class GetTaskByIdQuery {
-    public function __construct(
-        public readonly string $taskId
-    ) {}
-}
-
-// Handlers
-class CreateTaskHandler {
-    public function handle(CreateTaskCommand $command): Task {
-        // Implementation
-    }
-}
+// After planning
+$this->reportProgress('planning_task', [
+    'phase' => 'plan_complete',
+    'task_id' => $task->id,
+    'plan_summary' => $plan['summary'],
+    'step_count' => count($plan['steps']),
+    'estimated_complexity' => $plan['complexity'],
+    'tools_needed' => array_map(fn($s) => $s['tool_needed'], $plan['steps'])
+]);
 ```
 
-### Repository Pattern for Tools
-```php
-interface ToolRepository {
-    public function find(string $name): ?Tool;
-    public function all(): array;
-    public function register(Tool $tool): void;
-}
+## Implementation Strategy
 
-class InMemoryToolRepository implements ToolRepository {
-    private array $tools = [];
-    
-    public function register(Tool $tool): void {
-        $this->tools[$tool->name()] = $tool;
-    }
-    
-    public function find(string $name): ?Tool {
-        return $this->tools[$name] ?? null;
-    }
-}
-```
+1. **Start with Progress Reporting**: Enhance CodingAgent with detailed progress callbacks
+2. **Update StreamingAsyncProcessor**: Send richer state updates  
+3. **Enhance UI Components**: Add agent state visualization
+4. **Test with Complex Tasks**: Ensure all decision points are visible
+5. **Optimize Performance**: Ensure detailed reporting doesn't slow down execution
 
-## Performance Optimization Opportunities
+## Success Metrics
 
-1. **Lazy Loading**: Load tools only when needed
-2. **Connection Pooling**: Reuse database/API connections
-3. **Async I/O**: Use ReactPHP for non-blocking operations
-4. **Memory Management**: Stream large files instead of loading entirely
-5. **Prompt Optimization**: Reduce token usage with concise prompts
+- User can see exactly what the agent is thinking at every moment
+- Decision reasoning is transparent and understandable
+- Tool execution progress is visible in real-time
+- No "black box" moments where the agent appears stuck
+- State updates are smooth and don't cause UI flicker
 
-## Security Enhancements
+## Technical Considerations
 
-1. **Input Sanitization**: Stronger validation for tool parameters
-2. **Sandboxed Execution**: Run tools in isolated environments
-3. **Rate Limiting**: Prevent abuse of expensive operations
-4. **Audit Logging**: Track all tool executions with user context
-5. **Secret Management**: Use dedicated service for API keys
+### Performance
+- Use throttling for high-frequency updates (tool execution loops)
+- Batch related updates when possible
+- Keep message sizes reasonable
 
-## Developer Experience Improvements
+### User Experience  
+- Don't overwhelm with too much detail
+- Use progressive disclosure (summary → details on demand)
+- Maintain readability with good visual hierarchy
 
-1. **Development Mode**: Enhanced debugging, mock services
-2. **Tool Scaffolding**: Generator for new tools
-3. **Interactive Documentation**: Swagger/OpenAPI for web API
-4. **Performance Profiling**: Built-in profiler for slow operations
-5. **Error Recovery Assistant**: AI-powered error resolution suggestions
+### Debugging
+- All progress events should be logged for troubleshooting
+- Include timing information for performance analysis
+- Capture decision paths for replay/analysis
 
 ## Conclusion
 
-These improvements would transform Swarm from a capable AI coding assistant into a production-ready platform. Priority should be given to:
+These improvements focus on making the agent's decision-making process completely transparent. By implementing detailed progress reporting, enhanced state synchronization, and rich UI visualization, users will have full visibility into what the agent is doing, thinking, and planning at every moment.
 
-1. **Reliability**: Retry logic, better error handling
-2. **Performance**: Parallel execution, caching
-3. **Testability**: Comprehensive test suite
-4. **Extensibility**: Plugin system, better abstractions
-
-The existing architecture provides a solid foundation. These enhancements would make it more robust, performant, and suitable for enterprise use cases.
+The goal is not just to show what tools are being executed, but to reveal the agent's reasoning process, decision points, and planning logic. This transparency builds trust and helps users understand how to better interact with the system.
