@@ -2,15 +2,25 @@
 
 namespace HelgeSverre\Swarm\Tools;
 
+use Exception;
 use FilesystemIterator;
 use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Core\ToolResponse;
 use InvalidArgumentException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use RuntimeException;
+use Symfony\Component\Process\Process;
 
 class Grep extends Tool
 {
+    public function __construct(
+        protected readonly int $maxResults = 1000,
+        protected readonly int $maxFileSize = 10 * 1024 * 1024, // 10MB
+        protected readonly array $excludePatterns = ['.git', 'node_modules', 'vendor', '.cache', 'tmp'],
+        protected readonly bool $preferNativeRipgrep = true
+    ) {}
+
     public function name(): string
     {
         return 'grep';
@@ -18,171 +28,276 @@ class Grep extends Tool
 
     public function description(): string
     {
-        return 'Search for content in files, optionally filtering by filename pattern';
+        return 'Fast content search tool that works with any codebase size. Searches file contents using regular expressions. Supports full regex syntax and returns file paths with at least one match sorted by modification time.';
     }
 
     public function parameters(): array
     {
         return [
-            'search' => [
-                'type' => 'string',
-                'description' => 'The text/pattern to search for in file contents',
-            ],
             'pattern' => [
                 'type' => 'string',
-                'description' => 'File pattern to search within (e.g., *.php, *.txt)',
-                'default' => '*',
+                'description' => 'The regular expression pattern to search for in file contents (e.g., "log.*Error", "function\\s+\\w+")',
             ],
-            'directory' => [
+            'path' => [
                 'type' => 'string',
-                'description' => 'Directory to search in',
-                'default' => '.',
+                'description' => 'The directory to search in. Defaults to the current working directory.',
             ],
-            'case_sensitive' => [
-                'type' => 'boolean',
-                'description' => 'Whether the search is case sensitive',
-                'default' => false,
-            ],
-            'files_only' => [
-                'type' => 'boolean',
-                'description' => 'Only return matching filenames without searching content',
-                'default' => false,
-            ],
-            'recursive' => [
-                'type' => 'boolean',
-                'description' => 'Search recursively in subdirectories',
-                'default' => true,
+            'include' => [
+                'type' => 'string',
+                'description' => 'File pattern to include in the search (e.g., "*.js", "*.{ts,tsx}")',
             ],
         ];
     }
 
     public function required(): array
     {
-        // If files_only is true, we don't need a search term
-        return [];
+        return ['pattern'];
     }
 
     public function execute(array $params): ToolResponse
     {
-        $search = $params['search'] ?? null;
-        $pattern = $params['pattern'] ?? '*';
-        $directory = $params['directory'] ?? '.';
-        $caseSensitive = $params['case_sensitive'] ?? false;
-        $filesOnly = $params['files_only'] ?? false;
-        $recursive = $params['recursive'] ?? true;
+        $pattern = $params['pattern'] ?? throw new InvalidArgumentException('pattern is required');
+        $path = $params['path'] ?? getcwd();
+        $include = $params['include'] ?? null;
 
-        // If files_only and no search term, just find files
-        if ($filesOnly && ! $search) {
-            return $this->findFiles($pattern, $directory, $recursive);
+        // Validate and normalize the search path
+        $searchPath = $this->validateAndNormalizePath($path);
+        if (! $searchPath) {
+            return ToolResponse::error("Invalid or inaccessible path: {$path}");
         }
 
-        // If no search term for content search, error
-        if (! $filesOnly && ! $search) {
-            throw new InvalidArgumentException('search parameter required for content search');
+        // Validate the regex pattern
+        if (! $this->isValidRegexPattern($pattern)) {
+            return ToolResponse::error("Invalid or potentially dangerous regex pattern: {$pattern}");
         }
 
-        // Find matching files first
-        $files = $this->getMatchingFiles($pattern, $directory, $recursive);
-
-        // If files_only, filter by search term in filename
-        if ($filesOnly) {
-            $filteredFiles = [];
-            $searchRegex = $caseSensitive ? "/{$search}/" : "/{$search}/i";
-            foreach ($files as $file) {
-                if (preg_match($searchRegex, basename($file))) {
-                    $filteredFiles[] = $file;
-                }
+        try {
+            // Try native ripgrep first if available and preferred
+            if ($this->preferNativeRipgrep && $this->isRipgrepAvailable()) {
+                $result = $this->searchWithRipgrep($pattern, $searchPath, $include);
+            } else {
+                $result = $this->searchWithPHP($pattern, $searchPath, $include);
             }
 
-            return ToolResponse::success([
-                'search' => $search,
-                'pattern' => $pattern,
-                'directory' => $directory,
-                'files' => $filteredFiles,
-                'count' => count($filteredFiles),
-            ]);
+            return $result;
+        } catch (Exception $e) {
+            return ToolResponse::error("Failed to search files: {$e->getMessage()}");
+        }
+    }
+
+    protected function validateAndNormalizePath(string $path): ?string
+    {
+        // Resolve the real path to prevent directory traversal
+        $realPath = realpath($path);
+
+        if (! $realPath || ! is_dir($realPath) || ! is_readable($realPath)) {
+            return null;
         }
 
-        // Search content in files
-        $results = [];
-        $searchRegex = $caseSensitive ? "/{$search}/" : "/{$search}/i";
+        // Ensure we stay within reasonable bounds
+        $cwd = getcwd();
+        if ($cwd && ! str_starts_with($realPath, $cwd)) {
+            // Allow absolute paths but be cautious about system directories
+            $systemDirs = ['/etc', '/usr', '/var', '/sys', '/proc', '/dev'];
+            foreach ($systemDirs as $sysDir) {
+                if (str_starts_with($realPath, $sysDir)) {
+                    return null;
+                }
+            }
+        }
 
+        return $realPath;
+    }
+
+    protected function isValidRegexPattern(string $pattern): bool
+    {
+        // Basic validation
+        if (empty($pattern) || mb_strlen($pattern) > 1000) {
+            return false;
+        }
+
+        // Test if it's a valid regex
+        if (@preg_match("/{$pattern}/", '') === false) {
+            return false;
+        }
+
+        // Check for catastrophic backtracking patterns (ReDoS)
+        $dangerousPatterns = [
+            '(.*)+',
+            '(.+)+',
+            '(a+)+',
+            '(a*)*',
+            '(x+x+)+',
+            '([a-zA-Z]+)*',
+        ];
+
+        foreach ($dangerousPatterns as $dangerous) {
+            if (str_contains($pattern, $dangerous)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    protected function isRipgrepAvailable(): bool
+    {
+        static $available = null;
+
+        if ($available === null) {
+            $process = new Process(['which', 'rg']);
+            $process->run();
+            $available = $process->isSuccessful();
+        }
+
+        return $available;
+    }
+
+    protected function searchWithRipgrep(string $pattern, string $searchPath, ?string $include): ToolResponse
+    {
+        $command = ['rg', '--files-with-matches', '--no-heading', '--no-line-number'];
+
+        // Add include pattern if specified
+        if ($include) {
+            $command[] = '--glob';
+            $command[] = $include;
+        }
+
+        // Add exclude patterns
+        foreach ($this->excludePatterns as $exclude) {
+            $command[] = '--glob';
+            $command[] = "!{$exclude}";
+        }
+
+        $command[] = $pattern;
+        $command[] = $searchPath;
+
+        $process = new Process($command);
+        $process->setTimeout(30); // 30 second timeout
+        $process->run();
+
+        if (! $process->isSuccessful()) {
+            throw new RuntimeException('Ripgrep failed: ' . $process->getErrorOutput());
+        }
+
+        $output = trim($process->getOutput());
+        $files = $output ? explode("\n", $output) : [];
+
+        // Sort by modification time (newest first)
+        $filesWithMtime = [];
         foreach ($files as $file) {
-            if (! is_file($file) || ! is_readable($file)) {
-                continue;
-            }
-
-            $content = @file_get_contents($file);
-            if ($content === false) {
-                continue;
-            }
-
-            $lines = explode("\n", $content);
-            foreach ($lines as $lineNum => $line) {
-                if (preg_match($searchRegex, $line, $matches)) {
-                    $results[] = [
-                        'file' => $file,
-                        'line' => $lineNum + 1,
-                        'content' => mb_trim($line),
-                        'match' => $matches[0] ?? $search,
-                    ];
-                }
+            if (is_file($file)) {
+                $filesWithMtime[] = [
+                    'path' => $file,
+                    'mtime' => filemtime($file),
+                ];
             }
         }
 
-        return ToolResponse::success([
-            'search' => $search,
-            'pattern' => $pattern,
-            'directory' => $directory,
-            'results' => $results,
-            'count' => count($results),
-            'files_searched' => count($files),
-        ]);
-    }
+        usort($filesWithMtime, fn ($a, $b) => $b['mtime'] <=> $a['mtime']);
+        $sortedFiles = array_column($filesWithMtime, 'path');
 
-    protected function findFiles(string $pattern, string $directory, bool $recursive): ToolResponse
-    {
-        $files = $this->getMatchingFiles($pattern, $directory, $recursive);
+        // Limit results
+        $sortedFiles = array_slice($sortedFiles, 0, $this->maxResults);
 
         return ToolResponse::success([
             'pattern' => $pattern,
-            'directory' => $directory,
-            'files' => $files,
-            'count' => count($files),
+            'path' => $searchPath,
+            'include' => $include,
+            'files' => $sortedFiles,
+            'count' => count($sortedFiles),
+            'truncated' => count($files) > $this->maxResults,
+            'method' => 'ripgrep',
         ]);
     }
 
-    protected function getMatchingFiles(string $pattern, string $directory, bool $recursive): array
+    protected function searchWithPHP(string $pattern, string $searchPath, ?string $include): ToolResponse
     {
-        $files = [];
+        $matchingFiles = [];
+        $fileCount = 0;
 
-        if (! is_dir($directory)) {
-            return $files;
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($searchPath, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        foreach ($iterator as $fileInfo) {
+            if ($fileCount >= $this->maxResults) {
+                break;
+            }
+
+            if (! $fileInfo->isFile() || ! $fileInfo->isReadable()) {
+                continue;
+            }
+
+            // Skip if file is too large
+            if ($fileInfo->getSize() > $this->maxFileSize) {
+                continue;
+            }
+
+            // Skip excluded paths
+            if ($this->shouldSkipPath($fileInfo->getPath())) {
+                continue;
+            }
+
+            // Check include pattern if specified
+            if ($include && ! fnmatch($include, $fileInfo->getFilename())) {
+                continue;
+            }
+
+            // Search file content
+            if ($this->fileContainsPattern($fileInfo->getPathname(), $pattern)) {
+                $matchingFiles[] = [
+                    'path' => $fileInfo->getPathname(),
+                    'mtime' => $fileInfo->getMTime(),
+                ];
+                $fileCount++;
+            }
         }
 
-        if ($recursive) {
-            $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::SELF_FIRST
-            );
+        // Sort by modification time (newest first)
+        usort($matchingFiles, fn ($a, $b) => $b['mtime'] <=> $a['mtime']);
+        $filePaths = array_column($matchingFiles, 'path');
 
-            foreach ($iterator as $file) {
-                if ($file->isFile() && fnmatch($pattern, $file->getFilename())) {
-                    $files[] = $file->getPathname();
+        return ToolResponse::success([
+            'pattern' => $pattern,
+            'path' => $searchPath,
+            'include' => $include,
+            'files' => $filePaths,
+            'count' => count($filePaths),
+            'truncated' => $fileCount >= $this->maxResults,
+            'method' => 'php',
+        ]);
+    }
+
+    protected function fileContainsPattern(string $filePath, string $pattern): bool
+    {
+        $handle = fopen($filePath, 'r');
+        if (! $handle) {
+            return false;
+        }
+
+        try {
+            while (($line = fgets($handle)) !== false) {
+                if (preg_match("/{$pattern}/", $line)) {
+                    return true;
                 }
             }
-        } else {
-            $searchPattern = mb_rtrim($directory, '/') . '/' . $pattern;
-            $globFiles = glob($searchPattern);
-            if ($globFiles !== false) {
-                foreach ($globFiles as $file) {
-                    if (is_file($file)) {
-                        $files[] = $file;
-                    }
-                }
+        } finally {
+            fclose($handle);
+        }
+
+        return false;
+    }
+
+    protected function shouldSkipPath(string $path): bool
+    {
+        foreach ($this->excludePatterns as $excludePattern) {
+            if (str_contains($path, "/{$excludePattern}/") || str_ends_with($path, "/{$excludePattern}")) {
+                return true;
             }
         }
 
-        return $files;
+        return false;
     }
 }

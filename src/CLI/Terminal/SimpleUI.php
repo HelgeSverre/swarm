@@ -2,22 +2,19 @@
 
 declare(strict_types=1);
 
-namespace HelgeSverre\Swarm\CLI;
+namespace HelgeSverre\Swarm\CLI\Terminal;
 
 use HelgeSverre\Swarm\Agent\AgentResponse;
 use HelgeSverre\Swarm\CLI\Activity\ActivityEntry;
 use HelgeSverre\Swarm\CLI\Activity\ConversationEntry;
 use HelgeSverre\Swarm\CLI\Activity\NotificationEntry;
 use HelgeSverre\Swarm\CLI\Activity\ToolCallEntry;
-use HelgeSverre\Swarm\CLI\Terminal\Ansi;
-use HelgeSverre\Swarm\CLI\Terminal\FullTerminalUI;
-use HelgeSverre\Swarm\CLI\Terminal\Renderer;
 use HelgeSverre\Swarm\Core\ToolResponse;
 use HelgeSverre\Swarm\Enums\CLI\NotificationType;
 
 use function Laravel\Prompts\text;
 
-class UI
+class SimpleUI
 {
     protected array $history = [];
 
@@ -30,8 +27,6 @@ class UI
     protected array $contextData = [];
 
     protected bool $showPanels = false;
-
-    protected ?FullTerminalUI $terminalUI = null;
 
     protected bool $richMode = false;
 
@@ -69,11 +64,6 @@ class UI
         // Show agent state updates if there's a change
         if (! empty($status['agent_state'])) {
             $this->showAgentThinking($status['agent_state']);
-        }
-
-        // Update panels if visible
-        if ($this->showPanels) {
-            $this->refreshPanels();
         }
     }
 
@@ -178,23 +168,6 @@ class UI
     }
 
     /**
-     * Toggle panel display / rich mode
-     */
-    public function togglePanels(): void
-    {
-        $this->richMode = ! $this->richMode;
-
-        if ($this->richMode && ! $this->terminalUI) {
-            $this->terminalUI = FullTerminalUI::getInstance();
-            $this->syncToTerminalUI();
-        }
-
-        if ($this->richMode) {
-            $this->terminalUI->render();
-        }
-    }
-
-    /**
      * Show keyboard shortcuts help
      */
     public function showHelp(): void
@@ -209,7 +182,7 @@ class UI
         $details = $agentState['details'] ?? [];
 
         // Calculate content width (75% of terminal)
-        $terminalWidth = $this->getTerminalWidth();
+        $terminalWidth = Ansi::getTerminalWidth();
         $contentWidth = (int) ($terminalWidth * 0.75);
 
         // Only show if operation changed or specific phases complete
@@ -315,30 +288,6 @@ class UI
     }
 
     /**
-     * Word wrap text to a percentage of terminal width
-     */
-    protected function wordWrap(string $text, int $width): string
-    {
-        return Ansi::wordWrap($text, $width);
-    }
-
-    /**
-     * Get terminal width for responsive layouts
-     */
-    protected function getTerminalWidth(): int
-    {
-        return Ansi::getTerminalWidth();
-    }
-
-    /**
-     * Colorize text with ANSI escape codes
-     */
-    protected function colorize(string $text, string $style): string
-    {
-        return Ansi::colorize($text, $style);
-    }
-
-    /**
      * Display task execution progress with progress bar
      */
     protected function displayTaskProgress(array $details, int $contentWidth): void
@@ -396,50 +345,6 @@ class UI
             // Update active tasks for panel display
             $this->activeTasks[$taskId] = $taskInfo;
         }
-    }
-
-    /**
-     * Sync state to TerminalUI
-     */
-    protected function syncToTerminalUI(): void
-    {
-        if (! $this->terminalUI) {
-            return;
-        }
-
-        // Sync tasks
-        $tasks = [];
-        foreach ($this->activeTasks as $task) {
-            $tasks[] = [
-                'description' => $task['description'] ?? 'Task',
-                'status' => $task['status'] ?? 'pending',
-            ];
-        }
-        $this->terminalUI->setTasks($tasks);
-
-        // Sync context
-        $this->terminalUI->setContext($this->contextData);
-
-        // Sync history
-        foreach ($this->history as $entry) {
-            if ($entry instanceof ConversationEntry) {
-                $type = $entry->role === 'user' ? 'command' : 'info';
-                $this->terminalUI->addHistory($type, $entry->message, $entry->timestamp);
-            } elseif ($entry instanceof ToolCallEntry) {
-                $this->terminalUI->addHistory('tool', "Tool: {$entry->toolName}", $entry->timestamp);
-            }
-        }
-    }
-
-    /**
-     * Refresh side panels
-     */
-    protected function refreshPanels(): void
-    {
-        // This would typically clear and redraw panels
-        // For now, just show a divider to indicate panels are active
-        echo Ansi::divider(0, '═');
-        echo Ansi::DIM . 'Panels: Press ⌥T to toggle task panel' . Ansi::RESET . "\n";
     }
 
     /**

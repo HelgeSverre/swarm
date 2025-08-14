@@ -2,34 +2,21 @@
 
 namespace HelgeSverre\Swarm\Tests\Integration;
 
-pest()->group('integration');
-
 use Dotenv\Dotenv;
 use HelgeSverre\Swarm\Agent\CodingAgent;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Task\TaskManager;
-use HelgeSverre\Swarm\Tools\Grep;
-use HelgeSverre\Swarm\Tools\ReadFile;
-use HelgeSverre\Swarm\Tools\Terminal;
-use HelgeSverre\Swarm\Tools\WriteFile;
 use OpenAI;
+
+pest()->group('integration');
 
 beforeEach(function () {
     // Load environment
     $dotenv = Dotenv::createImmutable(dirname(__DIR__, 2));
     $dotenv->load();
 
-    // Skip if no OpenAI key
-    if (! getenv('OPENAI_API_KEY')) {
-        $this->markTestSkipped('OpenAI API key not configured');
-    }
-
     // Initialize components
-    $this->toolExecutor = new ToolExecutor;
-    $this->toolExecutor->register(new ReadFile);
-    $this->toolExecutor->register(new WriteFile);
-    $this->toolExecutor->register(new Grep);
-    $this->toolExecutor->register(new Terminal);
+    $this->toolExecutor = ToolExecutor::createWithDefaultTools();
 
     $this->taskManager = new TaskManager;
     $this->llmClient = OpenAI::client(getenv('OPENAI_API_KEY'));
@@ -40,7 +27,7 @@ beforeEach(function () {
         llmClient: $this->llmClient,
         model: 'gpt-4.1-nano'
     );
-});
+})->skip(! getenv('OPENAI_API_KEY'));
 
 describe('Chain of Thought classification', function () {
     it('correctly identifies internal task management requests', function () {
@@ -61,7 +48,7 @@ describe('Chain of Thought classification', function () {
             $status = $this->agent->getStatus();
             $fileCreationTasks = array_filter($status['tasks'] ?? [], function ($task) {
                 return str_contains(mb_strtolower($task['description']), 'create') &&
-                       str_contains(mb_strtolower($task['description']), 'file');
+                    str_contains(mb_strtolower($task['description']), 'file');
             });
 
             expect($fileCreationTasks)->toBeEmpty();

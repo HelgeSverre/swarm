@@ -4,136 +4,94 @@ declare(strict_types=1);
 
 namespace HelgeSverre\Swarm\CLI;
 
-use Dotenv\Dotenv;
 use Exception;
-use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\ToolExecutor;
-use HelgeSverre\Swarm\Enums\Core\LogLevel;
-use HelgeSverre\Swarm\Task\TaskManager;
-use Monolog\Handler\RotatingFileHandler;
-use Monolog\Logger;
-use OpenAI;
-use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
-use RuntimeException;
+use HelgeSverre\Swarm\CLI\Process\ProcessManager;
+use HelgeSverre\Swarm\Core\Application;
+use HelgeSverre\Swarm\Core\Container;
+use HelgeSverre\Swarm\Core\LoggerRegistry;
+use HelgeSverre\Swarm\Events\EventBus;
+use HelgeSverre\Swarm\Events\StateUpdateEvent;
+use HelgeSverre\Swarm\Events\UserInputEvent;
+use HelgeSverre\Swarm\Traits\EventAware;
+use HelgeSverre\Swarm\Traits\Loggable;
 
+/**
+ * Refactored Swarm orchestrator
+ * Coordinates between components but delegates all work to specialized managers
+ */
 class Swarm
 {
-    // Configuration constants
-    private const STATE_FILE = '.swarm.json';
+    use EventAware, Loggable;
 
-    private const DEFAULT_TIMEOUT = 600; // 10 minutes
+    private Container $container;
 
-    private const ANIMATION_INTERVAL = 0.1;
+    private StateManager $stateManager;
 
-    private const PROCESS_SLEEP_MS = 20000;
+    private CommandHandler $commandHandler;
 
-    protected readonly CodingAgent $agent;
+    private ProcessManager $processManager;
 
-    protected readonly UI $ui;
+    private bool $running = false;
 
-    protected readonly LoggerInterface $logger;
+    private array $syncedState = [];
 
-    /**
-     * Synced state that is shared between TUI and background processing
-     * This will be saved to .swarm.json on shutdown
-     */
-    protected array $syncedState = [
-        'tasks' => [],
-        'task_history' => [],
-        'current_task' => null,
-        'conversation_history' => [],
-        'tool_log' => [],
-        'operation' => '',
-    ];
-
-    /**
-     * Create a new SwarmCLI instance with injected dependencies
-     */
     public function __construct(
-        CodingAgent $agent,
-        ?UI $ui = null,
-        ?LoggerInterface $logger = null
+        private Application $app,
+        ?Container $container = null,
+        ?StateManager $stateManager = null,
+        ?CommandHandler $commandHandler = null,
+        ?ProcessManager $processManager = null
     ) {
-        $this->agent = $agent;
-        $this->ui = $ui ?? new UI;
-        $this->logger = $logger ?? new NullLogger;
+        $this->container = $container ?? new Container($app);
+        $this->stateManager = $stateManager ?? new StateManager;
+        $this->commandHandler = $commandHandler ?? new CommandHandler;
+        $this->processManager = $processManager ?? new ProcessManager;
 
-        // Register shutdown handler for saving state
-        register_shutdown_function([$this, 'saveStateOnShutdown']);
-
-        // Register signal handlers for graceful shutdown (SIGINT = Ctrl+C, SIGTERM = kill)
-        if (function_exists('pcntl_signal')) {
-            pcntl_signal(SIGINT, [$this, 'handleSignal']);
-            pcntl_signal(SIGTERM, [$this, 'handleSignal']);
-            pcntl_async_signals(true);
-        }
+        $this->setupEventListeners();
+        $this->registerShutdownHandlers();
     }
 
     /**
-     * Create a Swarm instance from environment configuration
+     * Factory method to create from environment
      */
-    public static function createFromEnvironment(): self
+    public static function createFromEnvironment(Application $app): self
     {
-        // Load environment variables from project root
-        $projectRoot = defined('SWARM_ROOT') ? SWARM_ROOT : dirname(__DIR__, 2);
+        // Setup LoggerRegistry from Application
+        LoggerRegistry::setLogger($app->logger());
 
-        if (file_exists($projectRoot . '/.env')) {
-            $dotenv = Dotenv::createImmutable($projectRoot);
-            $dotenv->load();
-        }
+        // Set the EventBus instance to ensure all components use the same one
+        EventBus::setInstance(EventBus::getInstance());
 
-        // Get API key from environment
-        $apiKey = $_ENV['OPENAI_API_KEY'] ?? getenv('OPENAI_API_KEY');
-        if (! $apiKey) {
-            throw new Exception('OpenAI API key not found. Please set OPENAI_API_KEY environment variable or create a .env file.');
-        }
-
-        // Get model from environment
-        $model = $_ENV['OPENAI_MODEL'] ?? 'gpt-4o-mini';
-        $temperature = (float) ($_ENV['OPENAI_TEMPERATURE'] ?? 0.7);
-
-        // Setup logger
-        $logger = new NullLogger;
-        if ($_ENV['LOG_ENABLED'] ?? false) {
-            $logger = new Logger('swarm');
-
-            // Get log level from environment
-            $logLevel = LogLevel::fromString($_ENV['LOG_LEVEL'] ?? 'info')->toMonologLevel();
-
-            // Log to file
-            $logPath = $_ENV['LOG_PATH'] ?? 'logs';
-            if (! is_dir($logPath)) {
-                mkdir($logPath, 0755, true);
-            }
-
-            $logger->pushHandler(
-                new RotatingFileHandler("{$logPath}/swarm.log", 7, $logLevel)
-            );
-        }
-
-        // Create dependencies
-        $toolExecutor = ToolExecutor::createWithDefaultTools($logger);
-
-        $taskManager = new TaskManager($logger);
-        $llmClient = OpenAI::client($apiKey);
-
-        $agent = new CodingAgent($toolExecutor, $taskManager, $llmClient, $logger, $model, $temperature);
-
-        // Create UI
-        $ui = new UI;
-
-        return new self($agent, $ui, $logger);
+        return new self($app);
     }
 
+    /**
+     * Run the application
+     */
     public function run(): void
     {
-        // Load any saved state from previous session
-        $this->loadState();
+        // Load saved state
+        $this->syncedState = $this->stateManager->load();
 
-        // Use background processing mode by default
-        $this->logger->info('Starting with background processing mode');
-        $this->runWithBackgroundProcessing();
+        // Restore conversation history to agent if available
+        if (! empty($this->syncedState['conversation_history'])) {
+            $agent = $this->container->getCodingAgent();
+            $agent->setConversationHistory($this->syncedState['conversation_history']);
+        }
+
+        // Restore task history to TaskManager if available
+        if (! empty($this->syncedState['task_history'])) {
+            $taskManager = $this->container->getTaskManager();
+            $taskManager->setTaskHistory($this->syncedState['task_history']);
+        }
+
+        // Emit initial state
+        $this->emitStateUpdate();
+
+        // Start the UI event loop
+        $this->running = true;
+        $this->logInfo('Starting event-driven UI');
+        $this->container->getUI()->run();
     }
 
     /**
@@ -154,513 +112,230 @@ class Swarm
      */
     public function handleSignal(int $signal): void
     {
-        $this->logger->info('Received signal, saving state', ['signal' => $signal]);
+        $this->logInfo('Received signal, saving state', ['signal' => $signal]);
         $this->saveState();
 
-        // Cleanup TUI
-        $this->ui->cleanup();
+        // Cleanup UI
+        $this->container->getUI()->cleanup();
 
         exit(0);
     }
 
-    protected function runWithBackgroundProcessing(): void
+    /**
+     * Setup event listeners
+     */
+    protected function setupEventListeners(): void
     {
-        while (true) {
-            $this->ui->refresh($this->syncedState);
+        // Handle user input events
+        $this->subscribe(UserInputEvent::class, function (UserInputEvent $event) {
+            $this->handleUserInput($event->input);
+        });
+    }
 
-            $input = $this->ui->prompt('>');
+    /**
+     * Register shutdown handlers
+     */
+    protected function registerShutdownHandlers(): void
+    {
+        // Register shutdown handler for saving state
+        register_shutdown_function([$this, 'saveStateOnShutdown']);
 
-            // Handle built-in commands
-            if ($this->handleCommand($input)) {
-                if ($input === 'exit' || $input === 'quit') {
-                    break; // Exit the main loop
+        // Register signal handlers for graceful shutdown
+        if (function_exists('pcntl_signal')) {
+            pcntl_signal(SIGINT, [$this, 'handleSignal']);
+            pcntl_signal(SIGTERM, [$this, 'handleSignal']);
+            pcntl_async_signals(true);
+        }
+    }
+
+    /**
+     * Handle user input
+     */
+    protected function handleUserInput(string $input): void
+    {
+        // Try built-in commands first
+        $result = $this->commandHandler->handle($input);
+
+        if ($result->handled) {
+            $this->processCommand($result);
+
+            return;
+        }
+
+        // Process with AI agent
+        $this->processRequestAsync($input);
+    }
+
+    /**
+     * Process a command result
+     */
+    protected function processCommand(CommandResult $result): void
+    {
+        switch ($result->action) {
+            case 'exit':
+                $this->shutdown();
+                break;
+            case 'save_state':
+                $this->saveState();
+                $this->container->getUI()->showNotification('State saved to .swarm.json', 'success');
+                break;
+            case 'clear_state':
+                $this->clearState();
+                break;
+            case 'clear_history':
+                // Clear history in UI
+                $this->container->getUI()->refresh(['history' => []]);
+                break;
+            case 'show_help':
+                $this->container->getUI()->showNotification($result->getMessage() ?? '', 'info');
+                break;
+            case 'error':
+                $this->container->getUI()->showNotification($result->getError() ?? 'Command failed', 'error');
+                break;
+        }
+    }
+
+    /**
+     * Process request with AI agent asynchronously
+     */
+    protected function processRequestAsync(string $input): void
+    {
+        try {
+            $this->logInfo('User request received', [
+                'input' => $input,
+                'timestamp' => date('Y-m-d H:i:s'),
+            ]);
+
+            // Add to conversation history
+            $this->syncedState['conversation_history'][] = [
+                'role' => 'user',
+                'content' => $input,
+                'timestamp' => time(),
+            ];
+
+            // Start processing animation
+            $ui = $this->container->getUI();
+            $ui->startProcessing();
+
+            // Launch background process
+            $result = $this->processManager->launch($input);
+
+            // Stop processing animation
+            $ui->stopProcessing();
+
+            if ($result->success) {
+                // Display response
+                $response = $result->getAgentResponse();
+                if ($response) {
+                    $ui->displayResponse($response);
+
+                    // Add to conversation history
+                    $this->syncedState['conversation_history'][] = [
+                        'role' => 'assistant',
+                        'content' => $response->getMessage(),
+                        'timestamp' => time(),
+                    ];
                 }
 
-                continue;
-            }
+                // Update state from agent
+                $this->updateStateFromAgent();
 
-            try {
-                // Log user request
-                $this->logger->info('User request received', [
-                    'input' => $input,
-                    'timestamp' => date('Y-m-d H:i:s'),
-                ]);
+                // Save state after successful completion
+                $this->saveState();
+            } else {
+                $ui->displayError($result->error ?? 'Request failed');
 
-                // Use streaming processor for real-time updates
-                $this->runWithStreamingProcessor($input);
-            } catch (Exception $e) {
-                // Stop processing animation on error too
-                $this->ui->stopProcessing();
-
-                $this->logger->error('Request processing failed', [
-                    'error' => $e->getMessage(),
-                    'exception' => get_class($e),
-                    'input' => $input,
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                    'trace' => $e->getTraceAsString(),
-                ]);
-
-                // Display error but continue running
-                $this->ui->displayError($e->getMessage());
-
-                // Check if this was a timeout and if retry is enabled
-                if (str_contains($e->getMessage(), 'timed out') &&
-                    ($_ENV['SWARM_TIMEOUT_RETRY_ENABLED'] ?? true)) {
-                    $this->ui->showNotification(
+                if (str_contains($result->error ?? '', 'timed out')) {
+                    $ui->showNotification(
                         'The request timed out. You can retry with a longer timeout or simplify your request.',
                         'warning'
                     );
                 }
-
-                // Continue the main loop instead of crashing
-                continue;
-            }
-        }
-    }
-
-    /**
-     * Handle built-in commands
-     *
-     * @return bool True if command was handled, false otherwise
-     */
-    protected function handleCommand(string $input): bool
-    {
-        return match ($input) {
-            'exit', 'quit' => $this->handleExit(),
-            'clear' => $this->handleClear(),
-            'help' => $this->handleHelp(),
-            'save' => $this->handleSave(),
-            'clear-state' => $this->handleClearState(),
-            'test-error' => $this->handleTestError(),
-            default => false
-        };
-    }
-
-    protected function handleExit(): bool
-    {
-        $this->saveState();
-
-        // Return special value to signal exit
-        return true;
-    }
-
-    protected function handleClear(): bool
-    {
-        InputHandler::clearHistory();
-
-        return true;
-    }
-
-    protected function handleHelp(): bool
-    {
-        $this->ui->showNotification('Commands: exit, quit, clear, save, clear-state, help, test-error', 'info');
-
-        return true;
-    }
-
-    protected function handleSave(): bool
-    {
-        $this->saveState();
-        $this->ui->showNotification('State saved to ' . self::STATE_FILE, 'success');
-
-        return true;
-    }
-
-    protected function handleClearState(): bool
-    {
-        try {
-            $stateFile = getcwd() . '/' . self::STATE_FILE;
-            if (file_exists($stateFile)) {
-                if (! @unlink($stateFile)) {
-                    throw new RuntimeException('Failed to delete state file');
-                }
-                $this->resetState();
-                $this->ui->showNotification('State cleared', 'success');
-            } else {
-                $this->ui->showNotification('No saved state found', 'info');
             }
         } catch (Exception $e) {
-            $this->logger->error('Failed to clear state', ['error' => $e->getMessage()]);
-            $this->ui->showNotification('Failed to clear state: ' . $e->getMessage(), 'error');
-        }
-
-        return true;
-    }
-
-    protected function handleTestError(): bool
-    {
-        $this->logger->info('Test error command invoked');
-        $this->ui->showNotification('Throwing test exception...', 'warning');
-
-        // This should be caught by the exception handler
-        throw new RuntimeException('Test exception to verify error logging');
-    }
-
-    protected function resetState(): void
-    {
-        $this->syncedState = [
-            'tasks' => [],
-            'task_history' => [],
-            'current_task' => null,
-            'conversation_history' => [],
-            'tool_log' => [],
-            'operation' => '',
-        ];
-    }
-
-    /**
-     * Run with streaming background processor (pipe-based IPC)
-     */
-    protected function runWithStreamingProcessor(string $input): void
-    {
-        // Add user input to conversation history
-        $this->syncedState['conversation_history'][] = [
-            'role' => 'user',
-            'content' => $input,
-            'timestamp' => time(),
-        ];
-
-        $processor = new StreamingBackgroundProcessor($this->logger);
-
-        try {
-            // Launch the streaming processor
-            $processor->launch($input);
-
-            // Start processing animation
-            $this->ui->startProcessing();
-
-            $lastUpdate = microtime(true);
-            // Get timeout from environment or use default of 10 minutes
-            $maxWaitTime = (int) ($_ENV['SWARM_REQUEST_TIMEOUT'] ?? self::DEFAULT_TIMEOUT);
-            $startTime = microtime(true);
-            $processComplete = false;
-
-            // Process updates in real-time
-            while (! $processComplete && microtime(true) - $startTime < $maxWaitTime) {
-                $now = microtime(true);
-
-                // Read any available updates
-                $updates = $processor->readUpdates();
-
-                foreach ($updates as $update) {
-                    if ($this->processUpdate($update, $processComplete)) {
-                        break;
-                    }
-                }
-
-                // Update animation periodically
-                if ($now - $lastUpdate > self::ANIMATION_INTERVAL) {
-                    $this->ui->showProcessing();
-                    $lastUpdate = $now;
-                }
-
-                // Small sleep to avoid busy waiting
-                usleep(self::PROCESS_SLEEP_MS); // 20ms for more responsive updates
-            }
-
-            // Check timeout
-            if (! $processComplete) {
-                // Terminate the process gracefully
-                $processor->terminate();
-
-                $timeoutMinutes = round($maxWaitTime / 60, 1);
-                throw new Exception(
-                    "Request timed out after {$timeoutMinutes} minutes. " .
-                    'You can increase the timeout by setting SWARM_REQUEST_TIMEOUT environment variable (in seconds).'
-                );
-            }
-        } catch (Exception $e) {
-            // Stop processing animation on error
-            $this->ui->stopProcessing();
-
-            $this->logger->error('Streaming process failed', [
+            $this->logError('Request processing failed', [
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
-                'input' => $input,
             ]);
 
-            $this->ui->displayError($e->getMessage());
-        } finally {
-            // Always cleanup
-            $processor->cleanup();
+            $this->container->getUI()->displayError($e->getMessage());
         }
     }
 
     /**
-     * Save current state to .swarm.json with atomic write
+     * Update state from agent after task completion
      */
-    protected function saveState(): void
+    protected function updateStateFromAgent(): void
     {
-        try {
-            $stateFile = getcwd() . '/' . self::STATE_FILE;
+        $agent = $this->container->getCodingAgent();
+        $taskManager = $this->container->getTaskManager();
 
-            // Update task history from TaskManager before saving
-            $taskManager = $this->agent->getTaskManager();
-            $this->syncedState['task_history'] = $taskManager->getTaskHistory();
-
-            $json = json_encode($this->syncedState, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-            if ($json === false) {
-                throw new RuntimeException('Failed to encode state: ' . json_last_error_msg());
-            }
-
-            // Atomic write: write to temp file first, then rename
-            $tempFile = $stateFile . '.tmp.' . getmypid();
-            if (file_put_contents($tempFile, $json) === false) {
-                throw new RuntimeException('Failed to write state to temp file');
-            }
-
-            // Rename is atomic on most filesystems
-            if (! rename($tempFile, $stateFile)) {
-                @unlink($tempFile);
-                throw new RuntimeException('Failed to rename temp file to state file');
-            }
-
-            $this->logger->info('State saved to ' . self::STATE_FILE);
-        } catch (Exception $e) {
-            $this->logger->error('Failed to save state', [
-                'error' => $e->getMessage(),
-                'file' => self::STATE_FILE,
-            ]);
-            // Don't rethrow - state save failure shouldn't crash the app
-        }
-    }
-
-    /**
-     * Load state from .swarm.json if it exists
-     */
-    protected function loadState(): void
-    {
-        $stateFile = getcwd() . '/' . self::STATE_FILE;
-
-        if (file_exists($stateFile)) {
-            $json = file_get_contents($stateFile);
-
-            // Handle empty file
-            if (empty(mb_trim($json))) {
-                $this->logger->warning('State file is empty, starting with clean slate');
-
-                return;
-            }
-
-            // Try to decode JSON
-            $state = json_decode($json, true);
-
-            // Check for JSON errors
-            if ($state === null && json_last_error() !== JSON_ERROR_NONE) {
-                $this->logger->error('Failed to parse state file, starting with clean slate', [
-                    'error' => json_last_error_msg(),
-                    'file' => $stateFile,
-                ]);
-
-                // Optionally rename the corrupt file for debugging
-                $backupFile = $stateFile . '.corrupt.' . time();
-                rename($stateFile, $backupFile);
-                $this->logger->info('Corrupt state file backed up', ['backup' => $backupFile]);
-
-                $this->ui->showNotification('State file was corrupt, starting fresh', 'warning');
-
-                return;
-            }
-
-            // Validate state structure
-            if (! is_array($state)) {
-                $this->logger->warning('State file does not contain valid array, starting with clean slate');
-
-                return;
-            }
-
-            // Validate state has expected structure
-            if (! $this->validateState($state)) {
-                $this->logger->warning('State file has invalid structure, starting with clean slate');
-
-                return;
-            }
-
-            // Merge with defaults, ensuring all expected keys exist
-            $this->syncedState = array_merge($this->syncedState, $state);
-
-            // Restore task history to TaskManager if available
-            if (isset($state['task_history']) && is_array($state['task_history'])) {
-                $taskManager = $this->agent->getTaskManager();
-                $taskManager->setTaskHistory($state['task_history']);
-            }
-
-            $this->logger->info('State loaded from .swarm.json', [
-                'tasks' => count($state['tasks'] ?? []),
-                'history' => count($state['conversation_history'] ?? []),
-                'task_history' => count($state['task_history'] ?? []),
-            ]);
-            $this->ui->showNotification('Restored previous session', 'success');
-        }
-    }
-
-    /**
-     * Validate state structure
-     */
-    protected function validateState(array $state): bool
-    {
-        $requiredKeys = ['tasks', 'task_history', 'current_task', 'conversation_history', 'tool_log', 'operation'];
-
-        foreach ($requiredKeys as $key) {
-            if (! array_key_exists($key, $state)) {
-                $this->logger->debug('Missing required state key', ['key' => $key]);
-
-                return false;
-            }
-        }
-
-        // Validate types
-        if (! is_array($state['tasks']) || ! is_array($state['task_history']) ||
-            ! is_array($state['conversation_history']) || ! is_array($state['tool_log'])) {
-            $this->logger->debug('Invalid state value types');
-
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Process a single update from the streaming processor
-     *
-     * @param array $update The update to process
-     * @param bool &$processComplete Reference to flag indicating if processing is complete
-     *
-     * @return bool True if processing should stop, false otherwise
-     */
-    protected function processUpdate(array $update, bool &$processComplete): bool
-    {
-        $type = $update['type'] ?? 'status';
-
-        return match ($type) {
-            'progress' => $this->handleProgressUpdate($update),
-            'state_sync' => $this->handleStateSyncUpdate($update),
-            'task_status' => $this->handleTaskStatusUpdate($update),
-            'status' => $this->handleStatusUpdate($update, $processComplete),
-            'error' => $this->handleErrorUpdate($update),
-            default => false
-        };
-    }
-
-    protected function handleProgressUpdate(array $update): bool
-    {
-        $this->ui->updateProcessingMessage($update['message'] ?? '');
-
-        return false;
-    }
-
-    protected function handleStateSyncUpdate(array $update): bool
-    {
-        $newData = $update['data'] ?? [];
-
-        // Special handling for conversation_history - merge instead of replace
-        if (isset($newData['conversation_history'], $this->syncedState['conversation_history'])) {
-            // Get existing conversation history
-            $existingHistory = $this->syncedState['conversation_history'];
-            $newHistory = $newData['conversation_history'];
-
-            // Create a map of existing messages by timestamp to avoid duplicates
-            $historyMap = [];
-            foreach ($existingHistory as $entry) {
-                $key = $entry['timestamp'] . '_' . $entry['role'] . '_' . md5($entry['content']);
-                $historyMap[$key] = $entry;
-            }
-
-            // Add new messages that don't exist
-            foreach ($newHistory as $entry) {
-                $key = $entry['timestamp'] . '_' . $entry['role'] . '_' . md5($entry['content']);
-                if (! isset($historyMap[$key])) {
-                    $historyMap[$key] = $entry;
-                }
-            }
-
-            // Sort by timestamp and convert back to array
-            $mergedHistory = array_values($historyMap);
-            usort($mergedHistory, fn ($a, $b) => $a['timestamp'] - $b['timestamp']);
-
-            // Update the new data with merged history
-            $newData['conversation_history'] = $mergedHistory;
-        }
-
-        $this->syncedState = array_merge($this->syncedState, $newData);
-        $this->ui->refresh($this->syncedState);
-
-        return false;
-    }
-
-    protected function handleTaskStatusUpdate(array $update): bool
-    {
-        // Legacy task status update (kept for compatibility)
-        $taskStatus = $update['status'] ?? [];
-        $this->syncedState['tasks'] = $taskStatus['tasks'] ?? [];
-        $this->syncedState['current_task'] = $taskStatus['current_task'] ?? null;
-        $this->ui->refresh($this->syncedState);
-
-        return false;
-    }
-
-    protected function handleStatusUpdate(array $update, bool &$processComplete): bool
-    {
-        $status = $update['status'] ?? '';
-
-        if ($status === 'completed') {
-            $processComplete = true;
-            $this->handleCompletedStatus($update);
-
-            return true;
-        } elseif ($status === 'error') {
-            $processComplete = true;
-            throw new Exception($update['error'] ?? 'Unknown error occurred');
-        }
-
-        return false;
-    }
-
-    protected function handleCompletedStatus(array $update): void
-    {
-        // Stop processing animation
-        $this->ui->stopProcessing();
-
-        // Display response
-        $responseData = $update['response'] ?? [];
-        $response = \HelgeSverre\Swarm\Agent\AgentResponse::success(
-            $responseData['message'] ?? ''
-        );
-        $this->ui->displayResponse($response);
-
-        // Add assistant response to conversation history
-        if (! empty($responseData['message'])) {
-            $this->syncedState['conversation_history'][] = [
-                'role' => 'assistant',
-                'content' => $responseData['message'],
-                'timestamp' => time(),
-            ];
-        }
-
-        // Clear completed tasks and update history
-        $taskManager = $this->agent->getTaskManager();
+        // Clear completed tasks
         $taskManager->clearCompletedTasks();
 
-        // Update synced state with current tasks
+        // Update synced state
         $this->syncedState['tasks'] = $taskManager->getTasksAsArrays();
         $this->syncedState['task_history'] = $taskManager->getTaskHistory();
         $this->syncedState['current_task'] = null;
         $this->syncedState['operation'] = '';
 
-        // Manually trigger refresh to show response with cleared tasks
-        $this->ui->refresh($this->syncedState);
-
-        // Save state after successful completion
-        $this->saveState();
+        // Refresh UI
+        $this->container->getUI()->refresh($this->syncedState);
+        $this->emitStateUpdate();
     }
 
-    protected function handleErrorUpdate(array $update): bool
+    /**
+     * Emit state update event
+     */
+    protected function emitStateUpdate(): void
     {
-        // Log error but don't stop unless it's fatal
-        $this->logger->error('Process error', ['error' => $update['message'] ?? 'Unknown error']);
+        $this->emit(new StateUpdateEvent(
+            tasks: $this->syncedState['tasks'] ?? [],
+            currentTask: $this->syncedState['current_task'] ?? null,
+            conversationHistory: $this->syncedState['conversation_history'] ?? [],
+            toolLog: $this->syncedState['tool_log'] ?? [],
+            context: [],
+            status: $this->syncedState['operation'] ?? 'ready'
+        ));
+    }
 
-        return false;
+    /**
+     * Save current state
+     */
+    protected function saveState(): void
+    {
+        // Update task history from TaskManager before saving
+        $taskManager = $this->container->getTaskManager();
+        $this->syncedState['task_history'] = $taskManager->getTaskHistory();
+
+        $this->stateManager->save($this->syncedState);
+    }
+
+    /**
+     * Clear state
+     */
+    protected function clearState(): void
+    {
+        try {
+            if ($this->stateManager->clear()) {
+                $this->syncedState = $this->stateManager->reset();
+                $this->container->getUI()->showNotification('State cleared', 'success');
+            } else {
+                $this->container->getUI()->showNotification('No saved state found', 'info');
+            }
+        } catch (Exception $e) {
+            $this->logError('Failed to clear state', ['error' => $e->getMessage()]);
+            $this->container->getUI()->showNotification('Failed to clear state: ' . $e->getMessage(), 'error');
+        }
+    }
+
+    /**
+     * Shutdown the application
+     */
+    protected function shutdown(): void
+    {
+        $this->running = false;
+        $this->saveState();
+        $this->container->getUI()->stop();
     }
 }

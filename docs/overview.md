@@ -21,8 +21,8 @@ Swarm is an AI-powered coding assistant that uses OpenAI's GPT models to underst
 ```mermaid
 flowchart TD
     A[User Input via CLI] --> B[Swarm::run]
-    B --> C[StreamingBackgroundProcessor::launch]
-    C --> D[Child Process: StreamingAsyncProcessor]
+    B --> C[ProcessSpawner::launch]
+    C --> D[Child Process: WorkerProcess]
     D --> E[CodingAgent::processRequest]
     
     E --> F{Request Classification}
@@ -273,8 +273,8 @@ Key methods:
 - Immutable state transitions
 
 ### 9. **IPC System** (`src/CLI/*`)
-- StreamingBackgroundProcessor: Parent process management
-- StreamingAsyncProcessor: Child process execution  
+- ProcessSpawner: Parent process management
+- WorkerProcess: Child process execution  
 - JSON message protocol for communication
 - Real-time progress updates
 
@@ -306,13 +306,13 @@ The system uses a sophisticated Inter-Process Communication (IPC) mechanism for 
 ```mermaid
 sequenceDiagram
     participant CLI as Swarm (Parent)
-    participant Proc as StreamingBackgroundProcessor
+    participant Proc as ProcessSpawner
     participant Child as Child Process
     participant Agent as CodingAgent
     
     CLI->>Proc: launch($input)
     Proc->>Proc: proc_open() with pipes
-    Proc->>Child: Spawn cli-streaming-process.php
+    Proc->>Child: Spawn bin/worker
     
     Note over Proc,Child: Bidirectional pipe communication
     

@@ -2,6 +2,7 @@
 
 use HelgeSverre\Swarm\Agent\CodingAgent;
 use HelgeSverre\Swarm\Core\ToolExecutor;
+use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Task\TaskManager;
 use OpenAI\Responses\Chat\CreateResponse;
 use OpenAI\Testing\ClientFake;
@@ -56,6 +57,7 @@ test('extractTasks successfully extracts tasks from function call', function () 
 });
 
 test('extractTasks returns empty array when no function call', function () {
+    $eventBus = new EventBus;
     $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
@@ -91,6 +93,7 @@ test('extractTasks returns empty array when no function call', function () {
 });
 
 test('extractTasks handles malformed JSON gracefully', function () {
+    $eventBus = new EventBus;
     $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
@@ -130,6 +133,7 @@ test('extractTasks handles malformed JSON gracefully', function () {
 });
 
 test('planTask sends correct prompt and updates task manager', function () {
+    $eventBus = new EventBus;
     $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
@@ -185,6 +189,7 @@ test('planTask sends correct prompt and updates task manager', function () {
 });
 
 test('executeTask processes tool calls until completion', function () {
+    $eventBus = new EventBus;
     $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager(new NullLogger);
@@ -253,6 +258,7 @@ test('executeTask processes tool calls until completion', function () {
 });
 
 test('executeTask stops after max iterations', function () {
+    $eventBus = new EventBus;
     $executor = ToolExecutor::createWithDefaultTools();
 
     $taskManager = new TaskManager(new NullLogger);
@@ -310,6 +316,7 @@ test('executeTask stops after max iterations', function () {
 });
 
 test('generateTaskSummary creates meaningful summary', function () {
+    $eventBus = new EventBus;
     $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 
@@ -351,6 +358,7 @@ test('generateTaskSummary creates meaningful summary', function () {
 });
 
 test('conversation history is maintained', function () {
+    $eventBus = new EventBus;
     $executor = ToolExecutor::createWithDefaultTools();
     $taskManager = new TaskManager(new NullLogger);
 

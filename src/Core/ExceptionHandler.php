@@ -4,12 +4,17 @@ namespace HelgeSverre\Swarm\Core;
 
 use ErrorException;
 use Exception;
+use HelgeSverre\Swarm\Exceptions\ConfigurationException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 class ExceptionHandler
 {
     protected bool $debug;
+
+    protected $previousExceptionHandler = null;
+
+    protected $previousErrorHandler = null;
 
     public function __construct(
         protected readonly ?LoggerInterface $logger = null
@@ -37,15 +42,40 @@ class ExceptionHandler
      */
     public function register(): void
     {
-        set_exception_handler([$this, 'handle']);
+        // Store previous handlers
+        $this->previousExceptionHandler = set_exception_handler([$this, 'handle']);
 
         // Also handle errors as exceptions
-        set_error_handler(function ($severity, $message, $file, $line) {
+        $this->previousErrorHandler = set_error_handler(function ($severity, $message, $file, $line) {
             if (! (error_reporting() & $severity)) {
                 return false;
             }
             throw new ErrorException($message, 0, $severity, $file, $line);
         });
+    }
+
+    /**
+     * Restore previous exception and error handlers
+     */
+    public function unregister(): void
+    {
+        // Restore previous exception handler
+        if ($this->previousExceptionHandler !== null) {
+            set_exception_handler($this->previousExceptionHandler);
+            $this->previousExceptionHandler = null;
+        } else {
+            // If there was no previous handler, remove ours
+            restore_exception_handler();
+        }
+
+        // Restore previous error handler
+        if ($this->previousErrorHandler !== null) {
+            set_error_handler($this->previousErrorHandler);
+            $this->previousErrorHandler = null;
+        } else {
+            // If there was no previous handler, remove ours
+            restore_error_handler();
+        }
     }
 
     /**
@@ -134,6 +164,11 @@ class ExceptionHandler
      */
     protected function getExitCode(Throwable $e): int
     {
+        // Handle our custom configuration exceptions
+        if ($e instanceof ConfigurationException) {
+            return $e->getExitCode();
+        }
+
         // Configuration errors
         if (str_contains($e->getMessage(), 'API key') || str_contains($e->getMessage(), 'environment')) {
             return 2;

@@ -92,8 +92,8 @@ src/
 │   │   └── ScrollablePane.php     # Scrollable content panes
 │   ├── Terminal/         # Terminal utilities
 │   │   └── Ansi.php      # ANSI escape codes
-│   ├── StreamingAsyncProcessor.php    # Async streaming
-│   └── StreamingBackgroundProcessor.php # Background processing
+│   ├── WorkerProcess.php         # Worker process for child execution
+│   └── ProcessSpawner.php        # Spawns and manages child processes
 ├── Core/                  # Core functionality
 │   ├── ToolExecutor.php  # Executes tool calls
 │   ├── AbstractToolkit.php # Base toolkit class

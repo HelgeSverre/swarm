@@ -39,19 +39,18 @@ test('correct tools are selected for search operations', function () {
     file_put_contents($testDir . '/test2.txt', 'Regular text file');
     file_put_contents($testDir . '/test3.php', '<?php // Another PHP file');
 
-    // Test grep for finding files scenario
-    $result = $executor->dispatch('grep', [
+    // Test glob for finding files scenario
+    $result = $executor->dispatch('glob', [
         'pattern' => '*.php',
-        'directory' => $testDir,
-        'files_only' => true,
+        'path' => $testDir,
     ]);
     expect($result->isSuccess())->toBeTrue()
         ->and($result->getData()['count'])->toBe(2);
 
     // Test grep for searching content scenario
     $result = $executor->dispatch('grep', [
-        'search' => 'TODO',
-        'directory' => $testDir,
+        'pattern' => 'TODO',
+        'path' => $testDir,
     ]);
     expect($result->isSuccess())->toBeTrue()
         ->and($result->getData()['count'])->toBe(1);
@@ -107,11 +106,10 @@ test('tools handle edge cases correctly', function () {
 
     // Test grep with non-existent directory
     $result = $executor->dispatch('grep', [
-        'search' => 'test',
-        'directory' => '/non/existent/directory',
+        'pattern' => 'test',
+        'path' => '/non/existent/directory',
     ]);
-    expect($result->isSuccess())->toBeTrue()
-        ->and($result->getData()['count'])->toBe(0);
+    expect($result->isSuccess())->toBeFalse(); // Should fail with invalid path
 });
 
 test('tool schemas contain required fields', function () {
@@ -140,7 +138,11 @@ test('tool schemas contain required fields', function () {
                 break;
             case 'grep':
                 expect($schema['parameters']['properties'])
-                    ->toHaveKeys(['search', 'pattern', 'directory']);
+                    ->toHaveKeys(['pattern', 'path', 'include']);
+                break;
+            case 'glob':
+                expect($schema['parameters']['properties'])
+                    ->toHaveKeys(['pattern', 'path']);
                 break;
         }
     }

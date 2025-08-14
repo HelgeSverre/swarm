@@ -88,11 +88,10 @@ test('search tools work with function parameters', function () {
     file_put_contents($testDir . '/test.php', '<?php echo "test";');
     file_put_contents($testDir . '/test.txt', 'test content');
 
-    // Test grep for finding files
-    $result = $executor->dispatch('grep', [
+    // Test glob for finding files
+    $result = $executor->dispatch('glob', [
         'pattern' => '*.php',
-        'directory' => $testDir,
-        'files_only' => true,
+        'path' => $testDir,
     ]);
 
     expect($result->isSuccess())->toBeTrue()
@@ -100,8 +99,8 @@ test('search tools work with function parameters', function () {
 
     // Test grep for searching content
     $result = $executor->dispatch('grep', [
-        'search' => 'echo',
-        'directory' => $testDir,
+        'pattern' => 'echo',
+        'path' => $testDir,
     ]);
 
     expect($result->isSuccess())->toBeTrue()

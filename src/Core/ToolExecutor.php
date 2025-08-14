@@ -5,7 +5,10 @@ namespace HelgeSverre\Swarm\Core;
 use Exception;
 use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Contracts\Toolkit;
+use HelgeSverre\Swarm\Events\ToolCompletedEvent;
+use HelgeSverre\Swarm\Events\ToolStartedEvent;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
+use HelgeSverre\Swarm\Tools\Glob;
 use HelgeSverre\Swarm\Tools\Grep;
 use HelgeSverre\Swarm\Tools\Playwright;
 use HelgeSverre\Swarm\Tools\ReadFile;
@@ -13,18 +16,19 @@ use HelgeSverre\Swarm\Tools\Tavily\TavilyToolkit;
 use HelgeSverre\Swarm\Tools\Terminal;
 use HelgeSverre\Swarm\Tools\WebFetch;
 use HelgeSverre\Swarm\Tools\WriteFile;
+use HelgeSverre\Swarm\Traits\EventAware;
+use HelgeSverre\Swarm\Traits\Loggable;
 use Psr\Log\LoggerInterface;
 
 class ToolExecutor
 {
+    use EventAware, Loggable;
+
     protected array $tools = [];
 
     protected array $toolInstances = [];
 
     protected array $executionLog = [];
-
-    /** @var callable|null */
-    protected $progressCallback = null;
 
     public function __construct(
         protected readonly ?LoggerInterface $logger = null
@@ -41,6 +45,7 @@ class ToolExecutor
         $executor->register(new ReadFile);
         $executor->register(new WriteFile);
         $executor->register(new Terminal);
+        $executor->register(new Glob);
         $executor->register(new Grep);
         $executor->register(new WebFetch);
         $executor->register(new Playwright);
@@ -61,16 +66,11 @@ class ToolExecutor
     /**
      * Set a callback to report progress during tool execution
      */
-    public function setProgressCallback(callable $callback): void
-    {
-        $this->progressCallback = $callback;
-    }
-
     public function registerTool(string $name, callable $handler): self
     {
         $this->tools[$name] = $handler;
 
-        $this->logger?->debug('Tool registered', ['tool' => $name]);
+        $this->logger?->debug('Closure based Tool registered', ['tool' => $name]);
 
         return $this;
     }
@@ -167,18 +167,15 @@ class ToolExecutor
         ]);
 
         try {
-            // Report progress if callback is set
-            if ($this->progressCallback) {
-                call_user_func($this->progressCallback, $tool, $params, 'started');
-            }
+            // Emit tool started event
+            $this->emit(new ToolStartedEvent($tool, $params));
 
             $response = $this->tools[$tool]($params);
             $duration = microtime(true) - $startTime;
 
-            // Report completion if callback is set
-            if ($this->progressCallback) {
-                call_user_func($this->progressCallback, $tool, $params, 'completed');
-            }
+            // Emit tool completed event
+            $this->emit(new ToolCompletedEvent($tool, $params, $response, $duration));
+
             $this->logExecution($logId, $tool, $params, 'completed', $response, $duration);
 
             $this->logger?->info('Tool dispatch completed', [

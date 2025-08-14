@@ -111,6 +111,6 @@ test('search tool parameter mapping works with router dependency', function () {
         }
     }
 
-    expect($searchSchema['parameters']['properties'])->toHaveKeys(['search', 'pattern', 'directory', 'case_sensitive'])
-        ->and($searchSchema['parameters']['required'])->toBe([]);
+    expect($searchSchema['parameters']['properties'])->toHaveKeys(['pattern', 'path', 'include'])
+        ->and($searchSchema['parameters']['required'])->toBe(['pattern']);
 });

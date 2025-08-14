@@ -2,19 +2,27 @@
 <?php
 
 /**
- * Streaming background process entry point for async agent execution
+ * Swarm Worker - Background process for async agent execution
  *
- * This script is launched by StreamingBackgroundProcessor to handle requests
+ * This script is launched by ProcessSpawner to handle requests
  * in a separate process while streaming progress updates via stdout.
  *
- * Usage: php cli-streaming-process.php <base64_encoded_input>
+ * Usage: php worker <base64_encoded_input> [timeout]
  */
 
-use HelgeSverre\Swarm\CLI\StreamingAsyncProcessor;
+// Get the bootstrapped application
+try {
+    $app = require dirname(__DIR__) . '/bootstrap/app.php';
+} catch (HelgeSverre\Swarm\Exceptions\ConfigurationException $e) {
+    fwrite(STDERR, "Configuration Error: " . $e->getMessage() . "\n");
+    exit($e->getExitCode());
+}
+
+use HelgeSverre\Swarm\CLI\Process\WorkerProcess;
 
 // Check command line arguments
 if ($argc < 2) {
-    fwrite(STDERR, "Usage: php cli-streaming-process.php <base64_encoded_input> [timeout]\n");
+    fwrite(STDERR, "Usage: php worker <base64_encoded_input> [timeout]\n");
     exit(1);
 }
 
@@ -29,12 +37,9 @@ if ($input === false) {
     exit(1);
 }
 
-// Bootstrap the application
-require_once __DIR__ . '/vendor/autoload.php';
-
 try {
     // Process the request with streaming updates
-    StreamingAsyncProcessor::processRequest($input, $timeout);
+    WorkerProcess::processRequest($input, $timeout);
     exit(0);
 } catch (Exception $e) {
     // Write error to stderr

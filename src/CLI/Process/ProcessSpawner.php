@@ -1,15 +1,15 @@
 <?php
 
-namespace HelgeSverre\Swarm\CLI;
+namespace HelgeSverre\Swarm\CLI\Process;
 
 use Exception;
 use Psr\Log\LoggerInterface;
 
 /**
- * Enhanced background processor using pipe-based communication
- * for real-time progress updates instead of file-based IPC
+ * Process spawner that manages child processes using pipe-based communication
+ * for real-time progress updates
  */
-class StreamingBackgroundProcessor
+class ProcessSpawner
 {
     /** @var resource|false|null */
     protected $process = null;
@@ -40,7 +40,7 @@ class StreamingBackgroundProcessor
 
         // Build command to run AsyncProcessor
         $phpBinary = PHP_BINARY;
-        $scriptPath = dirname(__DIR__, 2) . '/cli-streaming-process.php';
+        $scriptPath = dirname(__DIR__, 2) . '/bin/worker';
         $encodedInput = base64_encode($input);
 
         // Get subprocess timeout from environment

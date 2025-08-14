@@ -24,11 +24,13 @@
     "php": "^8.3",
     "ext-json": "*",
     "ext-mbstring": "*",
+    "ext-pcntl": "*",
     "crwlr/html-2-text": "^0.1",
     "laravel/prompts": "^0.3.6",
     "monolog/monolog": "^3.0",
     "nyholm/psr7": "^1.8",
     "openai-php/client": "^0.14.0",
+    "php-tui/term": "^0.3.4",
     "psy/psysh": "^0.12.9",
     "spatie/async": "^1.7",
     "spatie/pdf-to-text": "^1.54",
@@ -58,10 +60,10 @@
     }
   },
   "bin": [
-    "bin/swarm"
+    "bin/cli"
   ],
   "scripts": {
-    "swarm": "@php cli.php",
+    "swarm": "@php bin/cli",
     "test": "vendor/bin/pest --no-coverage --exclude-group=integration",
     "test:all": "vendor/bin/pest --no-coverage",
     "test:integration": "vendor/bin/pest --no-coverage --group=integration",

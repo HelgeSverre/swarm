@@ -1,6 +1,6 @@
 <?php
 
-// tmp/loop.php
+// examples/loop.php
 
 require 'vendor/autoload.php';
 

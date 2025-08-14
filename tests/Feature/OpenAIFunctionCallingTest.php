@@ -39,7 +39,7 @@ test('agent extracts tasks using function calling', function () {
         $taskManager,
         $client,
         null,
-        'gpt-4',
+        'gpt-4.1-nano',
         0.7
     );
 
@@ -58,7 +58,7 @@ test('agent extracts tasks using function calling', function () {
     // Assert the request was sent
     $client->chat()->assertSent(function ($method, $parameters) {
         return $method === 'create'
-            && $parameters['model'] === 'gpt-4'
+            && $parameters['model'] === 'gpt-4.1-nano'
             && isset($parameters['functions'])
             && count($parameters['functions']) === 1
             && $parameters['functions'][0]['name'] === 'extract_tasks';
@@ -109,7 +109,7 @@ test('agent executes task with function calling', function () {
         $taskManager,
         $client,
         null,
-        'gpt-4',
+        'gpt-4.1-nano',
         0.7
     );
 
@@ -145,9 +145,6 @@ test('agent executes task with function calling', function () {
 });
 
 test('agent handles no function call response', function () {
-    $executor = new ToolExecutor;
-    $taskManager = new TaskManager;
-
     // Create fake OpenAI client with regular response (no function call)
     $client = new ClientFake([
         CreateResponse::fake([
@@ -163,11 +160,11 @@ test('agent handles no function call response', function () {
     ]);
 
     $agent = new CodingAgent(
-        $executor,
-        $taskManager,
+        new ToolExecutor,
+        new TaskManager,
         $client,
         null,
-        'gpt-4',
+        'gpt-4.1-nano',
         0.7
     );
 
@@ -209,7 +206,7 @@ test('agent correctly passes tool schemas to OpenAI', function () {
         $taskManager,
         $client,
         null,
-        'gpt-4',
+        'gpt-4.1-nano',
         0.7
     );
 

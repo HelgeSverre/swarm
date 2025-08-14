@@ -1,21 +1,19 @@
 <?php
 
-namespace HelgeSverre\Swarm\CLI;
+namespace HelgeSverre\Swarm\CLI\Process;
 
-use Dotenv\Dotenv;
 use Exception;
 use HelgeSverre\Swarm\Agent\CodingAgent;
 use HelgeSverre\Swarm\Core\ToolExecutor;
+use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Task\TaskManager;
-use Monolog\Handler\StreamHandler;
-use Monolog\Logger;
 use OpenAI;
 
 /**
- * Async processor that streams progress updates via stdout
- * instead of writing to a status file
+ * Worker process that runs in a child process and streams progress updates
+ * via stdout to the parent process
  */
-class StreamingAsyncProcessor
+class WorkerProcess
 {
     /**
      * Process a request asynchronously with streaming updates
@@ -57,29 +55,11 @@ class StreamingAsyncProcessor
                 'message' => 'Starting request processing...',
             ]);
 
-            // Load environment
-            $envPath = dirname(__DIR__, 2) . '/.env';
-            if (file_exists($envPath)) {
-                $dotenv = Dotenv::createImmutable(dirname(__DIR__, 2));
-                $dotenv->load();
-            }
+            // Create Application instance for bootstrapping
+            $app = new \HelgeSverre\Swarm\Core\Application(dirname(__DIR__, 2));
 
-            // Setup logging to file only (not stderr)
-            $logger = null;
-            if ($_ENV['LOG_ENABLED'] ?? false) {
-                $logPath = $_ENV['LOG_PATH'] ?? 'logs';
-                if (! is_absolute_path($logPath)) {
-                    $logPath = dirname(__DIR__, 2) . '/' . $logPath;
-                }
-
-                if (! is_dir($logPath)) {
-                    mkdir($logPath, 0755, true);
-                }
-
-                $logFile = $logPath . '/swarm-' . date('Y-m-d') . '.log';
-                $logger = new Logger('swarm');
-                $logger->pushHandler(new StreamHandler($logFile, Logger::DEBUG));
-            }
+            // Get logger from Application
+            $logger = $app->logger();
 
             // Initialize services
             self::sendUpdate([
@@ -88,11 +68,14 @@ class StreamingAsyncProcessor
                 'message' => 'Setting up tools and services...',
             ]);
 
+            // Create EventBus for the tools and agent
+            $eventBus = new EventBus;
+
             $toolExecutor = ToolExecutor::createWithDefaultTools($logger);
             $taskManager = new TaskManager($logger);
 
-            // Setup OpenAI client
-            $apiKey = $_ENV['OPENAI_API_KEY'] ?? null;
+            // Setup OpenAI client using Application config
+            $apiKey = $app->config('openai.api_key');
             if (! $apiKey) {
                 throw new Exception('OpenAI API key not found in environment');
             }
@@ -105,8 +88,8 @@ class StreamingAsyncProcessor
                 taskManager: $taskManager,
                 llmClient: $openAI,
                 logger: $logger,
-                model: $_ENV['OPENAI_MODEL'] ?? 'gpt-4.1-mini',
-                temperature: (float) ($_ENV['OPENAI_TEMPERATURE'] ?? 0.7)
+                model: $app->config('openai.model', 'gpt-4o-mini'),
+                temperature: $app->config('openai.temperature', 0.7)
             );
 
             // Load conversation history from state file if it exists
@@ -124,7 +107,7 @@ class StreamingAsyncProcessor
                 }
             }
 
-            // Set progress callback to stream updates
+            // Subscribe to EventBus events for progress tracking
             // Track last heartbeat time and last state sync
             $lastHeartbeat = time();
             $heartbeatInterval = (int) ($_ENV['SWARM_HEARTBEAT_INTERVAL'] ?? 30);
@@ -136,84 +119,126 @@ class StreamingAsyncProcessor
             $lastClassification = null;
             $activePlan = null;
 
-            $agent->setProgressCallback(function (string $operation, array $details) use (&$lastHeartbeat, &$lastStateSync, $heartbeatInterval, $stateSyncThrottle, $agent, $toolExecutor, &$operationStartTimes, &$lastClassification, &$activePlan) {
-                // Track operation start time
-                if (! isset($operationStartTimes[$operation])) {
-                    $operationStartTimes[$operation] = microtime(true);
-                }
+            // Subscribe to ProcessingEvent
+            $eventBus->on(\HelgeSverre\Swarm\Events\ProcessingEvent::class,
+                function (\HelgeSverre\Swarm\Events\ProcessingEvent $event) use (
+                    &$lastHeartbeat,
+                    &$lastStateSync,
+                    $heartbeatInterval,
+                    $stateSyncThrottle,
+                    $agent,
+                    $toolExecutor,
+                    &$operationStartTimes,
+                    &$lastClassification,
+                    &$activePlan
+                ) {
+                    $operation = $event->operation;
+                    $details = $event->details;
 
-                // Store classification results
-                if ($operation === 'classifying' && ($details['phase'] ?? '') === 'classification_complete') {
-                    $lastClassification = $details;
-                }
+                    // Track operation start time
+                    if (! isset($operationStartTimes[$operation])) {
+                        $operationStartTimes[$operation] = microtime(true);
+                    }
 
-                // Store active plan
-                if ($operation === 'planning_task' && ($details['phase'] ?? '') === 'plan_complete') {
-                    $activePlan = $details;
-                }
+                    // Store classification results
+                    if ($operation === 'classifying' && ($details['phase'] ?? '') === 'classification_complete') {
+                        $lastClassification = $details;
+                    }
 
-                // Create detailed message based on operation and phase
-                $message = self::getDetailedMessage($operation, $details);
+                    // Store active plan
+                    if ($operation === 'planning_task' && ($details['phase'] ?? '') === 'plan_complete') {
+                        $activePlan = $details;
+                    }
 
-                // Enhanced progress details
-                $enrichedDetails = array_merge($details, [
-                    'timestamp' => microtime(true),
-                    'memory_usage' => memory_get_usage(true),
-                    'operation_id' => uniqid($operation . '_'),
-                ]);
+                    // Create detailed message based on operation and phase
+                    $message = self::getDetailedMessage($operation, $details);
 
-                self::sendUpdate([
-                    'type' => 'progress',
-                    'operation' => $operation,
-                    'message' => $message,
-                    'details' => $enrichedDetails,
-                    'context' => [
-                        'conversation_length' => count($agent->getConversationHistory()),
-                        'task_queue_size' => count($agent->getTaskManager()->getTasks()),
-                        'tools_available' => count($toolExecutor->getRegisteredTools()),
-                    ],
-                ]);
+                    // Enhanced progress details
+                    $enrichedDetails = array_merge($details, [
+                        'timestamp' => microtime(true),
+                        'memory_usage' => memory_get_usage(true),
+                        'operation_id' => uniqid($operation . '_'),
+                    ]);
 
-                // Send comprehensive state sync with throttling
-                $now = microtime(true);
-                if ($now - $lastStateSync > $stateSyncThrottle) {
-                    $status = $agent->getStatus();
                     self::sendUpdate([
-                        'type' => 'state_sync',
-                        'data' => [
-                            'agent_state' => [
-                                'operation' => $operation,
-                                'phase' => $details['phase'] ?? 'processing',
-                                'details' => $details,
-                                'start_time' => $operationStartTimes[$operation] ?? microtime(true),
-                            ],
-                            'tasks' => $status['tasks'],
-                            'current_task' => $status['current_task'],
-                            'conversation_history' => $agent->getConversationHistory(),
-                            'tool_log' => array_slice($toolExecutor->getExecutionLog(), -10), // Last 10 tool executions
-                            'operation' => $operation,
-                            'operation_details' => $details,
-                            'decision_context' => [
-                                'last_classification' => $lastClassification,
-                                'active_plan' => $activePlan,
-                                'pending_operations' => array_keys($operationStartTimes),
-                            ],
+                        'type' => 'progress',
+                        'operation' => $operation,
+                        'message' => $message,
+                        'details' => $enrichedDetails,
+                        'context' => [
+                            'conversation_length' => count($agent->getConversationHistory()),
+                            'task_queue_size' => count($agent->getTaskManager()->getTasks()),
+                            'tools_available' => count($toolExecutor->getRegisteredTools()),
                         ],
                     ]);
-                    $lastStateSync = $now;
-                }
 
-                // Send heartbeat if enough time has passed
-                $now = time();
-                if ($now - $lastHeartbeat >= $heartbeatInterval) {
-                    self::sendUpdate([
-                        'type' => 'heartbeat',
-                        'message' => 'Process is still running...',
-                        'elapsed' => $now - $lastHeartbeat,
-                    ]);
-                    $lastHeartbeat = $now;
+                    // Send comprehensive state sync with throttling
+                    $now = microtime(true);
+                    if ($now - $lastStateSync > $stateSyncThrottle) {
+                        $status = $agent->getStatus();
+                        self::sendUpdate([
+                            'type' => 'state_sync',
+                            'data' => [
+                                'agent_state' => [
+                                    'operation' => $operation,
+                                    'phase' => $details['phase'] ?? 'processing',
+                                    'details' => $details,
+                                    'start_time' => $operationStartTimes[$operation] ?? microtime(true),
+                                ],
+                                'tasks' => $status['tasks'],
+                                'current_task' => $status['current_task'],
+                                'conversation_history' => $agent->getConversationHistory(),
+                                'tool_log' => array_slice($toolExecutor->getExecutionLog(), -10), // Last 10 tool executions
+                                'operation' => $operation,
+                                'operation_details' => $details,
+                                'decision_context' => [
+                                    'last_classification' => $lastClassification,
+                                    'active_plan' => $activePlan,
+                                    'pending_operations' => array_keys($operationStartTimes),
+                                ],
+                            ],
+                        ]);
+                        $lastStateSync = $now;
+                    }
+
+                    // Send heartbeat if enough time has passed
+                    $now = time();
+                    if ($now - $lastHeartbeat >= $heartbeatInterval) {
+                        self::sendUpdate([
+                            'type' => 'heartbeat',
+                            'message' => 'Process is still running...',
+                            'elapsed' => $now - $lastHeartbeat,
+                        ]);
+                        $lastHeartbeat = $now;
+                    }
                 }
-            });
+            );
+
+            // Subscribe to ToolStartedEvent
+            $eventBus->on(\HelgeSverre\Swarm\Events\ToolStartedEvent::class,
+                function (\HelgeSverre\Swarm\Events\ToolStartedEvent $event) {
+                    self::sendUpdate([
+                        'type' => 'tool_started',
+                        'tool' => $event->tool,
+                        'params' => $event->params,
+                        'message' => "Starting tool: {$event->tool}",
+                    ]);
+                }
+            );
+
+            // Subscribe to ToolCompletedEvent
+            $eventBus->on(\HelgeSverre\Swarm\Events\ToolCompletedEvent::class,
+                function (\HelgeSverre\Swarm\Events\ToolCompletedEvent $event) {
+                    self::sendUpdate([
+                        'type' => 'tool_completed',
+                        'tool' => $event->tool,
+                        'params' => $event->params,
+                        'success' => $event->result->isSuccess(),
+                        'duration' => $event->duration,
+                        'message' => "Tool {$event->tool} completed" . ($event->result->isSuccess() ? ' successfully' : ' with errors'),
+                    ]);
+                }
+            );
 
             $logger?->info('Processing user request (streaming)', ['input' => $input]);
 
@@ -312,13 +337,5 @@ class StreamingAsyncProcessor
             ob_flush();
         }
         flush();
-    }
-}
-
-// Helper function
-if (! function_exists('is_absolute_path')) {
-    function is_absolute_path(string $path): bool
-    {
-        return $path[0] === '/' || preg_match('/^[A-Z]:\\\\/i', $path);
     }
 }

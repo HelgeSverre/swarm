@@ -168,7 +168,7 @@ Ansi::softReset();   // Soft reset (\033[!p)
 Run the demo script to see all features in action:
 
 ```bash
-php demo_terminal_features.php
+php examples/terminal-demo.php
 ```
 
 ## 🔄 Backward Compatibility

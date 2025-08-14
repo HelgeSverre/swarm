@@ -2,40 +2,34 @@
 
 namespace HelgeSverre\Swarm\Agent;
 
-use Closure;
 use Exception;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Enums\Agent\RequestType;
+use HelgeSverre\Swarm\Events\ProcessingEvent;
 use HelgeSverre\Swarm\Prompts\PromptTemplates;
 use HelgeSverre\Swarm\Task\Task;
 use HelgeSverre\Swarm\Task\TaskManager;
 use HelgeSverre\Swarm\Task\TaskStatus;
+use HelgeSverre\Swarm\Traits\EventAware;
+use HelgeSverre\Swarm\Traits\Loggable;
 use OpenAI;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 class CodingAgent
 {
-    protected array $conversationHistory = [];
+    use EventAware, Loggable;
 
-    protected ?Closure $progressCallback = null;
+    protected array $conversationHistory = [];
 
     public function __construct(
         protected readonly ToolExecutor $toolExecutor,
         protected readonly TaskManager $taskManager,
         protected readonly OpenAI\Contracts\ClientContract $llmClient,
         protected readonly ?LoggerInterface $logger = null,
-        protected readonly string $model = 'gpt-4',
-        protected readonly float $temperature = 0.7
+        protected readonly string $model = 'gpt-4.1',
+        protected readonly float $temperature = 0.3
     ) {}
-
-    /**
-     * Set a callback to report progress during processing
-     */
-    public function setProgressCallback(callable $callback): void
-    {
-        $this->progressCallback = $callback;
-    }
 
     public function processRequest(string $userInput): AgentResponse
     {
@@ -199,9 +193,7 @@ class CodingAgent
      */
     protected function reportProgress(string $operation, array $details = []): void
     {
-        if ($this->progressCallback) {
-            call_user_func($this->progressCallback, $operation, $details);
-        }
+        $this->emit(new ProcessingEvent($operation, $details, $details['phase'] ?? null));
     }
 
     /**

@@ -89,6 +89,8 @@ class Ansi
 
     public const string BOX_V = '│';
 
+    public const string BOX_V_HEAVY = '┃';
+
     public const string BOX_TL = '┌';
 
     public const string BOX_TR = '┐';
