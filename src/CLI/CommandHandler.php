@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\Swarm\CLI;
 
 use Exception;
+use HelgeSverre\Swarm\Core\PathChecker;
 use HelgeSverre\Swarm\Traits\Loggable;
 use RuntimeException;
 
@@ -25,8 +26,14 @@ class CommandHandler
      */
     private ?CommandResult $lastResult = null;
 
-    public function __construct()
+    private ?PathChecker $pathChecker = null;
+
+    private ?StateManager $stateManager = null;
+
+    public function __construct(?PathChecker $pathChecker = null, ?StateManager $stateManager = null)
     {
+        $this->pathChecker = $pathChecker;
+        $this->stateManager = $stateManager;
         $this->registerDefaultCommands();
     }
 
@@ -101,6 +108,90 @@ class CommandHandler
     }
 
     /**
+     * Handle directory addition with path validation
+     */
+    public function handleAddDirectory(string $path): CommandResult
+    {
+        if (! $this->pathChecker || ! $this->stateManager) {
+            return new CommandResult(
+                handled: true,
+                action: 'error',
+                data: ['error' => 'Path management not available']
+            );
+        }
+
+        // Expand user path if needed
+        if (str_starts_with($path, '~')) {
+            $path = str_replace('~', $_SERVER['HOME'] ?? getenv('HOME'), $path);
+        }
+
+        if (! is_dir($path)) {
+            return new CommandResult(
+                handled: true,
+                action: 'error',
+                data: ['error' => "Directory does not exist: {$path}"]
+            );
+        }
+
+        if ($this->pathChecker->addAllowedPath($path)) {
+            // Save updated state
+            $state = $this->stateManager->load();
+            $state['allowed_directories'] = $this->pathChecker->getAllowedPaths();
+            $this->stateManager->save($state);
+
+            return new CommandResult(
+                handled: true,
+                action: 'show_help',
+                data: ['message' => "Directory added to allow-list: {$path}"]
+            );
+        }
+
+        return new CommandResult(
+            handled: true,
+            action: 'error',
+            data: ['error' => "Failed to add directory: {$path}"]
+        );
+    }
+
+    /**
+     * Handle directory removal
+     */
+    public function handleRemoveDirectory(string $path): CommandResult
+    {
+        if (! $this->pathChecker || ! $this->stateManager) {
+            return new CommandResult(
+                handled: true,
+                action: 'error',
+                data: ['error' => 'Path management not available']
+            );
+        }
+
+        // Expand user path if needed
+        if (str_starts_with($path, '~')) {
+            $path = str_replace('~', $_SERVER['HOME'] ?? getenv('HOME'), $path);
+        }
+
+        if ($this->pathChecker->removeAllowedPath($path)) {
+            // Save updated state
+            $state = $this->stateManager->load();
+            $state['allowed_directories'] = $this->pathChecker->getAllowedPaths();
+            $this->stateManager->save($state);
+
+            return new CommandResult(
+                handled: true,
+                action: 'show_help',
+                data: ['message' => "Directory removed from allow-list: {$path}"]
+            );
+        }
+
+        return new CommandResult(
+            handled: true,
+            action: 'error',
+            data: ['error' => "Failed to remove directory (not in allow-list): {$path}"]
+        );
+    }
+
+    /**
      * Register default built-in commands
      */
     protected function registerDefaultCommands(): void
@@ -109,7 +200,7 @@ class CommandHandler
             return new CommandResult(
                 handled: true,
                 action: 'show_help',
-                data: ['message' => 'Commands: exit, quit, clear, save, clear-state, help, test-error']
+                data: ['message' => 'Commands: exit, quit, clear, save, clear-state, help, test-error, add-dir, list-dirs, remove-dir']
             );
         });
 
@@ -156,6 +247,77 @@ class CommandHandler
         $this->registerCommand('test-error', function () {
             $this->logInfo('Test error command invoked');
             throw new RuntimeException('Test exception to verify error logging');
+        });
+
+        // Allow-list management commands
+        $this->registerCommand('add-dir', function () {
+            if (! $this->pathChecker || ! $this->stateManager) {
+                return new CommandResult(
+                    handled: true,
+                    action: 'error',
+                    data: ['error' => 'Path management not available']
+                );
+            }
+
+            return new CommandResult(
+                handled: true,
+                action: 'prompt_for_path',
+                data: ['message' => 'Enter directory path to add to allow-list:']
+            );
+        });
+
+        $this->registerCommand('list-dirs', function () {
+            if (! $this->pathChecker) {
+                return new CommandResult(
+                    handled: true,
+                    action: 'error',
+                    data: ['error' => 'Path management not available']
+                );
+            }
+
+            $projectPath = $this->pathChecker->getProjectPath();
+            $allowedPaths = $this->pathChecker->getAllowedPaths();
+
+            $message = "Project directory: {$projectPath}\n";
+            if (empty($allowedPaths)) {
+                $message .= 'No additional allowed directories.';
+            } else {
+                $message .= "Allowed directories:\n" . implode("\n", array_map(fn ($p) => "  - {$p}", $allowedPaths));
+            }
+
+            return new CommandResult(
+                handled: true,
+                action: 'show_help',
+                data: ['message' => $message]
+            );
+        });
+
+        $this->registerCommand('remove-dir', function () {
+            if (! $this->pathChecker || ! $this->stateManager) {
+                return new CommandResult(
+                    handled: true,
+                    action: 'error',
+                    data: ['error' => 'Path management not available']
+                );
+            }
+
+            $allowedPaths = $this->pathChecker->getAllowedPaths();
+            if (empty($allowedPaths)) {
+                return new CommandResult(
+                    handled: true,
+                    action: 'show_help',
+                    data: ['message' => 'No allowed directories to remove.']
+                );
+            }
+
+            return new CommandResult(
+                handled: true,
+                action: 'prompt_for_path_removal',
+                data: [
+                    'message' => 'Enter directory path to remove from allow-list:',
+                    'available_paths' => $allowedPaths,
+                ]
+            );
         });
     }
 }

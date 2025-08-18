@@ -9,15 +9,17 @@ AI-powered coding agent written in PHP that helps with development tasks through
 - **Smart Tool Usage**: Only uses file operations when necessary, returns markdown snippets for demonstrations
 - **Structured Task Planning**: Uses OpenAI's structured outputs for reliable task execution
 - **Interactive Terminal UI**: Beautiful TUI with real-time updates, activity tracking, and scrollable panes
+- **Path Security System**: Validates file access with project directory and allow-list protection
 - **Extensible Tool System**: Modular architecture with toolkit support for adding new capabilities
 - **Type-safe Task Management**: Immutable Task objects with proper state transitions
 - **Activity Tracking System**: Visual activity feed showing conversations, tool calls, and notifications
 - **Web Integration**: Fetch web content and search the web with Tavily integration
-- **Browser Automation**: Playwright integration for browser-based tasks
 - **Streaming Processing**: Async and background processing for long-running operations
 - **Multiple AI Models**: Support for OpenAI and Mistral models
 - **Centralized Prompt Templates**: Consistent prompts across all interactions
 - **Progress Reporting**: Real-time updates during task execution
+- **Process Management**: Advanced process spawning and worker management for parallel tasks
+- **Event System**: Event-driven architecture with ProcessComplete and ProcessProgress events
 
 ## Requirements
 
@@ -80,23 +82,20 @@ src/
 │   └── AgentResponse.php # Response wrapper
 ├── CLI/                   # Command-line interface
 │   ├── Swarm.php         # Main CLI entry point
-│   ├── UI.php            # Terminal UI rendering
-│   ├── InputHandler.php  # Readline input handling
-│   ├── Activity/         # Activity tracking system
-│   │   ├── ActivityEntry.php      # Base activity class
-│   │   ├── ConversationEntry.php  # Conversation messages
-│   │   ├── NotificationEntry.php  # System notifications
-│   │   └── ToolCallEntry.php      # Tool execution tracking
-│   ├── Layout/           # Layout management
-│   │   ├── PaneLayout.php         # Pane layout manager
-│   │   └── ScrollablePane.php     # Scrollable content panes
-│   ├── Terminal/         # Terminal utilities
-│   │   └── Ansi.php      # ANSI escape codes
-│   ├── WorkerProcess.php         # Worker process for child execution
-│   └── ProcessSpawner.php        # Spawns and manages child processes
+│   ├── StateManager.php  # State persistence and management
+│   ├── CommandHandler.php # Command processing
+│   ├── Process/          # Process management
+│   │   ├── ProcessManager.php    # Process lifecycle management
+│   │   ├── ProcessSpawner.php    # Process spawning
+│   │   └── WorkerProcess.php     # Worker process implementation
+│   └── Terminal/         # Terminal UI components
+│       └── FullTerminalUI.php    # Full-screen terminal interface
 ├── Core/                  # Core functionality
 │   ├── ToolExecutor.php  # Executes tool calls
 │   ├── AbstractToolkit.php # Base toolkit class
+│   ├── PathChecker.php   # Path validation and security
+│   ├── Container.php     # Dependency injection container
+│   ├── Application.php   # Application bootstrap
 │   ├── ExceptionHandler.php # Global exception handling
 │   └── ToolResponse.php  # Tool response wrapper
 ├── Enums/                 # Type-safe enumerations
@@ -112,8 +111,12 @@ src/
 │   └── Core/             # Core enums
 │       ├── LogLevel.php
 │       └── ToolStatus.php
+├── Events/               # Event system
+│   ├── ProcessCompleteEvent.php  # Process completion events
+│   └── ProcessProgressEvent.php  # Process progress tracking
 ├── Exceptions/           # Custom exceptions
-│   └── ToolNotFoundException.php
+│   ├── ToolNotFoundException.php
+│   └── PathNotAllowedException.php # Path security violations
 ├── Prompts/              # Prompt management
 │   └── PromptTemplates.php # Centralized prompt templates
 ├── Task/                 # Task management
@@ -121,12 +124,12 @@ src/
 │   ├── Task.php         # Immutable task value object
 │   └── TaskStatus.php   # Task status enum
 ├── Tools/                # Tool implementations
-│   ├── ReadFile.php     # File reading
-│   ├── WriteFile.php    # File writing
+│   ├── ReadFile.php     # File reading with path validation
+│   ├── WriteFile.php    # File writing with path validation
 │   ├── Grep.php         # Pattern searching in files
+│   ├── Glob.php         # File pattern matching
 │   ├── Terminal.php     # Shell command execution
 │   ├── WebFetch.php     # Web content fetching
-│   ├── Playwright.php   # Browser automation
 │   └── Tavily/          # Tavily integration
 │       ├── TavilySearchTool.php  # Web search
 │       ├── TavilyExtractTool.php # Content extraction
@@ -166,10 +169,13 @@ src/
 ## Development
 
 ```bash
-# Run tests
+# Run tests (236 tests, 1239 assertions)
 composer test
 
-# Code formatting
+# Run specific test file
+./vendor/bin/pest tests/Unit/Core/PathCheckerTest.php
+
+# Code formatting (using Laravel Pint)
 composer format
 
 # Static analysis
@@ -178,6 +184,15 @@ composer check
 # Run test agent
 php test_agent.php
 ```
+
+### Test Coverage
+The project has comprehensive test coverage including:
+- Unit tests for all core components
+- Feature tests for integration scenarios
+- Integration tests with real API calls
+- Path security validation tests
+- Task management lifecycle tests
+- Tool execution and schema validation
 
 ## Configuration
 
@@ -253,14 +268,22 @@ Tools are registered with schemas for OpenAI function calling:
 - Easy to add new tools by implementing the interface
 
 Available tools:
-- **ReadFile**: Read contents of files with line numbers
-- **WriteFile**: Create or overwrite files with content
+- **ReadFile**: Read contents of files with line numbers and path validation
+- **WriteFile**: Create or overwrite files with content and path validation
 - **Grep**: Search for patterns in files using regular expressions
+- **Glob**: Find files matching glob patterns
 - **Terminal**: Execute shell commands with timeout control
 - **WebFetch**: Fetch and parse web content
-- **Playwright**: Automate browser interactions and testing
 - **TavilySearch**: Search the web for information
 - **TavilyExtract**: Extract structured data from web pages
+
+### Path Security System
+The PathChecker class provides secure file access control:
+- **Project Directory Protection**: Files are restricted to the project directory by default
+- **Allow-list Support**: Additional directories can be explicitly allowed
+- **Path Traversal Prevention**: Blocks attempts to access parent directories
+- **Symlink Validation**: Follows symlinks and validates target paths
+- **Real-time Validation**: All file operations are validated before execution
 
 ### Prompt Management
 All prompts are centralized in `PromptTemplates` class:

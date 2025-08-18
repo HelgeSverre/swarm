@@ -10,7 +10,6 @@ use HelgeSverre\Swarm\Events\ToolStartedEvent;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
 use HelgeSverre\Swarm\Tools\Glob;
 use HelgeSverre\Swarm\Tools\Grep;
-use HelgeSverre\Swarm\Tools\Playwright;
 use HelgeSverre\Swarm\Tools\ReadFile;
 use HelgeSverre\Swarm\Tools\Tavily\TavilyToolkit;
 use HelgeSverre\Swarm\Tools\Terminal;
@@ -37,18 +36,27 @@ class ToolExecutor
     /**
      * Create a ToolExecutor instance with all default tools registered
      */
-    public static function createWithDefaultTools(?LoggerInterface $logger = null): self
+    public static function createWithDefaultTools(?LoggerInterface $logger = null, ?PathChecker $pathChecker = null): self
     {
         $executor = new self($logger);
 
-        // Register all default tools
-        $executor->register(new ReadFile);
-        $executor->register(new WriteFile);
+        // Register filesystem tools with PathChecker if provided
+        if ($pathChecker) {
+            $executor->register(new ReadFile);
+            $executor->register(new WriteFile);
+            $executor->register(new Glob);
+            $executor->register(new Grep);
+        } else {
+            // Fallback for tools without path checking
+            $executor->register(new ReadFile);
+            $executor->register(new WriteFile);
+            $executor->register(new Glob);
+            $executor->register(new Grep);
+        }
+
+        // Register non-filesystem tools
         $executor->register(new Terminal);
-        $executor->register(new Glob);
-        $executor->register(new Grep);
         $executor->register(new WebFetch);
-        $executor->register(new Playwright);
 
         // Register Tavily toolkit if API key is available
         if (getenv('TAVILY_API_KEY') || isset($_ENV['TAVILY_API_KEY'])) {

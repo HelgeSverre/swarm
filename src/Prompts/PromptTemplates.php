@@ -8,7 +8,15 @@ use HelgeSverre\Swarm\Task\Task;
  * Centralized prompt templates for the coding agent.
  *
  * Provides type-safe static methods for generating prompts used throughout the system.
- * Inspired by patterns from Aider and Claude Code.
+ * Enhanced with advanced prompting techniques inspired by leading AI systems:
+ * - Chain-of-Thought reasoning
+ * - Multi-channel reasoning (analysis, planning, execution, reflection)
+ * - Self-consistency patterns
+ * - Safety-aware prompting
+ * - Context-adaptive templates
+ * - Error recovery with learning
+ *
+ * Based on analysis of Claude Code, OpenAI O3, Canvas, Gemini 2.5 Pro, and Warp 2.0.
  */
 class PromptTemplates
 {

@@ -27,13 +27,16 @@ if (!$autoloaderFound) {
     exit("Could not find autoloader. Please run 'composer install' first.\n");
 }
 
-// Change to the directory where the script was called from
-$workingDir = getcwd();
-chdir($workingDir);
+// Capture the project directory (where CLI was called from)
+$projectDir = getcwd();
+chdir($projectDir);
 
 // Bootstrap the application
 try {
-    // Get the bootstrapped application
+    // Set project directory in global scope for bootstrap
+    $GLOBALS['projectDir'] = $projectDir;
+    
+    // Get the bootstrapped application (pass project directory)
     $app = require __DIR__ . '/../bootstrap/app.php';
     
     // Create and run the CLI

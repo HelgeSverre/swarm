@@ -6,12 +6,13 @@ namespace HelgeSverre\Swarm\CLI\Terminal;
 
 use HelgeSverre\Swarm\Agent\AgentResponse;
 use HelgeSverre\Swarm\Events\EventBus;
+use HelgeSverre\Swarm\Events\ProcessCompleteEvent;
 use HelgeSverre\Swarm\Events\ProcessingEvent;
+use HelgeSverre\Swarm\Events\ProcessProgressEvent;
 use HelgeSverre\Swarm\Events\StateUpdateEvent;
 use HelgeSverre\Swarm\Events\TaskUpdateEvent;
 use HelgeSverre\Swarm\Events\ToolCompletedEvent;
 use HelgeSverre\Swarm\Events\ToolStartedEvent;
-use HelgeSverre\Swarm\Events\UserInputEvent;
 
 class FullTerminalUI
 {
@@ -85,6 +86,12 @@ class FullTerminalUI
 
     protected float $startTime;
 
+    protected array $currentProgress = [];
+
+    protected bool $initialized = false;
+
+    protected string $originalTermState = '';
+
     public function __construct(EventBus $eventBus)
     {
         $this->eventBus = $eventBus;
@@ -98,40 +105,59 @@ class FullTerminalUI
 
         // Subscribe to events
         $this->subscribeToEvents();
+
+        // Initialize terminal for non-blocking input
+        $this->initializeTerminal();
+
+        // Register cleanup on shutdown
+        register_shutdown_function([$this, 'cleanup']);
     }
 
     /**
-     * Main event loop
+     * Destructor to ensure cleanup
      */
-    public function run(): void
+    public function __destruct()
     {
-        // Set up terminal for raw mode
-        system('stty -echo -icanon min 1 time 0');
-        stream_set_blocking(STDIN, false);
+        $this->cleanup();
+    }
 
-        // Hide cursor initially
-        echo "\033[?25l";
+    public function checkForInput(): ?string
+    {
+        // Read all available characters at once to handle paste efficiently
+        $completedInput = null;
+        $hasInput = false;
 
-        // Clear screen
-        $this->clearScreen();
+        while (($key = $this->readKey()) !== null) {
+            $hasInput = true;
+            $this->handleInput($key);
 
-        $this->running = true;
-        $this->render();
-
-        while ($this->running) {
-            $key = $this->readKey();
-
-            if ($key !== null) {
-                $this->handleInput($key);
+            // Check if we have a complete input to return
+            if ($key === "\n" && ! empty($this->input)) {
+                $completedInput = $this->input;
+                $this->input = '';
+                $this->stateChanged = true;
+                break; // Stop processing after enter
             }
+        }
 
-            // Re-render if state changed
-            if ($this->stateChanged) {
-                $this->render();
-                $this->stateChanged = false;
-            }
+        // Force render if we processed any input (for immediate feedback)
+        if ($hasInput) {
+            $this->stateChanged = true;
+        }
 
-            usleep(50000); // 50ms delay
+        return $completedInput;
+    }
+
+    public function render(bool $force = false): void
+    {
+        if (! $this->initialized) {
+            return;
+        }
+
+        // Re-render if forced or state changed
+        if ($force || $this->stateChanged) {
+            $this->doRender();
+            $this->stateChanged = false;
         }
     }
 
@@ -149,11 +175,28 @@ class FullTerminalUI
      */
     public function cleanup(): void
     {
-        // Restore terminal
-        system('stty echo icanon');
-        echo "\033[?25h"; // Show cursor
-        $this->clearScreen();
-        echo "Goodbye!\n";
+        if (! $this->initialized) {
+            return;
+        }
+
+        // Show cursor
+        echo "\033[?25h";
+        
+        // Reset all attributes
+        echo "\033[0m";
+        
+        // Exit alternate screen buffer (restores original screen)
+        echo "\033[?1049l";
+
+        // Restore original terminal state if we saved it
+        if (! empty($this->originalTermState)) {
+            system("stty {$this->originalTermState}");
+        } else {
+            // Fallback to sane defaults
+            system('stty sane');
+        }
+
+        $this->initialized = false;
     }
 
     /**
@@ -198,24 +241,55 @@ class FullTerminalUI
         // For now, just ensure UI refreshes if needed
     }
 
+    public function refresh(array $state = []): void
+    {
+        if (! empty($state['tasks'])) {
+            $this->tasks = $state['tasks'];
+        }
+        if (! empty($state['conversation_history'])) {
+            $this->history = $state['conversation_history'];
+        }
+        if (isset($state['current_task'])) {
+            $this->currentTask = $state['current_task'] ?? '';
+        }
+        if (isset($state['operation'])) {
+            $this->status = $state['operation'] ?? 'Ready';
+        }
+
+        $this->stateChanged = true;
+    }
+
     public function updateProcessingMessage(string $message): void
     {
         $this->status = $message;
         $this->stateChanged = true;
     }
 
-    /**
-     * Refresh method for compatibility
-     */
-    public function refresh(array $status): void
+    protected function initializeTerminal(): void
     {
-        // Convert legacy status to state update
-        $this->tasks = $status['tasks'] ?? [];
-        $this->currentTask = $status['current_task'] ?? '';
-        if (isset($status['operation'])) {
-            $this->status = $status['operation'];
+        if ($this->initialized) {
+            return;
         }
-        $this->stateChanged = true;
+
+        // Save current terminal state for restoration
+        $this->originalTermState = trim(shell_exec('stty -g') ?? '');
+
+        // Enter alternate screen buffer (like vim/less)
+        echo "\033[?1049h";
+        
+        // Clear the alternate screen and scrollback
+        echo "\033[2J\033[3J\033[H";
+        
+        // Set up terminal for raw mode
+        system('stty -echo -icanon min 1 time 0');
+        stream_set_blocking(STDIN, false);
+
+        // Hide cursor initially
+        echo "\033[?25l";
+
+        $this->running = true;
+        $this->initialized = true;
+        $this->render(force: true);
     }
 
     protected function subscribeToEvents(): void
@@ -242,6 +316,15 @@ class FullTerminalUI
 
         $this->eventBus->on(ToolCompletedEvent::class, function (ToolCompletedEvent $event) {
             $this->onToolCompleted($event);
+        });
+
+        // Process events
+        $this->eventBus->on(ProcessProgressEvent::class, function (ProcessProgressEvent $event) {
+            $this->onProcessProgress($event);
+        });
+
+        $this->eventBus->on(ProcessCompleteEvent::class, function (ProcessCompleteEvent $event) {
+            $this->onProcessComplete($event);
         });
     }
 
@@ -295,9 +378,8 @@ class FullTerminalUI
         if ($key === "\n") {
             if (! empty($this->input)) {
                 $this->addHistory('command', $this->input);
-                // Emit user input event
-                $this->eventBus->emit(new UserInputEvent($this->input));
-                $this->input = '';
+                // Don't emit here - let checkForInput handle it
+                // The input will be returned by checkForInput() for Swarm to handle
                 $this->stateChanged = true;
             }
         } elseif ($key === "\177" || $key === "\010") { // Backspace
@@ -530,6 +612,12 @@ class FullTerminalUI
      */
     protected function onProcessingEvent(ProcessingEvent $event): void
     {
+        error_log('[UI] ProcessingEvent received: ' . json_encode([
+            'operation' => $event->operation,
+            'phase' => $event->phase,
+            'message' => $event->getMessage(),
+        ]));
+
         $message = $event->getMessage();
         $this->addHistory('status', $message);
         $this->status = $message;
@@ -538,6 +626,12 @@ class FullTerminalUI
 
     protected function onStateUpdate(StateUpdateEvent $event): void
     {
+        error_log('[UI] StateUpdateEvent received: ' . json_encode([
+            'tasks_count' => count($event->tasks),
+            'current_task' => $event->currentTask,
+            'status' => $event->status,
+        ]));
+
         $this->tasks = $event->tasks;
         $this->currentTask = $event->currentTask ?? '';
         $this->context = array_merge($this->context, $event->context);
@@ -559,12 +653,22 @@ class FullTerminalUI
 
     protected function onToolStarted(ToolStartedEvent $event): void
     {
+        error_log('[UI] ToolStartedEvent received: ' . json_encode([
+            'tool' => $event->tool,
+            'params' => $event->params,
+        ]));
+
         $this->addHistory('tool', $event->tool, implode(' ', $event->params), 'Running...');
         $this->stateChanged = true;
     }
 
     protected function onToolCompleted(ToolCompletedEvent $event): void
     {
+        error_log('[UI] ToolCompletedEvent received: ' . json_encode([
+            'tool' => $event->tool,
+            'success' => $event->result->isSuccess(),
+        ]));
+
         $result = $event->result->isSuccess() ? 'Success' : 'Failed';
         $this->addHistory('tool', $event->tool, implode(' ', $event->params), $result);
         $this->stateChanged = true;
@@ -573,7 +677,7 @@ class FullTerminalUI
     /**
      * Render methods (simplified versions from mockup)
      */
-    protected function render(): void
+    protected function doRender(): void
     {
         $oldWidth = $this->terminalWidth;
         $oldHeight = $this->terminalHeight;
@@ -595,6 +699,32 @@ class FullTerminalUI
         } else {
             $this->renderMainView();
         }
+    }
+
+    protected function onProcessProgress(ProcessProgressEvent $event): void
+    {
+        error_log('[UI] ProcessProgressEvent received: ' . json_encode([
+            'processId' => $event->processId,
+            'type' => $event->type,
+            'message' => $event->data['message'] ?? null,
+        ]));
+
+        $this->currentProgress = $event->data;
+        $this->status = $event->data['message'] ?? 'Processing...';
+        $this->stateChanged = true;
+    }
+
+    protected function onProcessComplete(ProcessCompleteEvent $event): void
+    {
+        error_log('[UI] ProcessCompleteEvent received: ' . json_encode([
+            'processId' => $event->processId,
+            'message_length' => mb_strlen($event->response->getMessage()),
+        ]));
+
+        $this->displayResponse($event->response);
+        $this->currentProgress = [];
+        $this->status = 'Ready';
+        $this->stateChanged = true;
     }
 
     protected function renderMainView(): void
@@ -620,8 +750,8 @@ class FullTerminalUI
         $row = 1;
         $isActive = $this->currentFocus === self::FOCUS_MAIN;
 
-        // Status bar
-        $this->moveCursor($row++, 2);
+        // Status bar - render from column 1 for full width
+        $this->moveCursor($row++, 1);
         $this->renderStatusBar();
 
         // Recent activity
@@ -664,23 +794,36 @@ class FullTerminalUI
 
     protected function renderStatusBar(): void
     {
+        // Start with background color
         echo Ansi::BG_DARK;
-        echo ' 💮 swarm ';
-        echo Ansi::DIM . Ansi::BOX_V . ' ' . Ansi::RESET . Ansi::BG_DARK;
+
+        // Build the status content
+        $statusContent = ' 💮 swarm ';
+        $statusContent .= Ansi::DIM . Ansi::BOX_V . ' ' . Ansi::RESET . Ansi::BG_DARK;
 
         if (! empty($this->currentTask)) {
-            echo Ansi::GREEN . '● ' . Ansi::WHITE . $this->truncate($this->currentTask, 30);
-            echo Ansi::DIM . ' ' . Ansi::BOX_V . ' ' . Ansi::RESET . Ansi::BG_DARK;
+            $statusContent .= Ansi::GREEN . '● ' . Ansi::WHITE . $this->truncate($this->currentTask, 30);
+            $statusContent .= Ansi::DIM . ' ' . Ansi::BOX_V . ' ' . Ansi::RESET . Ansi::BG_DARK;
         }
 
-        echo Ansi::YELLOW . $this->status . Ansi::RESET . Ansi::BG_DARK;
+        $statusContent .= Ansi::YELLOW . $this->status . Ansi::RESET . Ansi::BG_DARK;
 
         if ($this->totalSteps > 0) {
-            echo " ({$this->currentStep}/{$this->totalSteps})";
+            $statusContent .= " ({$this->currentStep}/{$this->totalSteps})";
         }
 
-        $padding = str_repeat(' ', max(0, $this->mainAreaWidth - 60));
-        echo $padding . Ansi::RESET;
+        // Output the status content
+        echo $statusContent;
+
+        // Calculate how much content we've already rendered (strip ANSI codes for accurate count)
+        $contentLength = mb_strlen(Ansi::stripAnsi($statusContent));
+
+        // Fill the rest of the terminal width with spaces (background color still applied)
+        $remainingWidth = max(0, $this->terminalWidth - $contentLength);
+        echo str_repeat(' ', $remainingWidth);
+
+        // Reset at the end
+        echo Ansi::RESET;
     }
 
     protected function renderSidebar(): void
@@ -1020,6 +1163,7 @@ class FullTerminalUI
 
     protected function clearScreen(): void
     {
+        // Clear screen and scrollback in alternate buffer
         echo "\033[2J\033[3J\033[H";
     }
 
@@ -1030,6 +1174,16 @@ class FullTerminalUI
 
     protected function readKey(): ?string
     {
+        // Check if input is available to avoid blocking
+        $read = [STDIN];
+        $write = null;
+        $except = null;
+        $result = stream_select($read, $write, $except, 0, 0);
+
+        if ($result === 0 || $result === false) {
+            return null; // No input available
+        }
+
         $key = fgetc(STDIN);
 
         if ($key === false || $key === '') {
@@ -1039,18 +1193,45 @@ class FullTerminalUI
         // Handle escape sequences
         if ($key === "\033") {
             $seq = $key;
-            $seq .= fgetc(STDIN);
-
-            // Check for Alt key combinations
-            if ($seq[1] !== '[' && $seq[1] !== false && $seq[1] !== "\033") {
-                return 'ALT+' . mb_strtoupper($seq[1]);
+            
+            // Wait a bit for the next character (escape sequences come quickly)
+            $read2 = [STDIN];
+            $result2 = stream_select($read2, $write, $except, 0, 10000); // 10ms timeout
+            
+            if ($result2 > 0) {
+                $next = fgetc(STDIN);
+                if ($next !== false && $next !== '') {
+                    $seq .= $next;
+                    
+                    // Check for Alt key combinations
+                    if ($next !== '[' && $next !== "\033") {
+                        return 'ALT+' . mb_strtoupper($next);
+                    }
+                } else {
+                    // Just ESC key
+                    return 'ESC';
+                }
+            } else {
+                // Just ESC key (no following character)
+                return 'ESC';
             }
 
-            // Handle other escape sequences
-            if ($seq[1] === "\033") {
+            // Handle other escape sequences (like arrow keys)
+            if (isset($seq[1]) && $seq[1] === '[') {
+                // Read the third character for arrow keys and other sequences
+                $read3 = [STDIN];
+                $result3 = stream_select($read3, $write, $except, 0, 10000); // 10ms timeout
+                
+                if ($result3 > 0) {
+                    $third = fgetc(STDIN);
+                    if ($third !== false && $third !== '') {
+                        $seq .= $third;
+                    }
+                }
+            } elseif (isset($seq[1]) && $seq[1] === "\033") {
                 // Option+Arrow on macOS - read and discard
                 $seq .= fgetc(STDIN);
-                if ($seq[2] === '[') {
+                if (isset($seq[2]) && $seq[2] === '[') {
                     while (true) {
                         $char = fgetc(STDIN);
                         if ($char === false || ctype_alpha($char)) {
@@ -1061,8 +1242,6 @@ class FullTerminalUI
 
                 return null;
             }
-
-            $seq .= fgetc(STDIN);
 
             // Check for extended sequences
             if (preg_match('/^\033\[1;9[A-D]$/', $seq)) {

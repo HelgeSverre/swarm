@@ -71,6 +71,9 @@ class WorkerProcess
             // Create EventBus for the tools and agent
             $eventBus = new EventBus;
 
+            // Set this as the singleton instance so EventAware traits use it
+            EventBus::setInstance($eventBus);
+
             $toolExecutor = ToolExecutor::createWithDefaultTools($logger);
             $taskManager = new TaskManager($logger);
 

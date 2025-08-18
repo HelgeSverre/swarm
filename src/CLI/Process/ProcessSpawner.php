@@ -3,6 +3,7 @@
 namespace HelgeSverre\Swarm\CLI\Process;
 
 use Exception;
+use HelgeSverre\Swarm\Core\Application;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -23,6 +24,7 @@ class ProcessSpawner
     protected ?array $lastStatus = null;
 
     public function __construct(
+        protected readonly Application $app,
         protected readonly ?LoggerInterface $logger = null
     ) {}
 
@@ -40,7 +42,7 @@ class ProcessSpawner
 
         // Build command to run AsyncProcessor
         $phpBinary = PHP_BINARY;
-        $scriptPath = dirname(__DIR__, 2) . '/bin/worker';
+        $scriptPath = $this->app->binPath('worker');
         $encodedInput = base64_encode($input);
 
         // Get subprocess timeout from environment

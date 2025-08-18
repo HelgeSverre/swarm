@@ -6,6 +6,7 @@ namespace HelgeSverre\Swarm\CLI\Process;
 
 use Exception;
 use HelgeSverre\Swarm\Agent\AgentResponse;
+use HelgeSverre\Swarm\Core\Application;
 use HelgeSverre\Swarm\Traits\EventAware;
 use HelgeSverre\Swarm\Traits\Loggable;
 
@@ -23,86 +24,99 @@ class ProcessManager
 
     private const PROCESS_SLEEP_MS = 20000; // 20ms
 
-    private ?ProcessSpawner $processor = null;
+    protected Application $app;
 
-    private bool $processComplete = false;
+    private array $activeProcesses = [];
 
-    private float $startTime = 0;
-
-    /**
-     * Launch a background process to handle the input
-     */
-    public function launch(string $input): \HelgeSverre\Swarm\CLI\ProcessResult
+    public function __construct(Application $app)
     {
-        $this->processor = new ProcessSpawner($this->log());
-        $this->processComplete = false;
-        $this->startTime = microtime(true);
+        $this->app = $app;
+    }
 
-        try {
-            // Launch the streaming processor
-            $this->processor->launch($input);
+    public function startProcess(string $input): string
+    {
+        $processId = uniqid('proc_');
+        $processor = new ProcessSpawner($this->app, $this->log());
 
-            // Get timeout from environment or use default
-            $maxWaitTime = (int) ($_ENV['SWARM_REQUEST_TIMEOUT'] ?? self::DEFAULT_TIMEOUT);
+        $processor->launch($input);
 
-            // Process updates in real-time
-            $lastUpdate = microtime(true);
-            $finalUpdate = null;
+        $this->activeProcesses[$processId] = [
+            'processor' => $processor,
+            'startTime' => microtime(true),
+            'complete' => false,
+            'input' => $input,
+            'updates' => [],
+        ];
 
-            while (! $this->processComplete && microtime(true) - $this->startTime < $maxWaitTime) {
-                $now = microtime(true);
+        return $processId;
+    }
 
-                // Read any available updates
-                $updates = $this->processor->readUpdates();
+    public function pollUpdates(): array
+    {
+        $allUpdates = [];
 
-                foreach ($updates as $update) {
-                    $result = $this->processUpdate($update);
-                    if ($result->isComplete) {
-                        $this->processComplete = true;
-                        $finalUpdate = $update;
-                        break;
-                    }
+        if (empty($this->activeProcesses)) {
+            return $allUpdates;
+        }
+
+        $this->logDebug('Polling processes', ['process_count' => count($this->activeProcesses)]);
+
+        foreach ($this->activeProcesses as $processId => $processData) {
+            if ($processData['complete']) {
+                continue;
+            }
+
+            $updates = $processData['processor']->readUpdates();
+
+            if (! empty($updates)) {
+                $this->logDebug('Found updates from process', [
+                    'processId' => $processId,
+                    'update_count' => count($updates),
+                ]);
+            }
+
+            foreach ($updates as $update) {
+                $update['processId'] = $processId;
+                $allUpdates[] = $update;
+
+                if (($update['type'] ?? '') === 'status' && ($update['status'] ?? '') === 'completed') {
+                    $this->activeProcesses[$processId]['complete'] = true;
+                    $this->activeProcesses[$processId]['result'] = $update;
                 }
-
-                // Small sleep to avoid busy waiting
-                usleep(self::PROCESS_SLEEP_MS);
             }
+        }
 
-            // Check timeout
-            if (! $this->processComplete) {
-                $this->terminate();
-                $timeoutMinutes = round($maxWaitTime / 60, 1);
-                throw new Exception(
-                    "Request timed out after {$timeoutMinutes} minutes. " .
-                    'You can increase the timeout by setting SWARM_REQUEST_TIMEOUT environment variable (in seconds).'
-                );
+        return $allUpdates;
+    }
+
+    public function getProcessResult(string $processId): ?ProcessResult
+    {
+        $process = $this->activeProcesses[$processId] ?? null;
+        if (! $process || ! $process['complete']) {
+            return null;
+        }
+
+        return new ProcessResult(
+            success: true,
+            response: $process['result']['response'] ?? null,
+            error: null
+        );
+    }
+
+    public function cleanupCompletedProcesses(): void
+    {
+        foreach ($this->activeProcesses as $processId => $process) {
+            if ($process['complete']) {
+                $process['processor']->cleanup();
+                unset($this->activeProcesses[$processId]);
             }
-
-            return new \HelgeSverre\Swarm\CLI\ProcessResult(
-                success: true,
-                response: $finalUpdate['response'] ?? null,
-                error: null
-            );
-        } catch (Exception $e) {
-            $this->logError('Process execution failed', [
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-            ]);
-
-            return new \HelgeSverre\Swarm\CLI\ProcessResult(
-                success: false,
-                response: null,
-                error: $e->getMessage()
-            );
-        } finally {
-            $this->cleanup();
         }
     }
 
     /**
      * Process a single update from the streaming processor
      */
-    public function processUpdate(array $update): \HelgeSverre\Swarm\CLI\UpdateResult
+    public function processUpdate(array $update): UpdateResult
     {
         $type = $update['type'] ?? 'status';
 
@@ -112,81 +126,70 @@ class ProcessManager
             'task_status' => $this->handleTaskStatusUpdate($update),
             'status' => $this->handleStatusUpdate($update),
             'error' => $this->handleErrorUpdate($update),
-            default => new \HelgeSverre\Swarm\CLI\UpdateResult(false, $type, $update)
+            default => new UpdateResult(false, $type, $update)
         };
     }
 
-    /**
-     * Terminate the background process
-     */
-    public function terminate(): void
+    public function terminate(string $processId): void
     {
-        if ($this->processor) {
-            $this->processor->terminate();
+        $process = $this->activeProcesses[$processId] ?? null;
+        if ($process) {
+            $process['processor']->terminate();
         }
     }
 
-    /**
-     * Clean up resources
-     */
-    public function cleanup(): void
+    public function terminateAll(): void
     {
-        if ($this->processor) {
-            $this->processor->cleanup();
-            $this->processor = null;
+        foreach ($this->activeProcesses as $processData) {
+            $processData['processor']->terminate();
         }
+        $this->activeProcesses = [];
     }
 
-    /**
-     * Check if a process is currently running
-     */
-    public function isRunning(): bool
+    public function getActiveProcessCount(): int
     {
-        return $this->processor && $this->processor->isRunning();
+        return count(array_filter($this->activeProcesses, fn ($p) => ! $p['complete']));
     }
 
-    /**
-     * Get elapsed time since process start
-     */
-    public function getElapsedTime(): float
+    public function hasActiveProcesses(): bool
     {
-        return $this->startTime > 0 ? microtime(true) - $this->startTime : 0;
+        return $this->getActiveProcessCount() > 0;
     }
 
-    protected function handleProgressUpdate(array $update): \HelgeSverre\Swarm\CLI\UpdateResult
+    protected function handleProgressUpdate(array $update): UpdateResult
     {
-        return new \HelgeSverre\Swarm\CLI\UpdateResult(false, 'progress', $update);
+        return new UpdateResult(false, 'progress', $update);
     }
 
-    protected function handleStateSyncUpdate(array $update): \HelgeSverre\Swarm\CLI\UpdateResult
+    protected function handleStateSyncUpdate(array $update): UpdateResult
     {
-        return new \HelgeSverre\Swarm\CLI\UpdateResult(false, 'state_sync', $update);
+        return new UpdateResult(false, 'state_sync', $update);
     }
 
-    protected function handleTaskStatusUpdate(array $update): \HelgeSverre\Swarm\CLI\UpdateResult
+    protected function handleTaskStatusUpdate(array $update): UpdateResult
     {
-        return new \HelgeSverre\Swarm\CLI\UpdateResult(false, 'task_status', $update);
+        return new UpdateResult(false, 'task_status', $update);
     }
 
-    protected function handleStatusUpdate(array $update): \HelgeSverre\Swarm\CLI\UpdateResult
+    protected function handleStatusUpdate(array $update): UpdateResult
     {
         $status = $update['status'] ?? '';
 
         if ($status === 'completed') {
-            return new \HelgeSverre\Swarm\CLI\UpdateResult(true, 'completed', $update);
+            return new UpdateResult(true, 'completed', $update);
         } elseif ($status === 'error') {
             throw new Exception($update['error'] ?? 'Unknown error occurred');
         }
 
-        return new \HelgeSverre\Swarm\CLI\UpdateResult(false, 'status', $update);
+        return new UpdateResult(false, 'status', $update);
     }
 
-    protected function handleErrorUpdate(array $update): \HelgeSverre\Swarm\CLI\UpdateResult
+    protected function handleErrorUpdate(array $update): UpdateResult
     {
         // Log error but don't stop unless it's fatal
         $this->logError('Process error', ['error' => $update['message'] ?? 'Unknown error']);
 
-        return new \HelgeSverre\Swarm\CLI\UpdateResult(false, 'error', $update);
+        return new UpdateResult(false, 'error', $update);
     }
 }
 

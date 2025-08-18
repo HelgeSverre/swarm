@@ -1,0 +1,6 @@
+To-Do List:
+1. Finish coding project
+2. Review pull requests
+3. Write documentation
+4. Attend team meeting
+5. Plan next sprint

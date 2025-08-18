@@ -10,6 +10,8 @@ use HelgeSverre\Swarm\Core\Application;
 use HelgeSverre\Swarm\Core\Container;
 use HelgeSverre\Swarm\Core\LoggerRegistry;
 use HelgeSverre\Swarm\Events\EventBus;
+use HelgeSverre\Swarm\Events\ProcessCompleteEvent;
+use HelgeSverre\Swarm\Events\ProcessProgressEvent;
 use HelgeSverre\Swarm\Events\StateUpdateEvent;
 use HelgeSverre\Swarm\Events\UserInputEvent;
 use HelgeSverre\Swarm\Traits\EventAware;
@@ -23,20 +25,22 @@ class Swarm
 {
     use EventAware, Loggable;
 
-    private Container $container;
+    protected Container $container;
 
-    private StateManager $stateManager;
+    protected StateManager $stateManager;
 
-    private CommandHandler $commandHandler;
+    protected CommandHandler $commandHandler;
 
-    private ProcessManager $processManager;
+    protected ProcessManager $processManager;
 
-    private bool $running = false;
+    protected bool $running = false;
 
-    private array $syncedState = [];
+    protected array $syncedState = [];
+
+    protected array $activeRequests = [];
 
     public function __construct(
-        private Application $app,
+        protected Application $app,
         ?Container $container = null,
         ?StateManager $stateManager = null,
         ?CommandHandler $commandHandler = null,
@@ -45,7 +49,7 @@ class Swarm
         $this->container = $container ?? new Container($app);
         $this->stateManager = $stateManager ?? new StateManager;
         $this->commandHandler = $commandHandler ?? new CommandHandler;
-        $this->processManager = $processManager ?? new ProcessManager;
+        $this->processManager = $processManager ?? new ProcessManager($app);
 
         $this->setupEventListeners();
         $this->registerShutdownHandlers();
@@ -65,9 +69,6 @@ class Swarm
         return new self($app);
     }
 
-    /**
-     * Run the application
-     */
     public function run(): void
     {
         // Load saved state
@@ -88,10 +89,43 @@ class Swarm
         // Emit initial state
         $this->emitStateUpdate();
 
-        // Start the UI event loop
+        // Start the main event loop
         $this->running = true;
-        $this->logInfo('Starting event-driven UI');
-        $this->container->getUI()->run();
+        $this->logInfo('Starting async event loop');
+        $ui = $this->container->getUI();
+
+        $loopIterations = 0;
+        while ($this->running) {
+            $loopIterations++;
+
+            // Log every 20 iterations (1 second at 50ms sleep)
+            if ($loopIterations % 20 === 0) {
+                $this->logDebug('Main loop running', [
+                    'iterations' => $loopIterations,
+                    'active_requests' => count($this->activeRequests),
+                    'has_active_processes' => $this->processManager->hasActiveProcesses(),
+                ]);
+            }
+
+            // Handle any user input (non-blocking)
+            $input = $ui->checkForInput();
+            if ($input !== null) {
+                $this->logDebug('User input received in main loop', ['input' => $input]);
+                $this->handleUserInput($input);
+            }
+
+            // Poll all active processes for updates
+            $this->pollActiveProcesses();
+
+            // Update UI with any new state
+            $ui->render();
+
+            // Cleanup completed processes
+            $this->processManager->cleanupCompletedProcesses();
+
+            // Small sleep to prevent busy waiting
+            usleep(50000);
+        }
     }
 
     /**
@@ -195,9 +229,6 @@ class Swarm
         }
     }
 
-    /**
-     * Process request with AI agent asynchronously
-     */
     protected function processRequestAsync(string $input): void
     {
         try {
@@ -206,52 +237,25 @@ class Swarm
                 'timestamp' => date('Y-m-d H:i:s'),
             ]);
 
-            // Add to conversation history
+            // Start async processing (non-blocking!)
+            $processId = $this->processManager->startProcess($input);
+
+            $this->activeRequests[$processId] = [
+                'input' => $input,
+                'startTime' => microtime(true),
+                'conversationUpdated' => false,
+            ];
+
+            // Add to conversation history immediately
             $this->syncedState['conversation_history'][] = [
                 'role' => 'user',
                 'content' => $input,
                 'timestamp' => time(),
             ];
 
-            // Start processing animation
-            $ui = $this->container->getUI();
-            $ui->startProcessing();
-
-            // Launch background process
-            $result = $this->processManager->launch($input);
-
-            // Stop processing animation
-            $ui->stopProcessing();
-
-            if ($result->success) {
-                // Display response
-                $response = $result->getAgentResponse();
-                if ($response) {
-                    $ui->displayResponse($response);
-
-                    // Add to conversation history
-                    $this->syncedState['conversation_history'][] = [
-                        'role' => 'assistant',
-                        'content' => $response->getMessage(),
-                        'timestamp' => time(),
-                    ];
-                }
-
-                // Update state from agent
-                $this->updateStateFromAgent();
-
-                // Save state after successful completion
-                $this->saveState();
-            } else {
-                $ui->displayError($result->error ?? 'Request failed');
-
-                if (str_contains($result->error ?? '', 'timed out')) {
-                    $ui->showNotification(
-                        'The request timed out. You can retry with a longer timeout or simplify your request.',
-                        'warning'
-                    );
-                }
-            }
+            // Show processing started
+            $this->container->getUI()->startProcessing();
+            $this->emitStateUpdate();
         } catch (Exception $e) {
             $this->logError('Request processing failed', [
                 'error' => $e->getMessage(),
@@ -260,6 +264,87 @@ class Swarm
 
             $this->container->getUI()->displayError($e->getMessage());
         }
+    }
+
+    protected function pollActiveProcesses(): void
+    {
+        $updates = $this->processManager->pollUpdates();
+
+        if (! empty($updates)) {
+            $this->logDebug('Polling found updates', ['update_count' => count($updates)]);
+        }
+
+        foreach ($updates as $update) {
+            $processId = $update['processId'];
+
+            $this->logDebug('Processing update from worker', [
+                'processId' => $processId,
+                'type' => $update['type'],
+                'status' => $update['status'] ?? null,
+            ]);
+
+            // Emit progress events for UI updates
+            $this->emit(new ProcessProgressEvent(
+                processId: $processId,
+                type: $update['type'],
+                data: $update
+            ));
+
+            // Handle state_sync updates to update task list
+            if ($update['type'] === 'state_sync' && isset($update['data'])) {
+                $data = $update['data'];
+
+                // Update synced state with task data
+                if (isset($data['tasks'])) {
+                    $this->syncedState['tasks'] = $data['tasks'];
+                }
+                if (isset($data['current_task'])) {
+                    // current_task from agent is an array, extract description for StateUpdateEvent
+                    if (is_array($data['current_task'])) {
+                        $this->syncedState['current_task'] = $data['current_task']['description'] ?? null;
+                    } else {
+                        $this->syncedState['current_task'] = $data['current_task'];
+                    }
+                }
+                if (isset($data['operation'])) {
+                    $this->syncedState['operation'] = $data['operation'];
+                }
+
+                // Emit state update so UI refreshes task list
+                $this->emitStateUpdate();
+            }
+
+            // Handle completion
+            if ($update['type'] === 'status' && $update['status'] === 'completed') {
+                $this->handleProcessComplete($processId, $update);
+            }
+        }
+    }
+
+    protected function handleProcessComplete(string $processId, array $update): void
+    {
+        $result = $this->processManager->getProcessResult($processId);
+
+        if ($result && $result->success) {
+            $response = $result->getAgentResponse();
+            if ($response) {
+                // Add to conversation history
+                $this->syncedState['conversation_history'][] = [
+                    'role' => 'assistant',
+                    'content' => $response->getMessage(),
+                    'timestamp' => time(),
+                ];
+
+                // UI will update via events
+                $this->emit(new ProcessCompleteEvent($processId, $response));
+            }
+        }
+
+        // Cleanup
+        unset($this->activeRequests[$processId]);
+        $this->container->getUI()->stopProcessing();
+        $this->saveState();
+        $this->emitStateUpdate();
     }
 
     /**

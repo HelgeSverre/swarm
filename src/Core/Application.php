@@ -33,12 +33,15 @@ class Application
 
     protected array $paths = [];
 
+    protected string $projectPath;
+
     /**
      * Create and bootstrap the application
      */
-    public function __construct(string $basePath)
+    public function __construct(string $basePath, ?string $projectPath = null)
     {
         $this->basePath = rtrim($basePath, '/');
+        $this->projectPath = $projectPath ? rtrim($projectPath, '/') : $this->basePath;
         $this->initializePaths();
         $this->bootstrap();
     }
@@ -49,6 +52,14 @@ class Application
     public function basePath(string $path = ''): string
     {
         return $this->paths['base'] . ($path ? '/' . ltrim($path, '/') : '');
+    }
+
+    /**
+     * Get the bin path with optional path appended
+     */
+    public function binPath(string $path = ''): string
+    {
+        return $this->paths['bin'] . ($path ? '/' . ltrim($path, '/') : '');
     }
 
     /**
@@ -65,6 +76,14 @@ class Application
     public function logPath(string $path = ''): string
     {
         return $this->paths['logs'] . ($path ? '/' . ltrim($path, '/') : '');
+    }
+
+    /**
+     * Get the project path (where CLI was called from)
+     */
+    public function projectPath(string $path = ''): string
+    {
+        return $this->projectPath . ($path ? '/' . ltrim($path, '/') : '');
     }
 
     /**
@@ -119,6 +138,7 @@ class Application
     {
         $this->paths = [
             'base' => $this->basePath,
+            'bin' => $this->basePath . '/bin',
             'storage' => $this->basePath . '/storage',
             'logs' => $this->basePath . '/storage/logs',
             'cache' => $this->basePath . '/storage/cache',

@@ -28,6 +28,7 @@ class StateManager
         'conversation_history' => [],
         'tool_log' => [],
         'operation' => '',
+        'allowed_directories' => [],
     ];
 
     /**
@@ -145,7 +146,7 @@ class StateManager
      */
     public function validate(array $state): bool
     {
-        $requiredKeys = ['tasks', 'task_history', 'current_task', 'conversation_history', 'tool_log', 'operation'];
+        $requiredKeys = ['tasks', 'task_history', 'current_task', 'conversation_history', 'tool_log', 'operation', 'allowed_directories'];
 
         foreach ($requiredKeys as $key) {
             if (! array_key_exists($key, $state)) {
@@ -157,7 +158,8 @@ class StateManager
 
         // Validate types
         if (! is_array($state['tasks']) || ! is_array($state['task_history']) ||
-            ! is_array($state['conversation_history']) || ! is_array($state['tool_log'])) {
+            ! is_array($state['conversation_history']) || ! is_array($state['tool_log']) ||
+            ! is_array($state['allowed_directories'])) {
             $this->logDebug('Invalid state value types');
 
             return false;

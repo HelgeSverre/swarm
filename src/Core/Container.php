@@ -29,6 +29,8 @@ class Container
 
     protected ?EventBus $eventBus = null;
 
+    protected ?PathChecker $pathChecker = null;
+
     public function __construct(
         protected Application $app
     ) {}
@@ -63,6 +65,26 @@ class Container
     }
 
     /**
+     * Get or create the PathChecker
+     */
+    public function getPathChecker(): PathChecker
+    {
+        if ($this->pathChecker === null) {
+            // Load allowed directories from state
+            $stateManager = new \HelgeSverre\Swarm\CLI\StateManager;
+            $state = $stateManager->load();
+            $allowedPaths = $state['allowed_directories'] ?? [];
+
+            $this->pathChecker = new PathChecker(
+                $this->app->projectPath(),
+                $allowedPaths
+            );
+        }
+
+        return $this->pathChecker;
+    }
+
+    /**
      * Get or create the ToolExecutor
      */
     public function getToolExecutor(): ToolExecutor
@@ -70,7 +92,8 @@ class Container
         if ($this->toolExecutor === null) {
             // ToolExecutor now uses traits for EventBus and Logger
             $this->toolExecutor = ToolExecutor::createWithDefaultTools(
-                $this->app->logger()
+                $this->app->logger(),
+                $this->getPathChecker()
             );
         }
 

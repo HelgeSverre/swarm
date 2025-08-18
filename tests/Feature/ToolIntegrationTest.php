@@ -11,8 +11,7 @@ test('toolchain registers all tools correctly', function () {
         ->and($registeredTools)->toContain('write_file')
         ->and($registeredTools)->toContain('bash')
         ->and($registeredTools)->toContain('grep')
-        ->and($registeredTools)->toContain('web_fetch')
-        ->and($registeredTools)->toContain('playwright');
+        ->and($registeredTools)->toContain('web_fetch');
 });
 
 test('tool schemas are generated dynamically for all tools', function () {
@@ -28,8 +27,7 @@ test('tool schemas are generated dynamically for all tools', function () {
         ->and($toolNames)->toContain('write_file')
         ->and($toolNames)->toContain('bash')
         ->and($toolNames)->toContain('grep')
-        ->and($toolNames)->toContain('web_fetch')
-        ->and($toolNames)->toContain('playwright');
+        ->and($toolNames)->toContain('web_fetch');
 
     // At least 6 tools (may have Tavily if API key is set)
     expect(count($schemas))->toBeGreaterThanOrEqual(6);
