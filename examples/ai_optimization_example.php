@@ -2,21 +2,20 @@
 
 /**
  * Example implementation of AI/LLM optimizations for Swarm
- * 
+ *
  * This example demonstrates how to integrate the optimization components
  * into the existing codebase without breaking current functionality.
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use HelgeSverre\Swarm\Agent\CodingAgent;
 use HelgeSverre\Swarm\AI\ModelRouter;
 use HelgeSverre\Swarm\AI\ResponseCache;
 use HelgeSverre\Swarm\AI\TokenBudgetManager;
-use HelgeSverre\Swarm\Agent\CodingAgent;
-use HelgeSverre\Swarm\Core\Application;
 use HelgeSverre\Swarm\Prompts\PromptTemplates;
-use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
 
 // Setup logging
 $logger = new Logger('ai-optimization');
@@ -43,9 +42,9 @@ foreach ($tasks as $task) {
         $task['context_length'],
         $task['complexity']
     );
-    
+
     $config = $modelRouter->getModelConfig($selectedModel);
-    
+
     echo sprintf(
         "Task: %s (complexity: %d, context: %d tokens)\n",
         $task['type'],
@@ -81,24 +80,24 @@ class OptimizedCodingAgent extends CodingAgent
             ['role' => 'assistant', 'content' => 'Fixed the error...', 'timestamp' => time() - 900],
             ['role' => 'user', 'content' => 'Now add logging', 'timestamp' => time() - 100],
         ];
-        
+
         // Original method (simple slicing)
         $simpleContext = array_slice($history, -4);
-        echo "Simple Context (last 4 messages): " . count($simpleContext) . " messages\n";
-        
+        echo 'Simple Context (last 4 messages): ' . count($simpleContext) . " messages\n";
+
         // Optimized method (importance scoring)
         $optimizedContext = $this->optimizeContext($history, 3000);
-        echo "Optimized Context (scored): " . count($optimizedContext) . " messages\n";
-        
+        echo 'Optimized Context (scored): ' . count($optimizedContext) . " messages\n";
+
         echo "\nOptimized context includes:\n";
         foreach ($optimizedContext as $msg) {
-            echo sprintf("  - [%s] %s\n", 
-                $msg['role'], 
-                substr($msg['content'], 0, 50) . (strlen($msg['content']) > 50 ? '...' : '')
+            echo sprintf("  - [%s] %s\n",
+                $msg['role'],
+                mb_substr($msg['content'], 0, 50) . (mb_strlen($msg['content']) > 50 ? '...' : '')
             );
         }
     }
-    
+
     /**
      * Demonstrate the context optimization algorithm
      */
@@ -106,52 +105,59 @@ class OptimizedCodingAgent extends CodingAgent
     {
         $scored = [];
         $historyCount = count($history);
-        
+
         foreach ($history as $index => $message) {
             $score = 0;
-            
+
             // Recency score
             $recencyScore = (($historyCount - $index) / $historyCount) * 10;
             $score += $recencyScore;
-            
+
             // Role importance
             if ($message['role'] === 'system') {
                 $score += 20;
             } elseif ($message['role'] === 'user') {
                 $score += 8;
             }
-            
+
             // Content importance
-            if (stripos($message['content'], 'error') !== false) {
+            if (mb_stripos($message['content'], 'error') !== false) {
                 $score += 15;
             }
-            
+
             $scored[] = [
                 'message' => $message,
                 'score' => $score,
                 'reason' => $this->explainScore($message, $score),
             ];
         }
-        
+
         // Sort by score
-        usort($scored, fn($a, $b) => $b['score'] <=> $a['score']);
-        
+        usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
+
         // Take top scoring messages
         $result = [];
         foreach (array_slice($scored, 0, 5) as $item) {
             $result[] = $item['message'];
             echo sprintf("    Score %.1f: %s\n", $item['score'], $item['reason']);
         }
-        
+
         return $result;
     }
-    
+
     private function explainScore($message, $score): string
     {
         $reasons = [];
-        if ($message['role'] === 'system') $reasons[] = 'system message';
-        if (stripos($message['content'], 'error') !== false) $reasons[] = 'contains error';
-        if ($message['role'] === 'user') $reasons[] = 'user input';
+        if ($message['role'] === 'system') {
+            $reasons[] = 'system message';
+        }
+        if (mb_stripos($message['content'], 'error') !== false) {
+            $reasons[] = 'contains error';
+        }
+        if ($message['role'] === 'user') {
+            $reasons[] = 'user input';
+        }
+
         return implode(', ', $reasons) ?: 'context';
     }
 }
@@ -171,18 +177,18 @@ function getDynamicTemperature(string $taskType, array $context = []): float
         'conversation' => 0.7,
         'brainstorming' => 0.8,
     ];
-    
+
     $baseTemp = $temperatures[$taskType] ?? 0.5;
-    
+
     // Adjust based on context
     if (isset($context['retry_count']) && $context['retry_count'] > 0) {
         $baseTemp = min(1.0, $baseTemp + (0.1 * $context['retry_count']));
     }
-    
+
     if (isset($context['error_recovery']) && $context['error_recovery']) {
         $baseTemp = max(0.1, $baseTemp - 0.2);
     }
-    
+
     return $baseTemp;
 }
 
@@ -211,24 +217,24 @@ $cache = new ResponseCache($logger);
 
 // Simulate API calls
 $prompts = [
-    "Explain PHP namespaces",
-    "Explain PHP namespaces", // Duplicate - should hit cache
-    "Write a singleton pattern",
-    "Explain PHP namespaces", // Another duplicate
+    'Explain PHP namespaces',
+    'Explain PHP namespaces', // Duplicate - should hit cache
+    'Write a singleton pattern',
+    'Explain PHP namespaces', // Another duplicate
 ];
 
 foreach ($prompts as $i => $prompt) {
     // Check cache first
     $cached = $cache->get($prompt, 'gpt-4', 0.5);
-    
+
     if ($cached) {
-        echo "Request $i: CACHE HIT for '$prompt'\n";
+        echo "Request {$i}: CACHE HIT for '{$prompt}'\n";
     } else {
-        echo "Request $i: CACHE MISS for '$prompt' - calling API\n";
-        
+        echo "Request {$i}: CACHE MISS for '{$prompt}' - calling API\n";
+
         // Simulate API response
-        $response = ['content' => "Response for: $prompt", 'tokens' => 150];
-        
+        $response = ['content' => "Response for: {$prompt}", 'tokens' => 150];
+
         // Store in cache
         $cache->set($prompt, 'gpt-4', 0.5, $response);
     }
@@ -257,7 +263,7 @@ $operations = [
 
 foreach ($operations as $i => $op) {
     $totalTokens = $op['prompt'] + $op['completion'];
-    
+
     if ($tokenManager->canAfford($totalTokens)) {
         echo sprintf(
             "Operation %d: Using %d tokens with %s\n",
@@ -265,9 +271,9 @@ foreach ($operations as $i => $op) {
             $totalTokens,
             $op['model']
         );
-        
+
         $tokenManager->track($op['prompt'], $op['completion'], $op['model']);
-        
+
         $stats = $tokenManager->getStats();
         echo sprintf(
             "  Budget: %d/%d used (%.1f%%), %d remaining\n",
@@ -309,10 +315,10 @@ class EnhancedPromptTemplates extends PromptTemplates
                 'output' => '{"request_type": "explanation", "requires_tools": false, "confidence": 0.95}',
             ],
         ];
-        
+
         $prompt = "You are an expert at understanding user intent in coding requests.\n\n";
         $prompt .= "## Few-Shot Examples:\n\n";
-        
+
         foreach ($examples as $i => $example) {
             $prompt .= sprintf(
                 "Example %d:\n",
@@ -322,9 +328,9 @@ class EnhancedPromptTemplates extends PromptTemplates
             $prompt .= sprintf("Reasoning: %s\n", $example['reasoning']);
             $prompt .= sprintf("A: %s\n\n", $example['output']);
         }
-        
+
         $prompt .= "Now classify the user's request using the same format.";
-        
+
         return $prompt;
     }
 }
@@ -332,8 +338,8 @@ class EnhancedPromptTemplates extends PromptTemplates
 $enhancedPrompt = EnhancedPromptTemplates::classificationWithExamples();
 echo "Enhanced Classification Prompt:\n";
 echo "================================\n";
-echo substr($enhancedPrompt, 0, 500) . "...\n";
-echo sprintf("\nPrompt length: %d characters\n", strlen($enhancedPrompt));
+echo mb_substr($enhancedPrompt, 0, 500) . "...\n";
+echo sprintf("\nPrompt length: %d characters\n", mb_strlen($enhancedPrompt));
 
 // Summary
 echo "\n=== Optimization Summary ===\n";
