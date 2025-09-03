@@ -32,6 +32,7 @@
     "openai-php/client": "^0.14.0",
     "php-tui/term": "^0.3.4",
     "psy/psysh": "^0.12.9",
+    "soloterm/grapheme": "^1.0",
     "spatie/async": "^1.7",
     "spatie/pdf-to-text": "^1.54",
     "spatie/ray": "^1.42",
@@ -51,7 +52,8 @@
   },
   "autoload": {
     "psr-4": {
-      "HelgeSverre\\Swarm\\": "src/"
+      "HelgeSverre\\Swarm\\": "src/",
+      "Examples\\": "examples/"
     }
   },
   "autoload-dev": {
