@@ -98,14 +98,14 @@ class Swarm
         while ($this->running) {
             $loopIterations++;
 
-            // Log every 20 iterations (1 second at 50ms sleep)
-            if ($loopIterations % 20 === 0) {
-                $this->logDebug('Main loop running', [
-                    'iterations' => $loopIterations,
-                    'active_requests' => count($this->activeRequests),
-                    'has_active_processes' => $this->processManager->hasActiveProcesses(),
-                ]);
-            }
+            // Commented out to reduce log spam
+            // if ($loopIterations % 20 === 0) {
+            //     $this->logDebug('Main loop running', [
+            //         'iterations' => $loopIterations,
+            //         'active_requests' => count($this->activeRequests),
+            //         'has_active_processes' => $this->processManager->hasActiveProcesses(),
+            //     ]);
+            // }
 
             // Handle any user input (non-blocking)
             $input = $ui->checkForInput();

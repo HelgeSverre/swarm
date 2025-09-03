@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\Swarm\CLI\Terminal;
 
 use HelgeSverre\Swarm\Agent\AgentResponse;
+use HelgeSverre\Swarm\CLI\Activity\ToolCallEntry;
 use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Events\ProcessCompleteEvent;
 use HelgeSverre\Swarm\Events\ProcessingEvent;
@@ -42,6 +43,10 @@ class FullTerminalUI
         'tools' => [],
         'notes' => [],
     ];
+
+    protected array $pendingToolCalls = [];
+
+    protected array $activityFeed = [];
 
     protected string $currentTask = '';
 
@@ -181,10 +186,10 @@ class FullTerminalUI
 
         // Show cursor
         echo "\033[?25h";
-        
+
         // Reset all attributes
         echo "\033[0m";
-        
+
         // Exit alternate screen buffer (restores original screen)
         echo "\033[?1049l";
 
@@ -276,10 +281,10 @@ class FullTerminalUI
 
         // Enter alternate screen buffer (like vim/less)
         echo "\033[?1049h";
-        
+
         // Clear the alternate screen and scrollback
         echo "\033[2J\033[3J\033[H";
-        
+
         // Set up terminal for raw mode
         system('stty -echo -icanon min 1 time 0');
         stream_set_blocking(STDIN, false);
@@ -658,7 +663,16 @@ class FullTerminalUI
             'params' => $event->params,
         ]));
 
+        // Add to history for historical view
         $this->addHistory('tool', $event->tool, implode(' ', $event->params), 'Running...');
+
+        // Store the pending tool call for completion later
+        $this->pendingToolCalls[$event->tool] = [
+            'tool' => $event->tool,
+            'params' => $event->params,
+            'startTime' => time(),
+        ];
+
         $this->stateChanged = true;
     }
 
@@ -671,6 +685,21 @@ class FullTerminalUI
 
         $result = $event->result->isSuccess() ? 'Success' : 'Failed';
         $this->addHistory('tool', $event->tool, implode(' ', $event->params), $result);
+
+        // Create and add ToolCallEntry to activity feed
+        $toolCallEntry = new ToolCallEntry(
+            $event->tool,
+            $event->params,
+            $event->result,
+            $this->pendingToolCalls[$event->tool]['startTime'] ?? time()
+        );
+
+        // Add to activity feed for display
+        $this->addActivity($toolCallEntry);
+
+        // Clean up pending tool call
+        unset($this->pendingToolCalls[$event->tool]);
+
         $this->stateChanged = true;
     }
 
@@ -754,20 +783,46 @@ class FullTerminalUI
         $this->moveCursor($row++, 1);
         $this->renderStatusBar();
 
-        // Recent activity
-        if (! empty($this->history)) {
-            $row++;
-            $this->moveCursor($row++, 2);
-            echo Ansi::BOLD . 'Recent activity:' . Ansi::RESET;
+        // Recent activity (no label needed, just display the content)
+        if (! empty($this->history) || ! empty($this->activityFeed)) {
+            $row++; // Add some spacing after status bar
 
             $availableLines = $this->terminalHeight - $row - 6;
-            $recentHistory = array_slice($this->history, -$availableLines);
 
-            foreach ($recentHistory as $entry) {
+            // Merge activity feed and history, prioritizing activity feed
+            $allEntries = [];
+
+            // Add activity feed entries (they have a getMessage method)
+            foreach ($this->activityFeed as $activity) {
+                if (method_exists($activity, 'getMessage')) {
+                    $allEntries[] = [
+                        'time' => $activity->timestamp ?? time(),
+                        'type' => 'tool_activity',
+                        'content' => $activity->getMessage(),
+                        'activity_object' => $activity,
+                    ];
+                }
+            }
+
+            // Add history entries
+            foreach ($this->history as $entry) {
+                if ($entry['type'] !== 'tool') { // Skip old tool entries, we use activity feed now
+                    $allEntries[] = $entry;
+                }
+            }
+
+            // Sort by time (oldest first) and get recent ones
+            usort($allEntries, fn ($a, $b) => ($a['time'] ?? 0) - ($b['time'] ?? 0));
+            // Get the most recent entries but maintain chronological order
+            $totalEntries = count($allEntries);
+            $startIndex = max(0, $totalEntries - $availableLines);
+            $recentEntries = array_slice($allEntries, $startIndex, $availableLines);
+
+            foreach ($recentEntries as $entry) {
                 if ($row >= $this->terminalHeight - 5) {
                     break;
                 }
-                $this->moveCursor($row, 2);
+                // renderHistoryEntry now handles cursor positioning internally
                 $rowsUsed = $this->renderHistoryEntry($entry, $this->mainAreaWidth - 2, $row);
                 $row += $rowsUsed;
             }
@@ -801,11 +856,7 @@ class FullTerminalUI
         $statusContent = ' 💮 swarm ';
         $statusContent .= Ansi::DIM . Ansi::BOX_V . ' ' . Ansi::RESET . Ansi::BG_DARK;
 
-        if (! empty($this->currentTask)) {
-            $statusContent .= Ansi::GREEN . '● ' . Ansi::WHITE . $this->truncate($this->currentTask, 30);
-            $statusContent .= Ansi::DIM . ' ' . Ansi::BOX_V . ' ' . Ansi::RESET . Ansi::BG_DARK;
-        }
-
+        // Only show the status, no task description
         $statusContent .= Ansi::YELLOW . $this->status . Ansi::RESET . Ansi::BG_DARK;
 
         if ($this->totalSteps > 0) {
@@ -829,7 +880,7 @@ class FullTerminalUI
     protected function renderSidebar(): void
     {
         $col = $this->mainAreaWidth + 3;
-        $row = 1;
+        $row = 4;  // Start below the status bar
 
         // Task Queue section
         $tasksActive = $this->currentFocus === self::FOCUS_TASKS;
@@ -941,73 +992,162 @@ class FullTerminalUI
     {
         $time = date('H:i:s', $entry['time'] ?? time());
         $prefix = Ansi::DIM . "[{$time}]" . Ansi::RESET . ' ';
-        $prefixLen = 11;
+        $prefixLen = 11; // Length of "[HH:MM:SS] "
 
-        $rowsUsed = 1;
+        // Calculate actual content width (account for prefix and type indicator)
+        // maxWidth is the total width available, we need to subtract prefix and type indicator
+        $typeIndicatorLen = 2; // Most indicators are 1 char + space
+        $contentWidth = $maxWidth - $prefixLen - $typeIndicatorLen - 2; // Extra margin for safety
+
+        // Ensure content width is positive
+        if ($contentWidth < 10) {
+            $contentWidth = 10; // Minimum width for content
+        }
+
+        $rowsUsed = 0;
+
+        // Prepare the content based on type
+        $typeIndicator = '';
+        $content = $entry['content'] ?? '';
+        $formatting = '';
+        $formattingEnd = '';
 
         switch ($entry['type']) {
             case 'command':
-                echo $prefix . Ansi::BLUE . '$' . Ansi::RESET . ' ';
-                echo $this->truncate($entry['content'], $maxWidth - $prefixLen - 2);
+                $typeIndicator = Ansi::BLUE . '$' . Ansi::RESET . ' ';
                 break;
             case 'status':
-                echo $prefix . Ansi::GREEN . '✓' . Ansi::RESET . ' ';
-                echo $this->truncate($entry['content'], $maxWidth - $prefixLen - 2);
+                $typeIndicator = Ansi::GREEN . '✓' . Ansi::RESET . ' ';
+                break;
+            case 'tool_activity':
+                $typeIndicator = Ansi::CYAN . '🔧' . Ansi::RESET . ' ';
+                break;
+            case 'activity':
+                $typeIndicator = Ansi::CYAN . '⚡' . Ansi::RESET . ' ';
                 break;
             case 'tool':
-                echo $prefix . Ansi::CYAN . '>' . Ansi::RESET . ' ';
-                $toolStr = "{$entry['tool']} {$entry['params']}";
-                echo $this->truncate($toolStr, $maxWidth - $prefixLen - 2);
+                $typeIndicator = Ansi::CYAN . '>' . Ansi::RESET . ' ';
+                $content = "{$entry['tool']} {$entry['params']}";
                 break;
             case 'system':
-                echo $prefix . Ansi::YELLOW . '!' . Ansi::RESET . ' ';
-                echo Ansi::DIM . $this->truncate($entry['content'], $maxWidth - $prefixLen - 2) . Ansi::RESET;
+                $typeIndicator = Ansi::YELLOW . '!' . Ansi::RESET . ' ';
+                $formatting = Ansi::DIM;
+                $formattingEnd = Ansi::RESET;
                 break;
             case 'assistant':
-                echo $prefix . Ansi::GREEN . '●' . Ansi::RESET . ' ';
-                echo $this->truncate($entry['content'], $maxWidth - $prefixLen - 2);
-
-                // Handle thought display if present
-                if (isset($entry['thought']) && ! empty($entry['thought'])) {
-                    $thoughtId = md5($entry['time'] . $entry['thought']);
-                    $isExpanded = in_array($thoughtId, $this->expandedThoughts);
-                    $thoughtLines = $this->wrapText($entry['thought'], $maxWidth - $prefixLen - 4);
-
-                    if (count($thoughtLines) > 4 && ! $isExpanded) {
-                        // Show collapsed version
-                        for ($i = 0; $i < min(3, count($thoughtLines)); $i++) {
-                            $this->moveCursor($currentRow + $rowsUsed, 2);
-                            echo str_repeat(' ', $prefixLen) . Ansi::DIM . Ansi::ITALIC . '  ' . $thoughtLines[$i] . Ansi::RESET;
-                            $rowsUsed++;
-                        }
-
-                        $this->moveCursor($currentRow + $rowsUsed, 2);
-                        $remainingLines = count($thoughtLines) - 3;
-                        echo str_repeat(' ', $prefixLen) . Ansi::DIM . "  ... +{$remainingLines} more lines ({$this->modSymbol}R to expand)" . Ansi::RESET;
-                        $rowsUsed++;
-                    } else {
-                        // Show all lines
-                        foreach ($thoughtLines as $line) {
-                            $this->moveCursor($currentRow + $rowsUsed, 2);
-                            echo str_repeat(' ', $prefixLen) . Ansi::DIM . Ansi::ITALIC . '  ' . $line . Ansi::RESET;
-                            $rowsUsed++;
-                        }
-
-                        if (count($thoughtLines) > 4) {
-                            $this->moveCursor($currentRow + $rowsUsed, 2);
-                            echo str_repeat(' ', $prefixLen) . Ansi::DIM . "  ({$this->modSymbol}R to collapse)" . Ansi::RESET;
-                            $rowsUsed++;
-                        }
-                    }
-                }
+                $typeIndicator = Ansi::GREEN . '●' . Ansi::RESET . ' ';
                 break;
             case 'error':
-                echo $prefix . Ansi::RED . '✗' . Ansi::RESET . ' ';
-                echo Ansi::RED . $this->truncate($entry['content'], $maxWidth - $prefixLen - 2) . Ansi::RESET;
+                $typeIndicator = Ansi::RED . '✗' . Ansi::RESET . ' ';
+                $formatting = Ansi::RED;
+                $formattingEnd = Ansi::RESET;
                 break;
             default:
-                echo $prefix . '• ';
-                echo $this->truncate($entry['content'], $maxWidth - $prefixLen - 2);
+                $typeIndicator = '• ';
+        }
+
+        // Wrap the content to fit the available width
+        $wrappedLines = $this->wrapText($content, $contentWidth);
+
+        // Render the first line with prefix and type indicator
+        if (! empty($wrappedLines)) {
+            // Position cursor for first line
+            $this->moveCursor($currentRow, 2);
+
+            // Build the first line and ensure it doesn't exceed maxWidth
+            $firstLine = $prefix . $typeIndicator . $formatting . $wrappedLines[0] . $formattingEnd;
+
+            // Truncate if still too long (safety measure)
+            if (mb_strlen(Ansi::stripAnsi($firstLine)) > $maxWidth) {
+                $firstLine = mb_substr($firstLine, 0, $maxWidth - 3) . '...';
+            }
+
+            echo $firstLine;
+            $rowsUsed = 1;
+
+            // Render additional wrapped lines with proper indentation
+            $indentSpace = str_repeat(' ', $prefixLen + $typeIndicatorLen);
+            for ($i = 1; $i < count($wrappedLines); $i++) {
+                $this->moveCursor($currentRow + $rowsUsed, 2);
+
+                // Build the continuation line
+                $continuationLine = $indentSpace . $formatting . $wrappedLines[$i] . $formattingEnd;
+
+                // Truncate if too long (safety measure)
+                if (mb_strlen(Ansi::stripAnsi($continuationLine)) > $maxWidth) {
+                    $continuationLine = mb_substr($continuationLine, 0, $maxWidth - 3) . '...';
+                }
+
+                echo $continuationLine;
+                $rowsUsed++;
+            }
+        } else {
+            // If no content, just show the prefix and type indicator
+            $this->moveCursor($currentRow, 2);
+            echo $prefix . $typeIndicator;
+            $rowsUsed = 1;
+        }
+
+        // Special handling for assistant thoughts (if present)
+        if ($entry['type'] === 'assistant' && isset($entry['thought']) && ! empty($entry['thought'])) {
+            $thoughtId = md5($entry['time'] . $entry['thought']);
+            $isExpanded = in_array($thoughtId, $this->expandedThoughts);
+            $thoughtLines = $this->wrapText($entry['thought'], $contentWidth - 2);
+
+            $thoughtIndent = str_repeat(' ', $prefixLen + $typeIndicatorLen);
+
+            if (count($thoughtLines) > 4 && ! $isExpanded) {
+                // Show collapsed version
+                for ($i = 0; $i < min(3, count($thoughtLines)); $i++) {
+                    $this->moveCursor($currentRow + $rowsUsed, 2);
+                    $thoughtLine = $thoughtIndent . Ansi::DIM . Ansi::ITALIC . $thoughtLines[$i] . Ansi::RESET;
+
+                    // Ensure thought line doesn't exceed width
+                    if (mb_strlen(Ansi::stripAnsi($thoughtLine)) > $maxWidth) {
+                        $thoughtLine = mb_substr($thoughtLine, 0, $maxWidth - 3) . '...';
+                    }
+
+                    echo $thoughtLine;
+                    $rowsUsed++;
+                }
+
+                $this->moveCursor($currentRow + $rowsUsed, 2);
+                $remainingLines = count($thoughtLines) - 3;
+                $expandLine = $thoughtIndent . Ansi::DIM . "... +{$remainingLines} more lines ({$this->modSymbol}R to expand)" . Ansi::RESET;
+
+                if (mb_strlen(Ansi::stripAnsi($expandLine)) > $maxWidth) {
+                    $expandLine = mb_substr($expandLine, 0, $maxWidth - 3) . '...';
+                }
+
+                echo $expandLine;
+                $rowsUsed++;
+            } else {
+                // Show all thought lines
+                foreach ($thoughtLines as $line) {
+                    $this->moveCursor($currentRow + $rowsUsed, 2);
+                    $thoughtLine = $thoughtIndent . Ansi::DIM . Ansi::ITALIC . $line . Ansi::RESET;
+
+                    // Ensure thought line doesn't exceed width
+                    if (mb_strlen(Ansi::stripAnsi($thoughtLine)) > $maxWidth) {
+                        $thoughtLine = mb_substr($thoughtLine, 0, $maxWidth - 3) . '...';
+                    }
+
+                    echo $thoughtLine;
+                    $rowsUsed++;
+                }
+
+                if (count($thoughtLines) > 4) {
+                    $this->moveCursor($currentRow + $rowsUsed, 2);
+                    $collapseLine = $thoughtIndent . Ansi::DIM . "({$this->modSymbol}R to collapse)" . Ansi::RESET;
+
+                    if (mb_strlen(Ansi::stripAnsi($collapseLine)) > $maxWidth) {
+                        $collapseLine = mb_substr($collapseLine, 0, $maxWidth - 3) . '...';
+                    }
+
+                    echo $collapseLine;
+                    $rowsUsed++;
+                }
+            }
         }
 
         return $rowsUsed;
@@ -1193,16 +1333,16 @@ class FullTerminalUI
         // Handle escape sequences
         if ($key === "\033") {
             $seq = $key;
-            
+
             // Wait a bit for the next character (escape sequences come quickly)
             $read2 = [STDIN];
             $result2 = stream_select($read2, $write, $except, 0, 10000); // 10ms timeout
-            
+
             if ($result2 > 0) {
                 $next = fgetc(STDIN);
                 if ($next !== false && $next !== '') {
                     $seq .= $next;
-                    
+
                     // Check for Alt key combinations
                     if ($next !== '[' && $next !== "\033") {
                         return 'ALT+' . mb_strtoupper($next);
@@ -1221,7 +1361,7 @@ class FullTerminalUI
                 // Read the third character for arrow keys and other sequences
                 $read3 = [STDIN];
                 $result3 = stream_select($read3, $write, $except, 0, 10000); // 10ms timeout
-                
+
                 if ($result3 > 0) {
                     $third = fgetc(STDIN);
                     if ($third !== false && $third !== '') {
@@ -1309,6 +1449,26 @@ class FullTerminalUI
 
         if (count($this->history) > 100) {
             array_shift($this->history);
+        }
+    }
+
+    protected function addActivity($activityEntry): void
+    {
+        // Add to activity feed for display in main area
+        $this->activityFeed[] = $activityEntry;
+
+        // Keep activity feed from growing too large
+        if (count($this->activityFeed) > 50) {
+            array_shift($this->activityFeed);
+        }
+
+        // Also add a simplified version to history
+        if (method_exists($activityEntry, 'getMessage')) {
+            $this->history[] = [
+                'time' => time(),
+                'type' => 'activity',
+                'content' => $activityEntry->getMessage(),
+            ];
         }
     }
 
