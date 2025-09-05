@@ -376,11 +376,28 @@ class SwarmMockApp extends Widget
      */
     public function needsRepaint(): bool
     {
-        return $this->needsRepaint ||
-               $this->header->needsRepaint() ||
-               $this->activityLog->needsRepaint() ||
-               $this->sidebar->needsRepaint() ||
-               $this->input->needsRepaint();
+        $appNeedsRepaint = $this->needsRepaint;
+        $headerNeedsRepaint = $this->header->needsRepaint();
+        $activityLogNeedsRepaint = $this->activityLog->needsRepaint();
+        $sidebarNeedsRepaint = $this->sidebar->needsRepaint();
+        $inputNeedsRepaint = $this->input->needsRepaint();
+
+        $needsRepaint = $appNeedsRepaint || $headerNeedsRepaint || $activityLogNeedsRepaint || $sidebarNeedsRepaint || $inputNeedsRepaint;
+
+        // Debug: Log which components need repainting (but throttle to avoid spam)
+        static $debugCount = 0;
+        if ($needsRepaint && ++$debugCount % 100 === 0) { // Only log every 100th repaint request
+            \Examples\TuiLib\Core\Logger::debug('Repaint needed', [
+                'app' => $appNeedsRepaint,
+                'header' => $headerNeedsRepaint,
+                'activityLog' => $activityLogNeedsRepaint,
+                'sidebar' => $sidebarNeedsRepaint,
+                'input' => $inputNeedsRepaint,
+                'debug_count' => $debugCount,
+            ]);
+        }
+
+        return $needsRepaint;
     }
 
     /**

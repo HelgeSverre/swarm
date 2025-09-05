@@ -122,6 +122,8 @@ class SwarmInput extends Widget
 
         Logger::logWidgetStatic($this->id, 'paint_complete');
 
+        $this->clearRepaintFlag();
+
         return '';
     }
 
