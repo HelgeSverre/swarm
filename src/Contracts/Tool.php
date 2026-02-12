@@ -37,12 +37,15 @@ abstract class Tool
     public function toOpenAISchema(): array
     {
         return [
-            'name' => $this->name(),
-            'description' => $this->description(),
-            'parameters' => [
-                'type' => 'object',
-                'properties' => $this->parameters(),
-                'required' => $this->required(),
+            'type' => 'function',
+            'function' => [
+                'name' => $this->name(),
+                'description' => $this->description(),
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => $this->parameters(),
+                    'required' => $this->required(),
+                ],
             ],
         ];
     }
