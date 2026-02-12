@@ -51,7 +51,23 @@ class Layout
     {
         $layout = new self($width, $height);
 
-        if (isset($config['sidebar_width'])) {
+        // Handle chat interface layout (status + main + input)
+        if (isset($config['status_height'], $config['input_height'])) {
+            $statusHeight = $config['status_height'];
+            $inputHeight = $config['input_height'];
+            $mainHeight = $height - $statusHeight - $inputHeight;
+
+            // Status bar at the top
+            $layout->area('status', 1, 1, $width, $statusHeight);
+
+            // Main chat area in the middle
+            $layout->area('main', 1, $statusHeight + 1, $width, $mainHeight);
+
+            // Input area at the bottom
+            $layout->area('input', 1, $statusHeight + $mainHeight + 1, $width, $inputHeight);
+        }
+        // Handle sidebar layout (original behavior)
+        elseif (isset($config['sidebar_width'])) {
             $sidebarWidth = $config['sidebar_width'];
             $mainWidth = $width - $sidebarWidth - 1; // -1 for divider
 

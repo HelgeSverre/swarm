@@ -115,6 +115,14 @@ class Terminal
     }
 
     /**
+     * Check if running in a terminal
+     */
+    protected function isTerminal(): bool
+    {
+        return stream_isatty(STDIN) && stream_isatty(STDOUT);
+    }
+
+    /**
      * Initialize terminal for TUI mode
      */
     public function initialize(): void
@@ -123,8 +131,13 @@ class Terminal
             return;
         }
 
+        // Check if we're running in a terminal
+        if (!$this->isTerminal()) {
+            throw new \RuntimeException('This application requires a terminal to run.');
+        }
+
         // Save current terminal state
-        $this->originalTermState = trim(shell_exec('stty -g') ?? '');
+        $this->originalTermState = trim(shell_exec('stty -g 2>/dev/null') ?? '');
 
         // Enter alternate screen buffer
         echo "\033[?1049h";
@@ -133,7 +146,9 @@ class Terminal
         echo "\033[2J\033[3J\033[H";
 
         // Set up raw mode for non-blocking input
-        system('stty -echo -icanon min 1 time 0');
+        if ($this->originalTermState) {
+            system('stty -echo -icanon min 1 time 0 2>/dev/null');
+        }
         stream_set_blocking(STDIN, false);
 
         // Hide cursor initially
@@ -165,9 +180,9 @@ class Terminal
 
         // Restore original terminal state
         if (! empty($this->originalTermState)) {
-            system("stty {$this->originalTermState}");
-        } else {
-            system('stty sane');
+            system("stty {$this->originalTermState} 2>/dev/null");
+        } elseif ($this->isTerminal()) {
+            system('stty sane 2>/dev/null');
         }
 
         $this->initialized = false;
