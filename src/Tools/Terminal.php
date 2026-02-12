@@ -50,8 +50,8 @@ class Terminal extends Tool
             getenv('TERMINAL_ENABLED') ?: $_ENV['TERMINAL_ENABLED'] ?? 'false',
             FILTER_VALIDATE_BOOLEAN
         );
-        
-        if (!$enabled) {
+
+        if (! $enabled) {
             return ToolResponse::error(
                 'Terminal tool is disabled for security. Set TERMINAL_ENABLED=true in .env to enable command execution.'
             );

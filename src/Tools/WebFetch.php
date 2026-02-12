@@ -61,16 +61,16 @@ class WebFetch extends Tool
 
         // Security: Validate URL scheme (prevent SSRF)
         $parsedUrl = parse_url($url);
-        $scheme = strtolower($parsedUrl['scheme'] ?? '');
-        
-        if (!in_array($scheme, ['http', 'https'], true)) {
-            return ToolResponse::error("Invalid URL scheme. Only http and https are allowed.");
+        $scheme = mb_strtolower($parsedUrl['scheme'] ?? '');
+
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            return ToolResponse::error('Invalid URL scheme. Only http and https are allowed.');
         }
 
         // Security: Block private/local IP addresses (SSRF protection)
         $host = $parsedUrl['host'] ?? '';
         if ($this->isPrivateOrLocalHost($host)) {
-            return ToolResponse::error("Access to private or local network addresses is not allowed.");
+            return ToolResponse::error('Access to private or local network addresses is not allowed.');
         }
 
         try {
@@ -140,7 +140,7 @@ class WebFetch extends Tool
     {
         // Resolve hostname to IP(s)
         $ips = @gethostbynamel($host) ?: [$host];
-        
+
         foreach ($ips as $ip) {
             // Check for private/reserved ranges (RFC1918, loopback, link-local, etc.)
             if (
@@ -150,7 +150,7 @@ class WebFetch extends Tool
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -159,7 +159,8 @@ class WebFetch extends Tool
      */
     protected function isLocalHostname(string $host): bool
     {
-        $host = strtolower($host);
+        $host = mb_strtolower($host);
+
         return in_array($host, ['localhost', 'localhost.localdomain'], true) ||
                str_ends_with($host, '.local') ||
                str_ends_with($host, '.localhost');
