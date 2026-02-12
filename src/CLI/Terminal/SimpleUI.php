@@ -9,12 +9,13 @@ use HelgeSverre\Swarm\CLI\Activity\ActivityEntry;
 use HelgeSverre\Swarm\CLI\Activity\ConversationEntry;
 use HelgeSverre\Swarm\CLI\Activity\NotificationEntry;
 use HelgeSverre\Swarm\CLI\Activity\ToolCallEntry;
+use HelgeSverre\Swarm\Contracts\UIInterface;
 use HelgeSverre\Swarm\Core\ToolResponse;
 use HelgeSverre\Swarm\Enums\CLI\NotificationType;
 
 use function Laravel\Prompts\text;
 
-class SimpleUI
+class SimpleUI implements UIInterface
 {
     protected array $history = [];
 

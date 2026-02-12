@@ -19,16 +19,16 @@ class CommandHandler
     /**
      * Registered command handlers
      */
-    private array $handlers = [];
+    protected array $handlers = [];
 
     /**
      * Result of command execution
      */
-    private ?CommandResult $lastResult = null;
+    protected ?CommandResult $lastResult = null;
 
-    private ?PathChecker $pathChecker = null;
+    protected ?PathChecker $pathChecker = null;
 
-    private ?StateManager $stateManager = null;
+    protected ?StateManager $stateManager = null;
 
     public function __construct(?PathChecker $pathChecker = null, ?StateManager $stateManager = null)
     {

@@ -20,7 +20,7 @@ class ProcessManager
 
     protected Application $app;
 
-    private array $activeProcesses = [];
+    protected array $activeProcesses = [];
 
     public function __construct(Application $app)
     {

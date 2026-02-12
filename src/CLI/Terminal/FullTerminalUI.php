@@ -6,6 +6,7 @@ namespace HelgeSverre\Swarm\CLI\Terminal;
 
 use HelgeSverre\Swarm\Agent\AgentResponse;
 use HelgeSverre\Swarm\CLI\Activity\ToolCallEntry;
+use HelgeSverre\Swarm\Contracts\UIInterface;
 use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Events\ProcessCompleteEvent;
 use HelgeSverre\Swarm\Events\ProcessingEvent;
@@ -15,7 +16,7 @@ use HelgeSverre\Swarm\Events\TaskUpdateEvent;
 use HelgeSverre\Swarm\Events\ToolCompletedEvent;
 use HelgeSverre\Swarm\Events\ToolStartedEvent;
 
-class FullTerminalUI
+class FullTerminalUI implements UIInterface
 {
     // Focus modes
     const FOCUS_MAIN = 'main';
@@ -129,6 +130,20 @@ class FullTerminalUI
     public function __destruct()
     {
         $this->cleanup();
+    }
+
+    public function prompt(string $label = '>'): string
+    {
+        // FullTerminalUI uses non-blocking input via checkForInput().
+        // This blocking prompt is provided for UIInterface compatibility.
+        while (true) {
+            $input = $this->checkForInput();
+            if ($input !== null) {
+                return $input;
+            }
+            $this->render();
+            usleep(16000); // ~60fps
+        }
     }
 
     public function checkForInput(): ?string

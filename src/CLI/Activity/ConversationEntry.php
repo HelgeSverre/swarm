@@ -12,7 +12,7 @@ use HelgeSverre\Swarm\Enums\CLI\ActivityType;
  */
 class ConversationEntry extends ActivityEntry
 {
-    private ?array $parsedContent = null;
+    protected ?array $parsedContent = null;
 
     public function __construct(
         public readonly string $role,
@@ -62,7 +62,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Parse JSON content if applicable
      */
-    private function parseContent(): void
+    protected function parseContent(): void
     {
         if (str_starts_with(mb_trim($this->content), '{') || str_starts_with(mb_trim($this->content), '[')) {
             $decoded = json_decode($this->content, true);
@@ -75,7 +75,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Format parsed JSON content into human-readable text
      */
-    private function formatParsedContent(): string
+    protected function formatParsedContent(): string
     {
         // Handle function calls
         if (isset($this->parsedContent['function_call'])) {
@@ -114,7 +114,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Format a function call into readable text
      */
-    private function formatFunctionCall(array $functionCall): string
+    protected function formatFunctionCall(array $functionCall): string
     {
         $name = $functionCall['name'] ?? 'unknown';
         $args = $functionCall['arguments'] ?? '';
@@ -140,7 +140,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Format a plan into readable text
      */
-    private function formatPlan(array $plan): string
+    protected function formatPlan(array $plan): string
     {
         $summary = $plan['plan_summary'] ?? 'Planning task execution';
         $stepCount = isset($plan['steps']) ? count($plan['steps']) : 0;
@@ -154,7 +154,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Format a list (like file paths) into readable text
      */
-    private function formatList(array $list): string
+    protected function formatList(array $list): string
     {
         $count = count($list);
 
@@ -178,7 +178,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Extract path from function arguments
      */
-    private function extractPath($args): string
+    protected function extractPath($args): string
     {
         if (is_array($args) && isset($args['path'])) {
             return basename($args['path']);
@@ -193,7 +193,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Extract command from bash arguments
      */
-    private function extractCommand($args): string
+    protected function extractCommand($args): string
     {
         if (is_array($args) && isset($args['command'])) {
             $cmd = $args['command'];
@@ -207,7 +207,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Extract search term from grep arguments
      */
-    private function extractSearchTerm($args): string
+    protected function extractSearchTerm($args): string
     {
         if (is_array($args)) {
             return $args['search'] ?? $args['pattern'] ?? 'pattern';
@@ -219,7 +219,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Format task extraction results
      */
-    private function formatTasks(array $tasks): string
+    protected function formatTasks(array $tasks): string
     {
         $count = count($tasks);
         if ($count === 0) {
@@ -241,7 +241,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Format classification results
      */
-    private function formatClassification(array $classification): string
+    protected function formatClassification(array $classification): string
     {
         $type = $classification['request_type'] ?? 'unknown';
         $confidence = isset($classification['confidence']) ? sprintf(' (%.0f%% confident)', $classification['confidence'] * 100) : '';
@@ -264,7 +264,7 @@ class ConversationEntry extends ActivityEntry
     /**
      * Format generic objects
      */
-    private function formatGenericObject(array $object): string
+    protected function formatGenericObject(array $object): string
     {
         // Try to identify common patterns
         if (isset($object['success'], $object['message'])) {

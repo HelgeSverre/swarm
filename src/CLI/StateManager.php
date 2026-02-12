@@ -16,12 +16,12 @@ class StateManager
 {
     use Loggable;
 
-    private const STATE_FILE = '.swarm.json';
+    protected const STATE_FILE = '.swarm.json';
 
     /**
      * Default state structure
      */
-    private array $defaultState = [
+    protected array $defaultState = [
         'tasks' => [],
         'task_history' => [],
         'current_task' => null,

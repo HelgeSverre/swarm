@@ -59,7 +59,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Format the tool call based on tool name and parameters
      */
-    private function formatToolCall(): string
+    protected function formatToolCall(): string
     {
         return match ($this->toolName) {
             'write_file' => $this->formatWriteFile(),
@@ -73,7 +73,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Format write_file tool call
      */
-    private function formatWriteFile(): string
+    protected function formatWriteFile(): string
     {
         $path = $this->params['path'] ?? 'unknown';
         $filename = basename($path);
@@ -84,7 +84,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Format read_file tool call
      */
-    private function formatReadFile(): string
+    protected function formatReadFile(): string
     {
         $path = $this->params['path'] ?? 'unknown';
         $filename = basename($path);
@@ -95,7 +95,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Format bash tool call
      */
-    private function formatBash(): string
+    protected function formatBash(): string
     {
         $command = $this->params['command'] ?? 'command';
 
@@ -110,7 +110,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Format grep tool call
      */
-    private function formatGrep(): string
+    protected function formatGrep(): string
     {
         $search = $this->params['search'] ?? null;
         $pattern = $this->params['pattern'] ?? null;
@@ -125,7 +125,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Format generic tool call
      */
-    private function formatGeneric(): string
+    protected function formatGeneric(): string
     {
         return "🔧 {$this->toolName}";
     }
@@ -133,7 +133,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Summarize the result of the tool call
      */
-    private function summarizeResult(): ?string
+    protected function summarizeResult(): ?string
     {
         if ($this->response === null || ! $this->response->isSuccess()) {
             return null;
@@ -153,7 +153,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Summarize bash command result
      */
-    private function summarizeBashResult(array $data): string
+    protected function summarizeBashResult(array $data): string
     {
         $returnCode = $data['return_code'] ?? null;
 
@@ -167,7 +167,7 @@ class ToolCallEntry extends ActivityEntry
     /**
      * Summarize grep result
      */
-    private function summarizeGrepResult(array $data): string
+    protected function summarizeGrepResult(array $data): string
     {
         $count = $data['count'] ?? 0;
 
