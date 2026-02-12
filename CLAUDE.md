@@ -37,17 +37,28 @@ Swarm is an AI-powered coding assistant that uses OpenAI's GPT models to underst
 ## Component Details
 
 ### CodingAgent (src/Agent/CodingAgent.php)
-The brain of the system. Key methods:
-- `processRequest()`: Main entry point, classifies and routes requests
-- `classifyRequest()`: Uses structured outputs to determine request type
-- `handleDemonstration()`: Returns code examples in markdown
-- `handleExplanation()`: Provides educational content
-- `handleConversation()`: General conversation with context
-- `extractTasks()`: Extracts actionable tasks from implementation requests
-- `planTask()`: Creates structured execution plans
-- `executeTask()`: Runs tasks using tools
+The brain of the system. Uses multi-channel processing with handler delegation:
+- `processRequest()`: Main entry point, routes through channels with recovery
+- `processWithChannels()`: Multi-channel processing (analysis → classification → routing → execution)
+- `quickClassifyRequest()`: Fast pattern-based classification for simple requests
+- `classifyRequestWithConsistency()`: Self-consistent classification via multiple reasoning paths
+- `getRequestHandler()`: Routes to appropriate handler (Implementation/Demonstration/Explanation/Query/Conversation)
+- `callLLMWithEnhancements()`: LLM call with retry logic and exponential backoff
 - `setProgressCallback()`: Sets callback for progress reporting
-- `reportProgress()`: Reports progress during execution
+
+### Request Handlers (src/Agent/*Handler.php)
+Handlers implement `RequestHandler` interface for clean separation:
+- `ImplementationHandler`: Code generation and task execution with tools
+- `DemonstrationHandler`: Code examples in markdown
+- `ExplanationHandler`: Educational content
+- `QueryHandler`: General questions
+- `ConversationHandler`: General conversation with context
+
+### ConversationBuffer (src/Agent/ConversationBuffer.php)
+Intelligent context management with relevance-based selection:
+- `addMessage()`: Add messages with automatic memory management
+- `getOptimalContext()`: Get contextually relevant messages for a given query
+- `getRecentContext()`: Simple recent message retrieval
 
 ### ToolExecutor (src/Core/ToolExecutor.php)
 Manages tool registration and execution:
@@ -138,11 +149,11 @@ Manages the terminal UI:
 
 ### Conversation History Management
 ```php
-// History is maintained in CodingAgent::$conversationHistory
-// Filtered in buildMessagesWithHistory() to exclude:
-- 'tool' role messages (incompatible with API)
-- 'error' role messages (noise)
-// Limited to last 20 messages for token management
+// History is managed by ConversationBuffer with intelligent context selection
+// ConversationBuffer provides:
+// - Relevance-based context retrieval via getOptimalContext()
+// - Automatic memory management with configurable buffer size
+// - Recent context fallback via getRecentContext()
 ```
 
 ### Progress Reporting System
@@ -197,35 +208,17 @@ readonly class Task {
 
 ## Environment Variables
 - `OPENAI_API_KEY`: Required for OpenAI API access
-- `OPENAI_MODEL`: Model to use (default: gpt-4)
+- `OPENAI_MODEL`: Model to use (default: gpt-4o-mini)
 - `OPENAI_TEMPERATURE`: Temperature setting (default: 0.7)
+- `TERMINAL_ENABLED`: Enable terminal tool (default: false, for security)
 - `LOG_ENABLED`: Enable file logging
 - `LOG_LEVEL`: Logging level (debug, info, warning, error)
 - `LOG_PATH`: Path for log files (default: storage/logs)
 
-## Recent Changes
-
-### Task System Refactoring
-- Converted tasks from arrays to immutable Task value objects
-- Added TaskStatus enum with proper state transitions
-- Improved type safety throughout task management
-
-### Prompt Template System
-- Created PromptTemplates class with static methods
-- Centralized all prompts for consistency
-- Added code assistance prompts (explain, refactor, debug, review, generate, document, test)
-- Dynamic tool list integration
-
-### Progress Reporting
-- Added progress callback system to CodingAgent and ToolRouter
-- Real-time updates during task classification, planning, and execution
-- Better user feedback throughout the process
-
-## Future Improvements
-1. **Parallel Task Execution**: Use AsyncProcessor for concurrent tool calls
-2. **Conversation Persistence**: Save/load conversation history
-3. **Tool Chaining**: Allow tools to call other tools
-4. **Custom Instructions**: User-defined behavior modifications
-5. **Multi-Model Support**: Add support for other LLM providers
-6. **Implement Code Assistance Features**: Leverage the new prompt templates for code help
-7. **Add /tasks Command**: View and manage current task queue
+## Architecture Highlights
+- **Handler Pattern**: Request handling is delegated to focused handler classes via `RequestHandler` interface
+- **ConversationBuffer**: Intelligent context management replaces simple array-based history
+- **Self-Consistent Classification**: Multiple reasoning paths vote on request classification
+- **Event-Driven**: EventBus for decoupled component communication
+- **Immutable Tasks**: Task value objects with enum-based status transitions
+- **UIInterface Contract**: Both SimpleUI and FullTerminalUI implement UIInterface
