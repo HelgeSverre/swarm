@@ -36,6 +36,19 @@ Swarm is an AI-powered coding assistant that uses OpenAI's GPT models to underst
 
 ## Component Details
 
+### ModelCapabilities (src/Agent/ModelCapabilities.php)
+Static helper encapsulating model-specific API knowledge. Single source of truth for which parameters each model family supports:
+- `isReasoningModel(string $model): bool` — prefix-based detection for gpt-5*, o1*, o3*, o4-mini* (with exception for gpt-5-chat-latest)
+- `supportsTemperature(string $model): bool` — inverse of isReasoningModel
+- `supportsReasoningEffort(string $model): bool` — same as isReasoningModel
+- `supportsVerbosity(string $model): bool` — GPT-5 family only (not gpt-5-chat-latest)
+- `buildRequestOptions(model, messages, options, reasoningEffort, verbosity): array` — builds correct API parameters per model, stripping unsupported ones
+
+**Key rules:**
+- GPT-5 reasoning models do NOT accept `temperature` (causes 400 error). Use `reasoning_effort` and `verbosity` instead.
+- `gpt-5-chat-latest` is a non-reasoning GPT-5 variant that behaves like GPT-4 (supports temperature, no reasoning_effort/verbosity).
+- o1/o3/o4-mini models are reasoning models with the same restrictions as GPT-5.
+
 ### CodingAgent (src/Agent/CodingAgent.php)
 The brain of the system. Uses multi-channel processing with handler delegation:
 - `processRequest()`: Main entry point, routes through channels with recovery
@@ -43,7 +56,7 @@ The brain of the system. Uses multi-channel processing with handler delegation:
 - `quickClassifyRequest()`: Fast pattern-based classification for simple requests
 - `classifyRequestWithConsistency()`: Self-consistent classification via multiple reasoning paths
 - `getRequestHandler()`: Routes to appropriate handler (Implementation/Demonstration/Explanation/Query/Conversation)
-- `callLLMWithEnhancements()`: LLM call with retry logic and exponential backoff
+- `callLLMWithEnhancements()`: LLM call with retry logic, exponential backoff, and model-aware parameter handling via `ModelCapabilities`
 - `setProgressCallback()`: Sets callback for progress reporting
 
 ### Request Handlers (src/Agent/*Handler.php)
@@ -208,8 +221,10 @@ readonly class Task {
 
 ## Environment Variables
 - `OPENAI_API_KEY`: Required for OpenAI API access
-- `OPENAI_MODEL`: Model to use (default: gpt-4o-mini)
-- `OPENAI_TEMPERATURE`: Temperature setting (default: 0.7)
+- `OPENAI_MODEL`: Model to use (default: gpt-4o-mini). Supports GPT-4, GPT-5, o1, o3, o4-mini families.
+- `OPENAI_TEMPERATURE`: Temperature setting (default: 0.7). Ignored for reasoning models (gpt-5*, o1*, o3*, o4-mini*).
+- `OPENAI_REASONING_EFFORT`: Reasoning depth for reasoning models (minimal, low, medium, high; default: medium)
+- `OPENAI_VERBOSITY`: Output length for GPT-5 models (low, medium, high; default: medium)
 - `TERMINAL_ENABLED`: Enable terminal tool (default: false, for security)
 - `LOG_ENABLED`: Enable file logging
 - `LOG_LEVEL`: Logging level (debug, info, warning, error)
