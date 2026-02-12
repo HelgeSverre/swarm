@@ -1,8 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace HelgeSverre\Swarm\Agent;
 
 use Exception;
+use HelgeSverre\Swarm\Agent\ConversationHandler;
+use HelgeSverre\Swarm\Agent\DemonstrationHandler;
+use HelgeSverre\Swarm\Agent\ExplanationHandler;
+use HelgeSverre\Swarm\Agent\ImplementationHandler;
+use HelgeSverre\Swarm\Agent\QueryHandler;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Enums\Agent\RequestType;
 use HelgeSverre\Swarm\Events\ProcessingEvent;
@@ -16,132 +23,1066 @@ use OpenAI;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
+/**
+ * Enhanced Coding Agent with GPT-5 capabilities and intelligent context management
+ * 
+ * Key improvements:
+ * - GPT-5 model with custom tools and reasoning effort control
+ * - Intelligent conversation buffer with relevance-based context selection
+ * - Self-consistent reasoning for better classification accuracy
+ * - Multi-channel processing (analysis, planning, execution, reflection)
+ * - Reflexive error recovery with pattern learning
+ * - Clean architecture without massive processRequest() method
+ */
 class CodingAgent
 {
     use EventAware, Loggable;
 
-    protected array $conversationHistory = [];
+    protected ConversationBuffer $conversationBuffer;
+    protected bool $useCustomTools = true;
+    
+    // Progress callback for real-time feedback
+    protected $progressCallback = null;
 
     public function __construct(
         protected readonly ToolExecutor $toolExecutor,
         protected readonly TaskManager $taskManager,
         protected readonly OpenAI\Contracts\ClientContract $llmClient,
         protected readonly ?LoggerInterface $logger = null,
-        protected readonly string $model = 'gpt-4.1',
-        protected readonly float $temperature = 0.3
-    ) {}
+        protected readonly string $model = 'gpt-5-mini',
+        protected readonly string $reasoningEffort = 'medium'
+    ) {
+        $this->conversationBuffer = new ConversationBuffer();
+    }
 
+    /**
+     * Main request processing with clean architecture
+     */
     public function processRequest(string $userInput): AgentResponse
     {
-        $this->logger?->info('Processing user request', [
+        // Input validation
+        if (empty(trim($userInput))) {
+            return AgentResponse::error(
+                error: 'Empty input provided',
+                partialContent: 'Please provide a valid request.'
+            );
+        }
+        
+        if (strlen($userInput) > 10000) {
+            return AgentResponse::error(
+                error: 'Input too long',
+                partialContent: 'Please shorten your request to under 10,000 characters.'
+            );
+        }
+        
+        $this->logger?->info('Processing request with GPT-5 enhanced agent', [
             'input_length' => mb_strlen($userInput),
-            'conversation_length' => count($this->conversationHistory),
-        ]);
-        $this->addToHistory('user', $userInput);
-
-        // First, classify the request
-        $this->reportProgress('classifying', ['message' => 'Analyzing request type...']);
-        $classification = $this->classifyRequest($userInput);
-
-        $this->logger?->debug('Request classified', [
-            'type' => $classification['request_type']->value,
-            'requires_tools' => $classification['requires_tools'],
-            'confidence' => $classification['confidence'],
+            'model' => $this->model,
+            'reasoning_effort' => $this->reasoningEffort,
         ]);
 
-        // Handle demonstration requests without tools
-        if ($classification['request_type'] === RequestType::Demonstration && ! $classification['requires_tools']) {
-            return $this->handleDemonstration($userInput);
+        // Add to intelligent conversation buffer
+        $this->conversationBuffer->addMessage('user', $userInput);
+        
+        $startTime = microtime(true);
+
+        try {
+            // Multi-channel processing: analyze, classify, route, execute
+            $response = $this->processWithChannelsAndRecovery($userInput);
+            
+            $processingTime = microtime(true) - $startTime;
+            // Create new response with processing time since properties are readonly
+            $response = new AgentResponse(
+                content: $response->content,
+                success: $response->success,
+                metadata: array_merge($response->metadata, ['processing_time' => $processingTime]),
+                error: $response->error,
+                processingTime: $processingTime,
+                toolCalls: $response->toolCalls,
+                classificationData: $response->classificationData
+            );
+            
+            return $response;
+            
+        } catch (Exception $e) {
+            $processingTime = microtime(true) - $startTime;
+            
+            $this->logger?->error('Request processing failed', [
+                'error' => $e->getMessage(),
+                'input' => substr($userInput, 0, 200) . '...',
+                'processing_time' => $processingTime,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return $this->handleErrorWithRecovery($e, $userInput, $processingTime);
         }
+    }
 
-        // Handle explanation requests without tools
-        if ($classification['request_type'] === RequestType::Explanation) {
-            return $this->handleExplanation($userInput);
+    /**
+     * Multi-channel processing: separate analysis, planning, execution, reflection
+     */
+    protected function processWithChannels(string $userInput): AgentResponse
+    {
+        // Quick Initial Assessment - Low effort for immediate feedback
+        $this->reportProgress('quick_assessment', ['message' => 'Quick initial assessment...']);
+        $quickClassification = $this->quickClassifyRequest($userInput);
+        
+        // If we have high confidence and it's simple, provide immediate response
+        if ($quickClassification['confidence'] > 0.85 && $quickClassification['complexity'] === 'simple') {
+            $this->reportProgress('quick_response', [
+                'message' => 'Providing quick response...',
+                'type' => $quickClassification['request_type'],
+                'confidence' => $quickClassification['confidence']
+            ]);
+            
+            $handler = $this->getRequestHandler($quickClassification);
+            $response = $handler->handle($userInput, $quickClassification, []);
+            
+            // Log quick response
+            $this->logger?->info('Quick response provided', [
+                'type' => $quickClassification['request_type'],
+                'confidence' => $quickClassification['confidence']
+            ]);
+            
+            return $response;
         }
+        
+        // For complex requests, use deep processing channels
+        $this->reportProgress('deep_processing', ['message' => 'Processing complex request with multi-channel analysis...']);
+        
+        // Channel 1: Private analysis (enhanced understanding)
+        $this->reportProgress('analyzing', ['message' => 'Analyzing request with enhanced intelligence...']);
+        $analysis = $this->privateAnalysisChannel($userInput);
 
-        // Handle internal task management (like "show my tasks", "clear tasks", etc.)
-        if ($classification['is_internal_task_management'] ?? false) {
-            return $this->handleInternalTaskManagement($userInput);
-        }
+        // Channel 2: Public classification and routing (transparent to user)
+        $this->reportProgress('classifying', ['message' => 'Classifying request type with self-consistent reasoning...']);
+        $classification = $this->classifyRequestWithConsistency($userInput, $analysis);
 
-        // Check if request requires tools first
-        if ($classification['requires_tools'] || $classification['request_type'] === RequestType::Implementation) {
-            $this->reportProgress('extracting_tasks', ['message' => 'Identifying tasks to complete...']);
-            $tasks = $this->extractTasks($userInput);
+        // Channel 3: Route to appropriate handler
+        $handler = $this->getRequestHandler($classification);
+        
+        // Channel 4: Execute with monitoring and reflection
+        $response = $handler->handle($userInput, $classification, $analysis);
+        
+        // Channel 5: Post-execution reflection and learning
+        $this->reflectOnExecution($userInput, $response, $classification);
 
-            if (! empty($tasks)) {
-                $this->logger?->info('Tasks extracted', ['count' => count($tasks)]);
-                $this->taskManager->addTasks($tasks);
+        return $response;
+    }
 
-                // Get the actual Task objects from the TaskManager
-                $taskObjects = $this->taskManager->getTasks();
+    /**
+     * Private analysis channel - enhanced understanding not shown to user
+     */
+    protected function privateAnalysisChannel(string $userInput): array
+    {
+        $context = $this->conversationBuffer->getOptimalContext($userInput);
+        
+        $analysisPrompt = "PRIVATE ANALYSIS - Internal reasoning only, not shown to user.
+        
+        Analyze this request deeply:
+        REQUEST: {$userInput}
+        
+        CONTEXT ANALYSIS:
+        - What is the user's actual intent beyond the literal words?
+        - What context from conversation history is most relevant?
+        - What potential ambiguities or edge cases exist?
+        - What domain knowledge or expertise is required?
+        - What are the likely success/failure scenarios?
+        
+        STRATEGIC ASSESSMENT:
+        - Complexity level (simple/moderate/complex)
+        - Required capabilities and tools
+        - Potential risks or safety concerns
+        - Success probability and confidence level
+        
+        Provide structured analysis for internal decision-making in JSON format.";
 
-                // Report extracted tasks with full details for UI display
-                $this->reportProgress('extracting_tasks', [
-                    'phase' => 'extraction_complete',
-                    'task_count' => count($taskObjects),
-                    'tasks' => array_map(fn (Task $task) => [
-                        'id' => $task->id,
-                        'description' => $task->description,
-                        'status' => $task->status->value,
-                        'plan' => $task->plan,
-                        'steps' => $task->steps,
-                    ], $taskObjects),
+        $messages = array_merge($context, [
+            ['role' => 'user', 'content' => $analysisPrompt]
+        ]);
+
+        try {
+            $response = $this->callLLMWithEnhancements($messages, [
+                'reasoning_effort' => 'high', // Use deeper reasoning for analysis
+                'response_format' => ['type' => 'json_object']
+            ]);
+
+            $decoded = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $this->logger?->warning('JSON decode error in request analysis', [
+                    'error' => json_last_error_msg(),
+                    'response' => substr($response, 0, 500)
                 ]);
+                return [];
+            }
+            
+            return is_array($decoded) ? $decoded : [];
+            
+        } catch (Exception $e) {
+            $this->logger?->error('Request analysis failed', [
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
 
-                // Plan each task
-                foreach ($this->taskManager->getTasks() as $task) {
-                    if ($task->status === TaskStatus::Pending) {
-                        $this->reportProgress('planning_task', [
-                            'message' => 'Planning: ' . $task->description,
-                            'task_id' => $task->id,
-                        ]);
-                        $this->planTask($task);
-                    }
-                }
+    /**
+     * Self-consistent classification with multiple reasoning paths
+     */
+    protected function classifyRequestWithConsistency(string $userInput, array $analysis): array
+    {
+        $approaches = [
+            'literal' => "Analyze literally: What words and phrases directly indicate the user's intent?",
+            'contextual' => "Analyze contextually: How does this request fit within our conversation history?",
+            'pragmatic' => "Analyze pragmatically: What outcome does the user actually want to achieve?"
+        ];
 
-                // Execute tasks one by one
-                $taskResults = [];
-                while ($currentTask = $this->taskManager->getNextTask()) {
-                    $this->reportProgress('executing_task', [
-                        'message' => 'Starting task execution',
-                        'task_id' => $currentTask->id,
-                        'task_description' => $currentTask->description,
-                        'total_steps' => count($currentTask->steps),
-                        'current_step' => 0,
-                    ]);
-                    $this->executeTask($currentTask);
-                    $this->taskManager->completeCurrentTask();
-                    $taskResults[] = $currentTask->description;
-                }
+        $results = [];
+        foreach ($approaches as $name => $approach) {
+            $results[$name] = $this->singleReasoningPath($userInput, $approach, $analysis);
+        }
 
-                // Generate a summary of what was done
-                $this->reportProgress('generating_summary', ['message' => 'Generating summary...']);
-                $summary = $this->generateTaskSummary($userInput, $taskResults);
+        // Select most consistent result
+        return $this->selectMostConsistentClassification($results, $userInput);
+    }
 
-                return AgentResponse::success($summary);
+    /**
+     * Single reasoning path for classification
+     */
+    protected function singleReasoningPath(string $userInput, string $approach, array $analysis): array
+    {
+        $context = $this->conversationBuffer->getOptimalContext($userInput, 2000);
+        
+        $prompt = PromptTemplates::classificationSystemWithAnalysis($approach, $analysis) . "
+
+        User request: {$userInput}
+        
+        Using the {$approach} approach, classify this request and explain your reasoning. Return your classification in JSON format.";
+
+        $messages = array_merge($context, [
+            ['role' => 'user', 'content' => $prompt]
+        ]);
+
+        try {
+            $response = $this->callLLMWithEnhancements($messages, [
+                'response_format' => [
+                    'type' => 'json_schema',
+                    'json_schema' => $this->getClassificationSchema()
+                ]
+            ]);
+
+            $decoded = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $this->logger?->warning('JSON decode error in classification', [
+                    'error' => json_last_error_msg(),
+                    'response' => substr($response, 0, 500),
+                    'approach' => $approach
+                ]);
+                return [];
+            }
+            
+            // Validate required fields
+            if (!isset($decoded['request_type'], $decoded['confidence'], $decoded['reasoning'])) {
+                $this->logger?->warning('Invalid classification response structure', [
+                    'response' => $decoded,
+                    'approach' => $approach
+                ]);
+                return [];
+            }
+            
+            return $decoded;
+            
+        } catch (Exception $e) {
+            $this->logger?->error('Classification reasoning path failed', [
+                'approach' => $approach,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Select most consistent classification from multiple paths
+     */
+    protected function selectMostConsistentClassification(array $results, string $userInput): array
+    {
+        // Count votes for each classification
+        $votes = [];
+        $confidenceSum = [];
+        
+        foreach ($results as $approach => $result) {
+            if (isset($result['request_type'])) {
+                $type = $result['request_type'];
+                $votes[$type] = ($votes[$type] ?? 0) + 1;
+                $confidenceSum[$type] = ($confidenceSum[$type] ?? 0) + ($result['confidence'] ?? 0);
             }
         }
 
-        // Handle general queries or conversations without tools
-        if ($classification['request_type'] === RequestType::Query || $classification['request_type'] === RequestType::Conversation) {
-            return $this->handleConversation($userInput);
+        if (empty($votes)) {
+            // Fallback to simple classification if consistency check fails
+            return $this->fallbackClassification($userInput);
         }
 
-        // Default to conversation if no other handler matched
-        return $this->handleConversation($userInput);
+        // Select type with most votes, tie-breaking by confidence
+        $winner = array_keys($votes, max($votes))[0];
+        
+        // Find the result with highest confidence for this type
+        $bestResult = null;
+        $bestConfidence = 0;
+        
+        foreach ($results as $result) {
+            if (($result['request_type'] ?? '') === $winner) {
+                $confidence = $result['confidence'] ?? 0;
+                if ($confidence > $bestConfidence) {
+                    $bestConfidence = $confidence;
+                    $bestResult = $result;
+                }
+            }
+        }
+
+        // Enhance with consistency score
+        $bestResult['consistency_score'] = $votes[$winner] / count($results);
+        $bestResult['reasoning_approaches'] = array_keys($results);
+
+        return $bestResult;
     }
 
-    public function getStatus(): array
+    /**
+     * Quick classification with low reasoning effort for immediate response
+     */
+    protected function quickClassifyRequest(string $input): array
     {
+        // Simple pattern matching for common cases
+        $input = trim(strtolower($input));
+        
+        // Greeting patterns - high confidence, simple
+        if (preg_match('/^(hi|hello|hey|greetings?|good (morning|afternoon|evening))!?$/i', $input)) {
+            return [
+                'request_type' => 'conversation',
+                'requires_tools' => false,
+                'confidence' => 0.95,
+                'complexity' => 'simple',
+                'reasoning' => 'Standard greeting pattern detected'
+            ];
+        }
+        
+        // Question patterns - medium confidence
+        if (str_starts_with($input, 'what') || str_starts_with($input, 'how') || str_ends_with($input, '?')) {
+            if (str_contains($input, 'code') || str_contains($input, 'implement') || str_contains($input, 'build')) {
+                return [
+                    'request_type' => 'implementation',
+                    'requires_tools' => true,
+                    'confidence' => 0.75,
+                    'complexity' => 'moderate',
+                    'reasoning' => 'Question about coding/implementation'
+                ];
+            }
+            return [
+                'request_type' => 'query',
+                'requires_tools' => false,
+                'confidence' => 0.8,
+                'complexity' => 'simple',
+                'reasoning' => 'General question pattern'
+            ];
+        }
+        
+        // Command patterns - high confidence for simple commands
+        if (preg_match('/^(create|make|build|generate|write)\s+/i', $input)) {
+            return [
+                'request_type' => 'implementation',
+                'requires_tools' => true,
+                'confidence' => 0.85,
+                'complexity' => 'moderate',
+                'reasoning' => 'Imperative command for creation/implementation'
+            ];
+        }
+        
+        // Explanation requests
+        if (preg_match('/^(explain|describe|tell me about)\s+/i', $input)) {
+            return [
+                'request_type' => 'explanation',
+                'requires_tools' => false,
+                'confidence' => 0.8,
+                'complexity' => 'simple',
+                'reasoning' => 'Request for explanation or description'
+            ];
+        }
+        
+        // For uncertain cases, use low-effort LLM classification
+        if (strlen($input) < 100) {
+            return $this->llmQuickClassification($input);
+        }
+        
+        // Default for complex cases - requires deeper analysis
         return [
-            'tasks' => array_map(fn ($task) => $task->toArray(), $this->taskManager->getTasks()),
-            'current_task' => $this->taskManager->currentTask?->toArray(),
+            'request_type' => 'conversation',
+            'requires_tools' => false,
+            'confidence' => 0.6,
+            'complexity' => 'complex',
+            'reasoning' => 'Complex request requiring detailed analysis'
+        ];
+    }
+    
+    /**
+     * Use LLM for quick classification with minimal reasoning effort
+     */
+    protected function llmQuickClassification(string $input): array
+    {
+        try {
+            $prompt = "Classify this request quickly (one word): '{$input}'
+Response format: conversation|implementation|explanation|demonstration|query
+Also rate: simple|moderate|complex
+Confidence: 0.0-1.0";
+
+            $messages = [
+                ['role' => 'system', 'content' => 'You are a quick request classifier. Respond with JSON only.'],
+                ['role' => 'user', 'content' => $prompt]
+            ];
+            
+            $response = $this->callLLMWithEnhancements($messages, [
+                'reasoning_effort' => 'low', // Minimal reasoning for speed
+                'max_completion_tokens' => 100,
+                'response_format' => ['type' => 'json_object']
+            ]);
+            
+            $result = json_decode($response, true);
+            
+            if ($result && isset($result['type'])) {
+                return [
+                    'request_type' => $result['type'],
+                    'requires_tools' => in_array($result['type'], ['implementation', 'demonstration']),
+                    'confidence' => (float)($result['confidence'] ?? 0.7),
+                    'complexity' => $result['complexity'] ?? 'simple',
+                    'reasoning' => 'Quick LLM classification'
+                ];
+            }
+            
+        } catch (Exception $e) {
+            $this->logger?->debug('Quick LLM classification failed', ['error' => $e->getMessage()]);
+        }
+        
+        // Fallback
+        return [
+            'request_type' => 'conversation',
+            'requires_tools' => false,
+            'confidence' => 0.6,
+            'complexity' => 'moderate',
+            'reasoning' => 'Fallback classification'
         ];
     }
 
     /**
-     * Get the task manager instance
+     * Get appropriate request handler based on classification
+     */
+    protected function getRequestHandler(array $classification): RequestHandler
+    {
+        $type = RequestType::tryFrom($classification['request_type'] ?? 'conversation') 
+            ?? RequestType::Conversation;
+
+        return match($type) {
+            RequestType::Implementation => new ImplementationHandler(
+                toolExecutor: $this->toolExecutor,
+                taskManager: $this->taskManager,
+                conversationBuffer: $this->conversationBuffer,
+                logger: $this->logger,
+                progressCallback: fn(string $operation, array $details) => $this->reportProgress($operation, $details),
+                llmCallback: fn(array $messages, array $options = []) => $this->callLLMWithEnhancements($messages, $options)
+            ),
+            RequestType::Demonstration => new DemonstrationHandler(
+                conversationBuffer: $this->conversationBuffer,
+                llmCallback: fn(array $messages, array $options = []) => $this->callLLMWithEnhancements($messages, $options)
+            ),
+            RequestType::Explanation => new ExplanationHandler(
+                conversationBuffer: $this->conversationBuffer,
+                llmCallback: fn(array $messages, array $options = []) => $this->callLLMWithEnhancements($messages, $options)
+            ),
+            RequestType::Query => new QueryHandler(
+                conversationBuffer: $this->conversationBuffer,
+                llmCallback: fn(array $messages, array $options = []) => $this->callLLMWithEnhancements($messages, $options)
+            ),
+            default => new ConversationHandler(
+                conversationBuffer: $this->conversationBuffer,
+                llmCallback: fn(array $messages, array $options = []) => $this->callLLMWithEnhancements($messages, $options)
+            )
+        };
+    }
+
+    /**
+     * Enhanced LLM call with GPT-5 specific features
+     */
+    public function callLLMWithEnhancements(array $messages, array $options = []): string
+    {
+        $defaultOptions = [
+            'model' => $this->model,
+            'messages' => $messages,
+            'max_completion_tokens' => 4000,
+        ];
+
+        // Add GPT-5 specific parameters
+        if ($this->model === 'gpt-5-mini' || str_starts_with($this->model, 'gpt-5')) {
+            if (isset($options['reasoning_effort'])) {
+                $defaultOptions['reasoning_effort'] = $options['reasoning_effort'];
+            } else {
+                $defaultOptions['reasoning_effort'] = $this->reasoningEffort;
+            }
+            
+            // Use custom tools for direct code generation if available
+            if ($this->useCustomTools && isset($options['tools'])) {
+                $defaultOptions['tools'] = $options['tools'];
+            }
+            
+            // GPT-5 models only support default temperature (1.0) - remove temperature parameter
+            // Note: Temperature control is handled internally by reasoning_effort
+            if (isset($defaultOptions['temperature'])) {
+                unset($defaultOptions['temperature']);
+            }
+        } else {
+            // For non-GPT-5 models, add temperature if not present
+            if (!isset($defaultOptions['temperature'])) {
+                $defaultOptions['temperature'] = 0.7; // Default for other models
+            }
+        }
+
+        // Merge options
+        $requestOptions = array_merge($defaultOptions, $options);
+
+        $this->logger?->debug('LLM call with GPT-5 enhancements', [
+            'model' => $requestOptions['model'],
+            'reasoning_effort' => $requestOptions['reasoning_effort'] ?? 'default',
+            'message_count' => count($messages),
+            'use_custom_tools' => $this->useCustomTools
+        ]);
+
+        $retryCount = 0;
+        $maxRetries = 3;
+        $backoffDelay = 1; // Start with 1 second
+        
+        while ($retryCount <= $maxRetries) {
+            try {
+                $this->reportProgress('calling_openai', [
+                    'model' => $requestOptions['model'],
+                    'reasoning_effort' => $requestOptions['reasoning_effort'] ?? 'default',
+                    'attempt' => $retryCount + 1,
+                    'max_retries' => $maxRetries + 1
+                ]);
+
+                $response = $this->llmClient->chat()->create($requestOptions);
+                
+                // Extract both content and reasoning from GPT-5 responses
+                $choice = $response->choices[0] ?? null;
+                if (!$choice) {
+                    throw new RuntimeException('No choices in LLM response');
+                }
+                
+                $message = $choice->message ?? null;
+                if (!$message) {
+                    throw new RuntimeException('No message in LLM response choice');
+                }
+                
+                $content = $message->content ?? '';
+                $reasoning = null;
+                
+                // GPT-5 models may include reasoning in the response
+                if ($this->model === 'gpt-5-mini' || str_starts_with($this->model, 'gpt-5')) {
+                    // Check for reasoning field (GPT-5 specific)
+                    if (property_exists($message, 'reasoning') && !empty($message->reasoning)) {
+                        $reasoning = $message->reasoning;
+                        
+                        // Report reasoning content via progress callback
+                        $this->reportProgress('reasoning_received', [
+                            'reasoning_content' => $reasoning,
+                            'content_length' => strlen($reasoning),
+                            'model' => $requestOptions['model']
+                        ]);
+                    }
+                    
+                    // Handle case where reasoning is embedded in content (fallback)
+                    if (!$reasoning && str_contains($content, '"reasoning":')) {
+                        $this->logger?->debug('Found reasoning content embedded in response content');
+                    }
+                }
+                
+                if (empty($content)) {
+                    // If no content but we have reasoning, that might be the issue
+                    if ($reasoning) {
+                        $this->logger?->warning('GPT-5 returned reasoning but no content', [
+                            'reasoning_length' => strlen($reasoning),
+                            'full_response' => json_encode($response)
+                        ]);
+                    }
+                    throw new RuntimeException('Empty content from LLM response');
+                }
+                
+                // Add to conversation buffer
+                $this->conversationBuffer->addMessage('assistant', $content);
+                
+                // Log successful response with reasoning info
+                $this->logger?->debug('LLM response received', [
+                    'content_length' => strlen($content),
+                    'has_reasoning' => !empty($reasoning),
+                    'reasoning_length' => $reasoning ? strlen($reasoning) : 0
+                ]);
+                
+                return $content;
+                
+            } catch (Exception $e) {
+                $retryCount++;
+                $isLastAttempt = $retryCount > $maxRetries;
+                
+                $this->logger?->warning('LLM call failed', [
+                    'error' => $e->getMessage(),
+                    'model' => $requestOptions['model'],
+                    'attempt' => $retryCount,
+                    'max_retries' => $maxRetries + 1,
+                    'will_retry' => !$isLastAttempt
+                ]);
+                
+                if ($isLastAttempt) {
+                    $this->logger?->error('LLM call failed after all retries', [
+                        'error' => $e->getMessage(),
+                        'model' => $requestOptions['model'],
+                        'total_attempts' => $retryCount
+                    ]);
+                    
+                    // Return a graceful fallback response
+                    return $this->generateFallbackResponse($messages, $e);
+                }
+                
+                // Exponential backoff with jitter
+                $delay = $backoffDelay + random_int(0, 1000000) / 1000000; // Add up to 1s jitter
+                $this->logger?->info("Retrying LLM call after {$delay}s delay");
+                sleep((int)$delay);
+                $backoffDelay *= 2; // Double the delay for next retry
+            }
+        }
+        
+        // This should never be reached due to the loop logic, but added for static analysis
+        return $this->generateFallbackResponse($messages, new RuntimeException('Max retries exceeded'));
+    }
+    
+    /**
+     * Generate a fallback response when LLM calls fail
+     */
+    protected function generateFallbackResponse(array $messages, Exception $originalError): string
+    {
+        // Try to extract the last user message for context
+        $lastUserMessage = null;
+        for ($i = count($messages) - 1; $i >= 0; $i--) {
+            if ($messages[$i]['role'] === 'user') {
+                $lastUserMessage = $messages[$i]['content'];
+                break;
+            }
+        }
+        
+        $fallbackResponse = "I apologize, but I'm currently experiencing technical difficulties connecting to the AI service. ";
+        
+        if ($lastUserMessage) {
+            $fallbackResponse .= "I understand you're asking about: " . substr($lastUserMessage, 0, 100);
+            if (strlen($lastUserMessage) > 100) {
+                $fallbackResponse .= "...";
+            }
+            $fallbackResponse .= "\n\n";
+        }
+        
+        $fallbackResponse .= "Please try your request again in a few moments. If the issue persists, ";
+        $fallbackResponse .= "you may want to check your internet connection or contact support.\n\n";
+        $fallbackResponse .= "Error details: " . $originalError->getMessage();
+        
+        return $fallbackResponse;
+    }
+
+    /**
+     * Post-execution reflection and learning
+     */
+    protected function reflectOnExecution(string $input, AgentResponse $response, array $classification): void
+    {
+        // Simple reflection for now - can be enhanced with pattern learning
+        $this->logger?->info('Request completed', [
+            'classification_type' => $classification['request_type'] ?? 'unknown',
+            'consistency_score' => $classification['consistency_score'] ?? 0,
+            'response_length' => strlen($response->content),
+            'success' => $response->success
+        ]);
+
+        // Store successful patterns for future learning
+        if ($response->success && ($classification['consistency_score'] ?? 0) > 0.8) {
+            $this->recordSuccessPattern($input, $classification, $response);
+        }
+    }
+
+    /**
+     * Handle errors with potential recovery
+     */
+    /**
+     * Enhanced processing with recovery mechanisms
+     */
+    protected function processWithChannelsAndRecovery(string $userInput): AgentResponse
+    {
+        try {
+            return $this->processWithChannels($userInput);
+        } catch (Exception $e) {
+            $this->logger?->warning('Primary processing failed, attempting recovery', [
+                'error' => $e->getMessage()
+            ]);
+            
+            // Try simplified processing as fallback
+            return $this->simplifiedProcessing($userInput);
+        }
+    }
+    
+    /**
+     * Simplified processing fallback
+     */
+    protected function simplifiedProcessing(string $userInput): AgentResponse
+    {
+        try {
+            // Simplified classification
+            $classification = $this->simpleClassification($userInput);
+            
+            // Use basic conversation handler
+            $handler = new ConversationHandler(
+                conversationBuffer: $this->conversationBuffer,
+                llmCallback: fn(array $messages, array $options = []) => $this->callLLMWithEnhancements($messages, $options)
+            );
+            
+            $response = $handler->handle($userInput, $classification, []);
+            
+            // Mark as fallback
+            return AgentResponse::error(
+                error: 'Used simplified processing due to primary system issues',
+                partialContent: $response->content,
+                metadata: array_merge($response->metadata, [
+                    'fallback_mode' => 'simplified',
+                    'classification' => $classification
+                ])
+            );
+            
+        } catch (Exception $e) {
+            // Final fallback - emergency response
+            return AgentResponse::error(
+                error: 'All processing methods failed: ' . $e->getMessage(),
+                partialContent: $this->generateEmergencyResponse($userInput)
+            );
+        }
+    }
+    
+    /**
+     * Enhanced error handling with multiple recovery strategies
+     */
+    protected function handleErrorWithRecovery(Exception $error, string $input, float $processingTime): AgentResponse
+    {
+        // Determine error severity and appropriate response
+        $severity = $this->categorizeErrorSeverity($error);
+        
+        $this->logger?->error('Error categorized', [
+            'severity' => $severity,
+            'error_type' => get_class($error),
+            'processing_time' => $processingTime
+        ]);
+        
+        // Generate contextual error message
+        $errorMessage = $this->generateContextualErrorMessage($error, $input, $severity);
+        
+        // Add error to conversation buffer for learning (only for non-critical errors)
+        if ($severity !== 'critical') {
+            $this->conversationBuffer->addMessage('error', $errorMessage);
+        }
+        
+        return AgentResponse::error(
+            error: $error->getMessage(),
+            partialContent: $errorMessage,
+            metadata: [
+                'error_type' => get_class($error),
+                'severity' => $severity,
+                'processing_time' => $processingTime,
+                'recovery_suggestions' => $this->getRecoverySuggestions($severity, $error),
+                'input_length' => strlen($input)
+            ]
+        );
+    }
+    
+    /**
+     * Categorize error severity for appropriate response
+     */
+    protected function categorizeErrorSeverity(Exception $error): string
+    {
+        $errorMessage = $error->getMessage();
+        $errorClass = get_class($error);
+        
+        // Critical errors - system level issues  
+        if (str_contains($errorMessage, 'out of memory') || 
+            str_contains($errorMessage, 'segmentation fault') ||
+            str_contains($errorClass, 'Error')) {
+            return 'critical';
+        }
+        
+        // High errors - API or service failures
+        if (str_contains($errorMessage, 'API') ||
+            str_contains($errorMessage, 'network') ||
+            str_contains($errorMessage, 'timeout') ||
+            str_contains($errorMessage, 'authentication')) {
+            return 'high';
+        }
+        
+        // Medium errors - processing issues
+        if (str_contains($errorMessage, 'JSON') ||
+            str_contains($errorMessage, 'invalid') ||
+            str_contains($errorMessage, 'format')) {
+            return 'medium';
+        }
+        
+        // Low errors - user input issues
+        return 'low';
+    }
+    
+    /**
+     * Generate contextual error message based on error type and input
+     */
+    protected function generateContextualErrorMessage(Exception $error, string $input, string $severity): string
+    {
+        $baseMessage = match ($severity) {
+            'critical' => "I'm experiencing a critical system issue and cannot process requests right now.",
+            'high' => "I'm having trouble connecting to external services needed to help you.",
+            'medium' => "I encountered a processing issue with your request.",
+            'low' => "There's a problem with how I interpreted your request.",
+            default => "I encountered an unexpected issue with your request."
+        };
+        
+        // Add context about what the user was trying to do
+        if (strlen($input) > 0) {
+            $context = " I can see you were asking about: " . substr($input, 0, 100);
+            if (strlen($input) > 100) {
+                $context .= "...";
+            }
+        } else {
+            $context = "";
+        }
+        
+        // Add recovery suggestions
+        $suggestions = match ($severity) {
+            'critical' => " Please restart the application and try again. If the issue persists, contact system administrator.",
+            'high' => " Please check your internet connection and try again in a few moments.",
+            'medium' => " Please try rephrasing your request or break it into smaller parts.",
+            'low' => " Please check your input and try again.",
+            default => " Please try again or contact support if the issue persists."
+        };
+        
+        return $baseMessage . $context . $suggestions;
+    }
+    
+    /**
+     * Get specific recovery suggestions based on error
+     */
+    protected function getRecoverySuggestions(string $severity, Exception $error): array
+    {
+        return match ($severity) {
+            'critical' => [
+                'restart_application',
+                'check_system_resources',
+                'contact_administrator'
+            ],
+            'high' => [
+                'check_internet_connection',
+                'verify_api_credentials',
+                'try_again_later',
+                'use_offline_mode_if_available'
+            ],
+            'medium' => [
+                'rephrase_request',
+                'break_into_smaller_parts',
+                'check_input_format',
+                'try_simpler_language'
+            ],
+            'low' => [
+                'check_spelling',
+                'provide_more_context',
+                'use_specific_examples'
+            ],
+            default => ['try_again_later', 'contact_support']
+        };
+    }
+    
+    /**
+     * Simple rule-based classification fallback
+     */
+    protected function simpleClassification(string $userInput): array
+    {
+        $input = strtolower(trim($userInput));
+        
+        // Rule-based classification
+        if (str_contains($input, 'show') || str_contains($input, 'example') || str_contains($input, 'demo')) {
+            return [
+                'request_type' => 'demonstration',
+                'requires_tools' => false,
+                'confidence' => 0.6,
+                'reasoning' => 'Rule-based: contains demonstration keywords'
+            ];
+        }
+        
+        if (str_contains($input, 'explain') || str_contains($input, 'what is') || str_contains($input, 'how does')) {
+            return [
+                'request_type' => 'explanation',
+                'requires_tools' => false,
+                'confidence' => 0.6,
+                'reasoning' => 'Rule-based: contains explanation keywords'
+            ];
+        }
+        
+        if (str_contains($input, 'create') || str_contains($input, 'implement') || str_contains($input, 'build')) {
+            return [
+                'request_type' => 'implementation',
+                'requires_tools' => true,
+                'confidence' => 0.6,
+                'reasoning' => 'Rule-based: contains implementation keywords'
+            ];
+        }
+        
+        // Default to conversation
+        return [
+            'request_type' => 'conversation',
+            'requires_tools' => false,
+            'confidence' => 0.4,
+            'reasoning' => 'Rule-based: default classification'
+        ];
+    }
+    
+    /**
+     * Generate emergency response when all else fails
+     */
+    protected function generateEmergencyResponse(string $userInput): string
+    {
+        return "I apologize, but I'm experiencing technical difficulties and cannot fully process your request right now. " .
+               "However, I can see you're asking about something related to: " . substr($userInput, 0, 50) . "...\n\n" .
+               "Please try again in a moment, or rephrase your request. If the problem continues, " .
+               "you may want to restart the application or check system resources.";
+    }
+
+    /**
+     * Get classification JSON schema
+     */
+    protected function getClassificationSchema(): array
+    {
+        return [
+            'name' => 'request_classification',
+            'schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'request_type' => [
+                        'type' => 'string',
+                        'enum' => RequestType::values()
+                    ],
+                    'requires_tools' => ['type' => 'boolean'],
+                    'confidence' => ['type' => 'number', 'minimum' => 0, 'maximum' => 1],
+                    'reasoning' => ['type' => 'string'],
+                    'complexity' => ['type' => 'string', 'enum' => ['simple', 'moderate', 'complex']],
+                    'estimated_effort' => ['type' => 'string', 'enum' => ['low', 'medium', 'high']]
+                ],
+                'required' => ['request_type', 'requires_tools', 'confidence', 'reasoning']
+            ]
+        ];
+    }
+
+    /**
+     * Fallback classification if self-consistent approach fails
+     */
+    protected function fallbackClassification(string $userInput): array
+    {
+        $this->logger?->warning('Using fallback classification due to consistency failure');
+        
+        return [
+            'request_type' => 'conversation',
+            'requires_tools' => false,
+            'confidence' => 0.5,
+            'reasoning' => 'Fallback classification due to consistency check failure',
+            'complexity' => 'simple',
+            'estimated_effort' => 'low'
+        ];
+    }
+
+    /**
+     * Record successful patterns for future learning
+     */
+    protected function recordSuccessPattern(string $input, array $classification, AgentResponse $response): void
+    {
+        // This could be enhanced to store patterns in database or file for persistence
+        $this->logger?->debug('Recording success pattern', [
+            'input_pattern' => substr($input, 0, 100),
+            'classification' => $classification['request_type'],
+            'confidence' => $classification['confidence'],
+            'response_success' => $response->success
+        ]);
+    }
+
+    /**
+     * Set progress callback for real-time feedback
+     */
+    public function setProgressCallback(?callable $callback): void
+    {
+        $this->progressCallback = $callback;
+    }
+
+    /**
+     * Report progress with enhanced detail
+     */
+    protected function reportProgress(string $operation, array $details = []): void
+    {
+        if ($this->progressCallback) {
+            ($this->progressCallback)($operation, $details);
+        }
+
+        $this->emit(new ProcessingEvent($operation, $details));
+    }
+
+    /**
+     * Get conversation buffer statistics for monitoring
+     */
+    public function getConversationStats(): array
+    {
+        return $this->conversationBuffer->getStats();
+    }
+
+    /**
+     * Get reasoning effort level for GPT-5
+     */
+    public function getReasoningEffort(): string
+    {
+        return $this->reasoningEffort;
+    }
+
+    /**
+     * Enable/disable custom tools usage
+     */
+    public function setUseCustomTools(bool $use): void
+    {
+        $this->useCustomTools = $use;
+    }
+
+    /**
+     * Set conversation history (for backward compatibility with state restoration)
+     */
+    public function setConversationHistory(array $history): void
+    {
+        // Convert old history format to new ConversationBuffer
+        foreach ($history as $entry) {
+            if (isset($entry['role'], $entry['content'])) {
+                $this->conversationBuffer->addMessage($entry['role'], $entry['content']);
+            }
+        }
+    }
+
+    /**
+     * Get conversation history (for backward compatibility with state saving)
+     */
+    public function getConversationHistory(): array
+    {
+        // Return recent context for state saving
+        return $this->conversationBuffer->getRecentContext(50);
+    }
+
+    /**
+     * Get task manager (for backward compatibility)
      */
     public function getTaskManager(): TaskManager
     {
@@ -149,892 +1090,26 @@ class CodingAgent
     }
 
     /**
-     * Get recent conversation history for display
+     * Get agent status (for backward compatibility with WorkerProcess)
      */
-    public function getConversationHistory(int $limit = 10): array
+    public function getStatus(): array
     {
-        // Get recent history, filtering out tool responses for cleaner display
-        $history = array_slice($this->conversationHistory, -$limit);
-
-        return array_map(function ($entry) {
-            return [
-                'role' => $entry['role'],
-                'content' => $this->truncateContent($entry['content']),
-                'timestamp' => $entry['timestamp'],
-            ];
-        }, array_filter($history, function ($entry) {
-            // Include user, assistant messages, but not tool or error messages
-            return in_array($entry['role'], ['user', 'assistant']);
-        }));
-    }
-
-    /**
-     * Set conversation history (for restoring from saved state)
-     */
-    public function setConversationHistory(array $history): void
-    {
-        $this->conversationHistory = $history;
-    }
-
-    /**
-     * Truncate content for display purposes
-     */
-    protected function truncateContent(string $content, int $maxLength = 2000): string
-    {
-        if (mb_strlen($content) <= $maxLength) {
-            return $content;
-        }
-
-        return mb_substr($content, 0, $maxLength - 3) . '...';
-    }
-
-    /**
-     * Report progress to the callback if set
-     */
-    protected function reportProgress(string $operation, array $details = []): void
-    {
-        $this->emit(new ProcessingEvent($operation, $details, $details['phase'] ?? null));
-    }
-
-    /**
-     * Get a preview of tool parameters for display
-     */
-    protected function getParamsPreview(array $params): string
-    {
-        if (empty($params)) {
-            return 'No parameters';
-        }
-
-        $preview = [];
-        foreach ($params as $key => $value) {
-            if (is_string($value)) {
-                $preview[$key] = mb_strlen($value) > 50 ? mb_substr($value, 0, 50) . '...' : $value;
-            } elseif (is_array($value)) {
-                $preview[$key] = '[' . count($value) . ' items]';
-            } else {
-                $preview[$key] = $value;
-            }
-        }
-
-        return json_encode($preview);
-    }
-
-    protected function getToolFunctions(): array
-    {
-        // Get schemas dynamically from registered tools
-        return $this->toolExecutor->getToolSchemas();
-    }
-
-    protected function addToHistory(string $role, string $content): void
-    {
-        $this->conversationHistory[] = [
-            'role' => $role,
-            'content' => $content,
-            'timestamp' => time(),
-        ];
-
-        // Keep history manageable (last 50 messages)
-        if (count($this->conversationHistory) > 50) {
-            $this->conversationHistory = array_slice($this->conversationHistory, -50);
-        }
-    }
-
-    protected function buildMessagesWithHistory(string $currentPrompt, ?string $systemPrompt = null): array
-    {
-        // Default system prompt if none provided
-        if ($systemPrompt === null) {
-            $systemPrompt = PromptTemplates::defaultSystem($this->toolExecutor->getRegisteredTools());
-        }
-
-        $messages = [
-            ['role' => 'system', 'content' => $systemPrompt],
-        ];
-
-        // Add conversation history (skip the last 'user' message if it's the current prompt)
-        $historyToInclude = $this->conversationHistory;
-        $lastMessage = end($historyToInclude);
-        if ($lastMessage && $lastMessage['role'] === 'user' && $lastMessage['content'] === $currentPrompt) {
-            array_pop($historyToInclude);
-        }
-
-        // Include recent history (last 20 messages to manage token usage)
-        $recentHistory = array_slice($historyToInclude, -20);
-        foreach ($recentHistory as $msg) {
-            // Skip tool messages in history as they need special formatting
-            if ($msg['role'] === 'tool') {
-                continue;
-            }
-
-            // Skip error messages in history
-            if ($msg['role'] === 'error') {
-                continue;
-            }
-
-            $messages[] = [
-                'role' => $msg['role'],
-                'content' => $msg['content'],
-            ];
-        }
-
-        // Add current user message
-        $messages[] = ['role' => 'user', 'content' => $currentPrompt];
-
-        return $messages;
-    }
-
-    protected function classifyRequest(string $input): array
-    {
-        $this->logger?->debug('Classifying request', [
-            'input' => $input,
-            'input_length' => mb_strlen($input),
-        ]);
-
-        // Report we're starting classification
-        $this->reportProgress('classifying', [
-            'message' => 'Analyzing request type...',
-            'phase' => 'understanding_intent',
-            'input_preview' => mb_substr($input, 0, 100) . (mb_strlen($input) > 100 ? '...' : ''),
-        ]);
-
-        try {
-            $systemPrompt = PromptTemplates::classificationSystem();
-
-            $messages = $this->buildMessagesWithHistory(
-                PromptTemplates::classifyRequest($input),
-                $systemPrompt
-            );
-
-            // Report we're calling AI
-            $this->reportProgress('classifying', [
-                'message' => 'Asking AI to classify request...',
-                'phase' => 'calling_ai',
-                'context_messages' => count($messages),
-            ]);
-
-            $startTime = microtime(true);
-
-            $result = $this->llmClient->chat()->create([
-                'model' => $this->model,
-                'messages' => $messages,
-                'temperature' => 0.3, // Lower temperature for more consistent classification
-                'response_format' => [
-                    'type' => 'json_schema',
-                    'json_schema' => [
-                        'name' => 'request_classification',
-                        'schema' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'chain_of_thought' => [
-                                    'type' => 'string',
-                                    'description' => 'Step-by-step reasoning about the user request',
-                                ],
-                                'request_type' => [
-                                    'type' => 'string',
-                                    'enum' => RequestType::values(),
-                                    'description' => 'Type of request: demonstration (show example code), implementation (create/modify files), explanation (explain concept), query (ask for information), conversation (general chat)',
-                                ],
-                                'requires_tools' => [
-                                    'type' => 'boolean',
-                                    'description' => 'Whether this request requires using tools like writing files or running commands',
-                                ],
-                                'is_internal_task_management' => [
-                                    'type' => 'boolean',
-                                    'description' => 'Whether this is about managing internal tasks (not file creation)',
-                                ],
-                                'confidence' => [
-                                    'type' => 'number',
-                                    'minimum' => 0,
-                                    'maximum' => 1,
-                                    'description' => 'Confidence level in the classification (0-1)',
-                                ],
-                                'reasoning' => [
-                                    'type' => 'string',
-                                    'description' => 'Brief explanation of why this classification was chosen',
-                                ],
-                            ],
-                            'required' => ['chain_of_thought', 'request_type', 'requires_tools', 'is_internal_task_management', 'confidence', 'reasoning'],
-                            'additionalProperties' => false,
-                        ],
-                    ],
-                ],
-            ]);
-
-            $duration = microtime(true) - $startTime;
-
-            // Log LLM usage
-            if (isset($result->usage)) {
-                $this->logger?->debug('LLM usage', [
-                    'operation' => 'classify_request',
-                    'model' => $this->model,
-                    'prompt_tokens' => $result->usage->promptTokens,
-                    'completion_tokens' => $result->usage->completionTokens,
-                    'total_tokens' => $result->usage->totalTokens,
-                    'duration_ms' => round($duration * 1000, 2),
-                ]);
-            }
-
-            $classification = json_decode($result->choices[0]->message->content, true);
-
-            if (! $classification || ! isset($classification['request_type'])) {
-                throw new RuntimeException('Invalid classification response');
-            }
-
-            // Convert request_type string to enum
-            $requestType = RequestType::fromString($classification['request_type']);
-            if ($requestType === null) {
-                throw new RuntimeException('Invalid request type: ' . $classification['request_type']);
-            }
-            $classification['request_type'] = $requestType;
-
-            $this->logger?->info('Request classified', [
-                'type' => $classification['request_type']->value,
-                'requires_tools' => $classification['requires_tools'],
-                'is_internal_task_management' => $classification['is_internal_task_management'] ?? false,
-                'confidence' => $classification['confidence'],
-                'reasoning' => $classification['reasoning'],
-                'chain_of_thought' => $classification['chain_of_thought'] ?? '',
-            ]);
-
-            // Report classification complete with reasoning
-            $this->reportProgress('classifying', [
-                'message' => 'Classification complete',
-                'phase' => 'classification_complete',
-                'type' => $classification['request_type']->value,
-                'confidence' => $classification['confidence'],
-                'reasoning' => $classification['reasoning'] ?? 'No reasoning provided',
-                'chain_of_thought' => $classification['chain_of_thought'] ?? '',
-                'requires_tools' => $classification['requires_tools'],
-                'elapsed_time' => round($duration, 2),
-            ]);
-
-            return $classification;
-        } catch (Exception $e) {
-            $this->logger?->error('Request classification failed', [
-                'error' => $e->getMessage(),
-                'input' => $input,
-            ]);
-
-            // Default to implementation if classification fails
-            return [
-                'request_type' => RequestType::Implementation,
-                'requires_tools' => true,
-                'confidence' => 0.5,
-                'reasoning' => 'Classification failed, defaulting to implementation',
-            ];
-        }
-    }
-
-    protected function extractTasks(string $input): array
-    {
-        // Define a function for extracting tasks
-        $extractTasksFunction = [
-            'name' => 'extract_tasks',
-            'description' => 'Extract coding tasks from natural language input',
-            'parameters' => [
-                'type' => 'object',
-                'properties' => [
-                    'tasks' => [
-                        'type' => 'array',
-                        'description' => 'Array of extracted tasks',
-                        'items' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'description' => [
-                                    'type' => 'string',
-                                    'description' => 'The task description',
-                                ],
-                            ],
-                            'required' => ['description'],
-                        ],
-                    ],
-                ],
-                'required' => ['tasks'],
-            ],
-        ];
-
-        $prompt = PromptTemplates::extractTasks($input);
-
-        $this->logger?->debug('Extracting tasks from input', [
-            'input_length' => mb_strlen($input),
-            'prompt_length' => mb_strlen($prompt),
-        ]);
-
-        try {
-            $startTime = microtime(true);
-
-            $result = $this->llmClient->chat()->create([
-                'model' => $this->model,
-                'messages' => [
-                    ['role' => 'system', 'content' => PromptTemplates::defaultSystem()],
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-                'functions' => [$extractTasksFunction],
-                'function_call' => 'auto',
-                'temperature' => $this->temperature,
-            ]);
-
-            $duration = microtime(true) - $startTime;
-
-            // Log LLM usage
-            if (isset($result->usage)) {
-                $this->logger?->debug('LLM usage', [
-                    'operation' => 'extract_tasks',
-                    'model' => $this->model,
-                    'prompt_tokens' => $result->usage->promptTokens,
-                    'completion_tokens' => $result->usage->completionTokens,
-                    'total_tokens' => $result->usage->totalTokens,
-                    'duration_ms' => round($duration * 1000, 2),
-                ]);
-            }
-
-            $message = $result->choices[0]->message;
-
-            if (isset($message->functionCall) && $message->functionCall->name === 'extract_tasks') {
-                $arguments = json_decode($message->functionCall->arguments, true);
-                $tasks = $arguments['tasks'] ?? [];
-
-                $this->logger?->info('Tasks extracted', [
-                    'count' => count($tasks),
-                    'tasks' => array_map(fn ($t) => $t['description'], $tasks),
-                ]);
-
-                return $tasks;
-            }
-
-            return [];
-        } catch (Exception $e) {
-            $this->logger?->error('Task extraction failed', [
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-                'input' => $input,
-            ]);
-
-            return [];
-        }
-    }
-
-    protected function callOpenAI(string $prompt, ?string $systemPrompt = null): string
-    {
-        $startTime = microtime(true);
-
-        // Build messages array with conversation history
-        $messages = $this->buildMessagesWithHistory($prompt, $systemPrompt);
-
-        // Log the request at debug level
-        $this->logger?->debug('OpenAI request', [
-            'prompt_preview' => mb_substr($prompt, 0, 500) . (mb_strlen($prompt) > 500 ? '...' : ''),
-            'prompt_length' => mb_strlen($prompt),
-            'model' => $this->model,
-            'temperature' => $this->temperature,
-            'message_count' => count($messages),
-        ]);
-
-        try {
-            $this->reportProgress('calling_openai', ['message' => 'Calling OpenAI API...']);
-            $result = $this->llmClient->chat()->create([
-                'model' => $this->model,
-                'messages' => $messages,
-                'temperature' => $this->temperature,
-            ]);
-
-            $response = $result->choices[0]->message->content;
-
-            // Store assistant response in history
-            $this->addToHistory('assistant', $response);
-
-            // Log the response
-            $this->logger?->info('OpenAI response', [
-                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
-                'prompt_tokens' => $result->usage->promptTokens ?? 0,
-                'completion_tokens' => $result->usage->completionTokens ?? 0,
-                'total_tokens' => $result->usage->totalTokens ?? 0,
-                'response_preview' => mb_substr($response, 0, 500) . (mb_strlen($response) > 500 ? '...' : ''),
-                'response_length' => mb_strlen($response),
-                'finish_reason' => $result->choices[0]->finishReason ?? 'unknown',
-            ]);
-
-            // Log full request/response at debug level
-            $this->logger?->debug('OpenAI full exchange', [
-                'request' => $prompt,
-                'response' => $response,
-                'full_messages' => $messages,
-            ]);
-
-            return $response;
-        } catch (Exception $e) {
-            $this->logger?->error('OpenAI API call failed', [
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
-                'model' => $this->model,
-                'prompt_length' => mb_strlen($prompt),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            throw new Exception('OpenAI API error: ' . $e->getMessage(), 0, $e);
-        }
-    }
-
-    protected function callOpenAIWithFunctions(string $prompt, array $functions): ?array
-    {
-        $startTime = microtime(true);
-
-        // Build messages with history
-        $systemPrompt = PromptTemplates::executionSystem($this->toolExecutor->getToolDescriptions());
-        $messages = $this->buildMessagesWithHistory($prompt, $systemPrompt);
-
-        $this->logger?->debug('OpenAI function call request', [
-            'prompt_preview' => mb_substr($prompt, 0, 500) . (mb_strlen($prompt) > 500 ? '...' : ''),
-            'prompt_length' => mb_strlen($prompt),
-            'model' => $this->model,
-            'temperature' => $this->temperature,
-            'functions_count' => count($functions),
-            'message_count' => count($messages),
-        ]);
-
-        try {
-            $result = $this->llmClient->chat()->create([
-                'model' => $this->model,
-                'messages' => $messages,
-                'functions' => $functions,
-                'function_call' => 'auto',
-                'temperature' => $this->temperature,
-            ]);
-
-            $message = $result->choices[0]->message;
-
-            // Check if the model made a function call
-            if (isset($message->functionCall)) {
-                $functionCall = $message->functionCall;
-
-                // Store the assistant's function call in history
-                $this->addToHistory('assistant', json_encode([
-                    'function_call' => [
-                        'name' => $functionCall->name,
-                        'arguments' => $functionCall->arguments,
-                    ],
-                ]));
-
-                $this->logger?->info('OpenAI function call response', [
-                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
-                    'function_name' => $functionCall->name,
-                    'arguments' => $functionCall->arguments,
-                ]);
-
-                return [
-                    'name' => $functionCall->name,
-                    'arguments' => json_decode($functionCall->arguments, true),
-                ];
-            }
-
-            // No function call, store regular response
-            if ($message->content) {
-                $this->addToHistory('assistant', $message->content);
-            }
-
-            // No function call, task might be complete
-            $this->logger?->info('OpenAI response without function call', [
-                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
-                'response' => $message->content,
-            ]);
-
-            return null;
-        } catch (Exception $e) {
-            $this->logger?->error('OpenAI function call failed', [
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
-                'model' => $this->model,
-                'functions_count' => count($functions),
-                'prompt_length' => mb_strlen($prompt),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            throw new Exception('OpenAI API error: ' . $e->getMessage(), 0, $e);
-        }
-    }
-
-    protected function planTask(Task $task): void
-    {
-        $this->logger?->info('Planning task', ['task_id' => $task->id, 'description' => $task->description]);
-
-        // Report starting planning
-        $this->reportProgress('planning_task', [
-            'message' => 'Planning: ' . $task->description,
-            'phase' => 'analyzing_requirements',
-            'task_id' => $task->id,
-            'task_description' => $task->description,
-            'complexity_assessment' => 'Determining required tools and steps...',
-        ]);
-
-        $context = $this->buildContext();
-
-        try {
-            $systemPrompt = PromptTemplates::planningSystem();
-
-            $messages = $this->buildMessagesWithHistory(
-                PromptTemplates::planTask($task->description, $context),
-                $systemPrompt
-            );
-
-            // Report calling AI for planning
-            $this->reportProgress('planning_task', [
-                'message' => 'Creating execution plan...',
-                'phase' => 'calling_ai',
-                'task_id' => $task->id,
-            ]);
-
-            $result = $this->llmClient->chat()->create([
-                'model' => $this->model,
-                'messages' => $messages,
-                'temperature' => 0.5, // Lower temperature for more focused planning
-                'response_format' => [
-                    'type' => 'json_schema',
-                    'json_schema' => [
-                        'name' => 'task_plan',
-                        'schema' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'plan_summary' => [
-                                    'type' => 'string',
-                                    'description' => 'High-level summary of the plan',
-                                ],
-                                'steps' => [
-                                    'type' => 'array',
-                                    'items' => [
-                                        'type' => 'object',
-                                        'properties' => [
-                                            'description' => [
-                                                'type' => 'string',
-                                                'description' => 'What needs to be done in this step',
-                                            ],
-                                            'tool_needed' => [
-                                                'type' => 'string',
-                                                'description' => 'Which tool to use (read_file, write_file, grep, bash)',
-                                            ],
-                                            'expected_outcome' => [
-                                                'type' => 'string',
-                                                'description' => 'What we expect to achieve with this step',
-                                            ],
-                                        ],
-                                        'required' => ['description', 'tool_needed'],
-                                        'additionalProperties' => false,
-                                    ],
-                                ],
-                                'estimated_complexity' => [
-                                    'type' => 'string',
-                                    'enum' => ['simple', 'moderate', 'complex'],
-                                    'description' => 'Overall complexity of the task',
-                                ],
-                                'potential_issues' => [
-                                    'type' => 'array',
-                                    'items' => ['type' => 'string'],
-                                    'description' => 'Potential issues or edge cases to watch for',
-                                ],
-                            ],
-                            'required' => ['plan_summary', 'steps'],
-                            'additionalProperties' => false,
-                        ],
-                    ],
-                ],
-            ]);
-
-            $planData = json_decode($result->choices[0]->message->content, true);
-
-            if (! $planData || ! isset($planData['plan_summary'], $planData['steps'])) {
-                throw new RuntimeException('Invalid plan structure');
-            }
-
-            // Store assistant's plan in history
-            $this->addToHistory('assistant', json_encode($planData));
-
-            // Extract steps for task manager
-            $steps = array_map(function ($step) {
-                return $step['description'];
-            }, $planData['steps']);
-
-            $this->taskManager->planTask($task->id, $planData['plan_summary'], $steps);
-
-            $this->logger?->debug('Task planned with structured output', [
-                'task_id' => $task->id,
-                'steps_count' => count($steps),
-                'complexity' => $planData['estimated_complexity'] ?? 'unknown',
-            ]);
-
-            // Report planning complete
-            $this->reportProgress('planning_task', [
-                'message' => 'Plan created successfully',
-                'phase' => 'plan_complete',
-                'task_id' => $task->id,
-                'plan_summary' => $planData['plan_summary'],
-                'step_count' => count($steps),
-                'estimated_complexity' => $planData['estimated_complexity'] ?? 'unknown',
-                'tools_needed' => array_unique(array_map(fn ($s) => $s['tool_needed'] ?? 'unknown', $planData['steps'])),
-            ]);
-        } catch (Exception $e) {
-            $this->logger?->error('Structured task planning failed, falling back', [
-                'error' => $e->getMessage(),
-                'task_id' => $task->id,
-            ]);
-
-            // Fallback to regular planning
-            $prompt = PromptTemplates::planTaskFallback($task->description, $context);
-            $planResponse = $this->callOpenAI($prompt);
-            $this->taskManager->planTask($task->id, $planResponse, []);
-        }
-    }
-
-    protected function buildContext(): string
-    {
-        // Build current project context
-        $context = 'Current directory: ' . getcwd() . "\n";
-        $context .= "Recent conversation:\n" . $this->getRecentHistory() . "\n";
-
-        return $context;
-    }
-
-    protected function getRecentHistory(): string
-    {
-        $recent = array_slice($this->conversationHistory, -10);
-
-        return implode("\n", array_map(function ($msg) {
-            return "{$msg['role']}: {$msg['content']}";
-        }, $recent));
-    }
-
-    protected function executeTask(Task $task): void
-    {
-        $maxIterations = 10;
-        $iteration = 0;
-
-        // Track step progress using task steps or iterations
-        $totalSteps = ! empty($task->steps) ? count($task->steps) : $maxIterations;
-        $currentStepIndex = 0;
-
-        $this->logger?->info('Executing task', [
-            'task_id' => $task->id,
-            'description' => $task->description,
-            'status' => $task->status->value,
-            'steps' => $totalSteps,
-        ]);
-
-        while ($iteration < $maxIterations) {
-            $this->logger?->debug('Task iteration', ['iteration' => $iteration + 1]);
-
-            $context = $this->buildContext();
-            $toolLog = $this->getRecentToolLog();
-
-            $prompt = PromptTemplates::executeTask($task, $context, $toolLog);
-
-            $startTime = microtime(true);
-            $toolCall = $this->callOpenAIWithFunctions($prompt, $this->getToolFunctions());
-            $duration = microtime(true) - $startTime;
-
-            $this->logger?->debug('LLM tool selection', [
-                'task_id' => $task->id,
-                'duration_ms' => round($duration * 1000, 2),
-                'tool_selected' => $toolCall ? $toolCall['name'] : 'none',
-            ]);
-
-            if (! $toolCall) {
-                $this->logger?->info('Task completed - no more tools needed');
-                break; // No tool call means task is complete
-            }
-
-            // Increment step tracking
-            $currentStepIndex = min($currentStepIndex + 1, $totalSteps);
-
-            // Get step description if available
-            $stepDescription = '';
-            if (! empty($task->steps) && isset($task->steps[$currentStepIndex - 1])) {
-                $stepDescription = $task->steps[$currentStepIndex - 1];
-            } else {
-                // Generate a description based on the tool being used
-                $stepDescription = $this->generateStepDescription($toolCall['name'], $toolCall['arguments']);
-            }
-
-            // Report task execution progress
-            $this->reportProgress('executing_task', [
-                'task_id' => $task->id,
-                'task_description' => $task->description,
-                'current_step' => $currentStepIndex,
-                'total_steps' => $totalSteps,
-                'step_description' => $stepDescription,
-                'current_tool' => $toolCall['name'],
-            ]);
-
-            try {
-                // Report tool execution starting
-                $this->reportProgress('executing_tool', [
-                    'message' => "Running {$toolCall['name']}...",
-                    'phase' => 'preparing',
-                    'task_id' => $task->id,
-                    'tool_name' => $toolCall['name'],
-                    'tool_index' => $iteration + 1,
-                    'tool_total' => $maxIterations,
-                    'params_preview' => $this->getParamsPreview($toolCall['arguments']),
-                ]);
-
-                // Execute the tool
-                $this->logger?->debug('Executing tool', [
-                    'tool' => $toolCall['name'],
-                    'params' => $toolCall['arguments'],
-                    'iteration' => $iteration + 1,
-                ]);
-
-                $toolStartTime = microtime(true);
-                $result = $this->toolExecutor->dispatch($toolCall['name'], $toolCall['arguments']);
-                $toolDuration = microtime(true) - $toolStartTime;
-
-                $this->logger?->debug('Tool execution complete', [
-                    'tool' => $toolCall['name'],
-                    'success' => $result->isSuccess(),
-                ]);
-
-                // Report tool execution complete
-                $this->reportProgress('executing_tool', [
-                    'message' => "Tool {$toolCall['name']} completed",
-                    'phase' => 'completed',
-                    'task_id' => $task->id,
-                    'tool_name' => $toolCall['name'],
-                    'success' => $result->isSuccess(),
-                    'execution_time' => round($toolDuration, 2),
-                ]);
-
-                $this->addToHistory('tool', "Tool: {$toolCall['name']}\nParams: " . json_encode($toolCall['arguments']) . "\nResult: " . json_encode($result->toArray()));
-            } catch (Exception $e) {
-                $this->logger?->error('Tool execution failed during task', [
-                    'error' => $e->getMessage(),
-                    'exception' => get_class($e),
-                    'tool' => $toolCall['name'],
-                    'params' => $toolCall['arguments'],
-                    'task' => $task->description,
-                    'iteration' => $iteration,
-                ]);
-
-                $this->addToHistory('error', $e->getMessage());
-                break;
-            }
-
-            $iteration++;
-        }
-
-        $this->logger?->info('Task execution completed', [
-            'task' => $task->description,
-            'iterations' => $iteration,
-            'max_iterations' => $maxIterations,
-        ]);
-    }
-
-    protected function getRecentToolLog(): string
-    {
-        $log = $this->toolExecutor->getExecutionLog();
-        $recent = array_slice($log, -5); // Last 5 tool calls
-
-        return json_encode($recent, JSON_PRETTY_PRINT);
-    }
-
-    protected function handleDemonstration(string $userInput): AgentResponse
-    {
-        $this->logger?->info('Handling demonstration request');
-
-        $systemPrompt = PromptTemplates::demonstrationSystem();
-
-        $response = $this->callOpenAI($userInput, $systemPrompt);
-
-        return AgentResponse::success($response);
-    }
-
-    protected function handleExplanation(string $userInput): AgentResponse
-    {
-        $this->logger?->info('Handling explanation request');
-
-        $systemPrompt = PromptTemplates::explanationSystem();
-
-        $response = $this->callOpenAI($userInput, $systemPrompt);
-
-        return AgentResponse::success($response);
-    }
-
-    protected function handleConversation(string $userInput): AgentResponse
-    {
-        $this->logger?->info('Handling conversation/query');
-
-        $systemPrompt = PromptTemplates::conversationSystem($this->toolExecutor->getToolDescriptions());
-
-        $response = $this->callOpenAI($userInput, $systemPrompt);
-
-        return AgentResponse::success($response);
-    }
-
-    protected function generateTaskSummary(string $userInput, array $taskResults): string
-    {
-        // Get the recent history to understand what was done
-        $recentHistory = $this->getRecentHistory();
-        $toolLog = $this->getRecentToolLog();
-
-        $prompt = PromptTemplates::generateSummary($userInput, $taskResults, $recentHistory, $toolLog);
-
-        return $this->callOpenAI($prompt);
-    }
-
-    /**
-     * Handle internal task management requests
-     */
-    protected function handleInternalTaskManagement(string $userInput): AgentResponse
-    {
-        $this->logger?->info('Handling internal task management request');
-
-        // Get current tasks
         $tasks = $this->taskManager->getTasks();
-        $taskHistory = $this->taskManager->getTaskHistory();
-
-        // Analyze what the user wants to do with tasks
-        $systemPrompt = 'You are helping the user manage their internal task list. ' .
-            "Available operations: view tasks, add tasks, clear completed tasks, view history.\n\n" .
-            'Current active tasks: ' . count($tasks) . "\n" .
-            'Tasks in history: ' . count($taskHistory);
-
-        $prompt = "The user said: \"{$userInput}\"\n\n" .
-            "Current tasks:\n";
-
-        if (empty($tasks)) {
-            $prompt .= "(No active tasks)\n";
-        } else {
-            foreach ($tasks as $index => $task) {
-                $prompt .= ($index + 1) . ". [{$task->status->value}] {$task->description}\n";
-            }
-        }
-
-        $prompt .= "\nBased on their request, provide a helpful response about their task list. " .
-            'If they want to add tasks, acknowledge it but explain that tasks are extracted from implementation requests. ' .
-            'If they want to see completed tasks, mention the history contains ' . count($taskHistory) . ' completed tasks.';
-
-        $response = $this->callOpenAI($prompt, $systemPrompt);
-
-        // If user wants to clear completed tasks, do it
-        if (mb_stripos($userInput, 'clear') !== false && mb_stripos($userInput, 'completed') !== false) {
-            $cleared = $this->taskManager->clearCompletedTasks();
-            if (count($cleared) > 0) {
-                $response .= "\n\n✓ Cleared " . count($cleared) . ' completed tasks from the active list.';
-            }
-        }
-
-        return AgentResponse::success($response);
-    }
-
-    /**
-     * Generate a user-friendly step description based on tool usage
-     */
-    protected function generateStepDescription(string $toolName, array $arguments): string
-    {
-        return match ($toolName) {
-            'read_file' => 'Reading ' . ($arguments['path'] ?? 'file'),
-            'write_file' => 'Writing to ' . ($arguments['path'] ?? 'file'),
-            'grep' => 'Searching for ' . ($arguments['pattern'] ?? 'pattern'),
-            'find_files' => 'Finding files matching ' . ($arguments['pattern'] ?? 'pattern'),
-            'bash' => 'Running command: ' . ($arguments['command'] ?? 'command'),
-            default => 'Using ' . $toolName,
-        };
+        $currentTask = $this->taskManager->currentTask;  // Use property directly
+        
+        return [
+            'tasks' => array_map(fn(Task $task) => [
+                'id' => $task->id,
+                'description' => $task->description,
+                'status' => $task->status->value,
+            ], $tasks),
+            'current_task' => $currentTask ? [
+                'id' => $currentTask->id,
+                'description' => $currentTask->description,
+                'status' => $currentTask->status->value,
+            ] : null,
+            'conversation_stats' => $this->conversationBuffer->getStats(),
+        ];
     }
 }
+
