@@ -59,6 +59,20 @@ class WebFetch extends Tool
             return ToolResponse::error("Invalid URL: {$url}");
         }
 
+        // Security: Validate URL scheme (prevent SSRF)
+        $parsedUrl = parse_url($url);
+        $scheme = strtolower($parsedUrl['scheme'] ?? '');
+        
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return ToolResponse::error("Invalid URL scheme. Only http and https are allowed.");
+        }
+
+        // Security: Block private/local IP addresses (SSRF protection)
+        $host = $parsedUrl['host'] ?? '';
+        if ($this->isPrivateOrLocalHost($host)) {
+            return ToolResponse::error("Access to private or local network addresses is not allowed.");
+        }
+
         try {
             $client = $this->httpClient ?? HttpClient::create([
                 'timeout' => $params['timeout'] ?? 30,
@@ -117,5 +131,37 @@ class WebFetch extends Tool
         } catch (Exception $e) {
             return '[PDF content - ' . mb_strlen($pdfContent) . ' bytes, extraction failed: ' . $e->getMessage() . ']';
         }
+    }
+
+    /**
+     * Check if a hostname or IP address is private or local (SSRF protection)
+     */
+    protected function isPrivateOrLocalHost(string $host): bool
+    {
+        // Resolve hostname to IP(s)
+        $ips = @gethostbynamel($host) ?: [$host];
+        
+        foreach ($ips as $ip) {
+            // Check for private/reserved ranges (RFC1918, loopback, link-local, etc.)
+            if (
+                filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false ||
+                $this->isLocalHostname($host)
+            ) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Check common localhost variations
+     */
+    protected function isLocalHostname(string $host): bool
+    {
+        $host = strtolower($host);
+        return in_array($host, ['localhost', 'localhost.localdomain'], true) ||
+               str_ends_with($host, '.local') ||
+               str_ends_with($host, '.localhost');
     }
 }

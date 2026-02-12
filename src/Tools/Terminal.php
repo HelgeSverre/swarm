@@ -45,6 +45,18 @@ class Terminal extends Tool
 
     public function execute(array $params): ToolResponse
     {
+        // Security: Check if terminal is enabled
+        $enabled = filter_var(
+            getenv('TERMINAL_ENABLED') ?: $_ENV['TERMINAL_ENABLED'] ?? 'false',
+            FILTER_VALIDATE_BOOLEAN
+        );
+        
+        if (!$enabled) {
+            return ToolResponse::error(
+                'Terminal tool is disabled for security. Set TERMINAL_ENABLED=true in .env to enable command execution.'
+            );
+        }
+
         $command = $params['command'] ?? throw new InvalidArgumentException('command required');
         $timeout = $params['timeout'] ?? 30;
         $directory = $params['directory'] ?? getcwd();
