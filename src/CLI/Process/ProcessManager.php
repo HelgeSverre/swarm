@@ -18,12 +18,6 @@ class ProcessManager
 {
     use EventAware, Loggable;
 
-    private const DEFAULT_TIMEOUT = 600; // 10 minutes
-
-    private const ANIMATION_INTERVAL = 0.1;
-
-    private const PROCESS_SLEEP_MS = 20000; // 20ms
-
     protected Application $app;
 
     private array $activeProcesses = [];
@@ -59,7 +53,8 @@ class ProcessManager
             return $allUpdates;
         }
 
-        $this->logDebug('Polling processes', ['process_count' => count($this->activeProcesses)]);
+        // Only log when we have updates to avoid log spam
+        // $this->logDebug('Polling processes', ['process_count' => count($this->activeProcesses)]);
 
         foreach ($this->activeProcesses as $processId => $processData) {
             if ($processData['complete']) {

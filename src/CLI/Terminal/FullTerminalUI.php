@@ -82,6 +82,11 @@ class FullTerminalUI
 
     protected string $currentFocus = self::FOCUS_MAIN;
 
+    // Reasoning display state
+    protected ?string $currentReasoning = null;
+
+    protected bool $showReasoning = false;
+
     // Platform detection
     protected bool $isMacOS;
 
@@ -255,10 +260,10 @@ class FullTerminalUI
             $this->history = $state['conversation_history'];
         }
         if (isset($state['current_task'])) {
-            $this->currentTask = $state['current_task'] ?? '';
+            $this->currentTask = $state['current_task'];
         }
         if (isset($state['operation'])) {
-            $this->status = $state['operation'] ?? 'Ready';
+            $this->status = $state['operation'];
         }
 
         $this->stateChanged = true;
@@ -376,6 +381,14 @@ class FullTerminalUI
             $this->currentFocus = self::FOCUS_TASKS;
             $this->stateChanged = true;
 
+            return;
+        }
+
+        // R to toggle reasoning display
+        if (strtoupper($key) === 'R' && $this->currentReasoning) {
+            $this->showReasoning = !$this->showReasoning;
+            $this->stateChanged = true;
+            
             return;
         }
 
@@ -736,10 +749,31 @@ class FullTerminalUI
             'processId' => $event->processId,
             'type' => $event->type,
             'message' => $event->data['message'] ?? null,
+            'operation' => $event->data['operation'] ?? null,
         ]));
 
         $this->currentProgress = $event->data;
         $this->status = $event->data['message'] ?? 'Processing...';
+        
+        // Handle reasoning content display
+        if (isset($event->data['operation']) && $event->data['operation'] === 'reasoning_received') {
+            $this->currentReasoning = $event->data['details']['reasoning_content'] ?? null;
+            $this->showReasoning = !empty($this->currentReasoning);
+            
+            // Update status to show reasoning is available
+            if ($this->showReasoning) {
+                $this->status = 'Thinking... (Press R to toggle reasoning)';
+            }
+        }
+        
+        // Clear reasoning for non-reasoning operations
+        if (isset($event->data['operation']) && !in_array($event->data['operation'], ['reasoning_received', 'calling_openai'])) {
+            if ($event->data['operation'] === 'quick_response' || $event->data['operation'] === 'deep_processing') {
+                $this->currentReasoning = null;
+                $this->showReasoning = false;
+            }
+        }
+        
         $this->stateChanged = true;
     }
 
@@ -832,9 +866,18 @@ class FullTerminalUI
         $this->moveCursor($this->terminalHeight - 2, 1);
         echo Ansi::DIM . str_repeat(Ansi::BOX_H, $this->mainAreaWidth) . Ansi::BOX_R . Ansi::RESET;
 
+        // Reasoning display (if available and enabled)
+        if ($this->showReasoning && $this->currentReasoning) {
+            $this->renderReasoningDisplay($row);
+        }
+        
         // Footer hints
         $this->moveCursor($this->terminalHeight - 1, 2);
-        echo Ansi::DIM . "{$this->modSymbol}T: tasks  {$this->modSymbol}H: help  Tab: switch pane  {$this->modSymbol}Q: quit" . Ansi::RESET;
+        $footerText = "{$this->modSymbol}T: tasks  {$this->modSymbol}H: help  Tab: switch pane  {$this->modSymbol}Q: quit";
+        if ($this->currentReasoning) {
+            $footerText .= "  R: reasoning";
+        }
+        echo Ansi::DIM . $footerText . Ansi::RESET;
 
         // Prompt
         $this->moveCursor($this->terminalHeight, 2);
@@ -847,6 +890,70 @@ class FullTerminalUI
         }
     }
 
+    protected function renderReasoningDisplay(int &$row): void
+    {
+        if (!$this->currentReasoning) {
+            return;
+        }
+        
+        // Calculate available space for reasoning display
+        $maxLines = 5; // Maximum lines to show reasoning
+        $availableWidth = $this->mainAreaWidth - 4; // Leave margins
+        
+        // Wrap reasoning text
+        $reasoningLines = $this->wrapText($this->currentReasoning, $availableWidth);
+        $displayLines = array_slice($reasoningLines, 0, $maxLines);
+        
+        // Render reasoning box
+        $startRow = max(3, min($row, $this->terminalHeight - 8));
+        
+        // Top border
+        $this->moveCursor($startRow, 2);
+        echo Ansi::CYAN . '╭─ Thinking ';
+        echo str_repeat('─', max(0, $availableWidth - 11));
+        echo '╮' . Ansi::RESET;
+        
+        // Content lines
+        $currentRow = $startRow + 1;
+        foreach ($displayLines as $line) {
+            if ($currentRow >= $this->terminalHeight - 3) break;
+            
+            $this->moveCursor($currentRow, 2);
+            echo Ansi::CYAN . '│' . Ansi::RESET;
+            echo ' ' . Ansi::DIM . $line . Ansi::RESET;
+            
+            // Pad to full width and add right border
+            $lineLength = mb_strlen($line);
+            if ($lineLength < $availableWidth) {
+                echo str_repeat(' ', $availableWidth - $lineLength);
+            }
+            echo Ansi::CYAN . '│' . Ansi::RESET;
+            
+            $currentRow++;
+        }
+        
+        // Show truncation indicator if needed
+        if (count($reasoningLines) > $maxLines) {
+            $this->moveCursor($currentRow, 2);
+            echo Ansi::CYAN . '│' . Ansi::RESET;
+            echo ' ' . Ansi::DIM . '... (truncated)' . Ansi::RESET;
+            
+            $truncText = ' ... (truncated)';
+            $padding = max(0, $availableWidth - mb_strlen($truncText));
+            echo str_repeat(' ', $padding);
+            echo Ansi::CYAN . '│' . Ansi::RESET;
+            $currentRow++;
+        }
+        
+        // Bottom border  
+        $this->moveCursor($currentRow, 2);
+        echo Ansi::CYAN . '╰';
+        echo str_repeat('─', $availableWidth);
+        echo '╯' . Ansi::RESET;
+        
+        $row = $currentRow + 2; // Update row position for next element
+    }
+    
     protected function renderStatusBar(): void
     {
         // Start with background color
@@ -980,10 +1087,8 @@ class FullTerminalUI
             if ($contextActive && $row < $this->terminalHeight - 2) {
                 $this->moveCursor($row++, $col);
                 echo '  + ' . $this->contextInput;
-                if ($contextActive) {
-                    $this->moveCursor($row - 1, $col + 4 + mb_strlen($this->contextInput));
-                    echo "\033[?25h"; // Show cursor
-                }
+                $this->moveCursor($row - 1, $col + 4 + mb_strlen($this->contextInput));
+                echo "\033[?25h"; // Show cursor
             }
         }
     }
@@ -1198,7 +1303,7 @@ class FullTerminalUI
                 echo Ansi::REVERSE;
             }
 
-            $num = mb_str_pad($taskIndex + 1, 2);
+            $num = mb_str_pad((string)($taskIndex + 1), 2);
             $status = $task['status'] ?? 'pending';
             $icon = match ($status) {
                 'completed' => Ansi::GREEN . '✓',
