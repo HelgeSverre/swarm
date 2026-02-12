@@ -49,12 +49,13 @@ The brain of the system. Key methods:
 - `setProgressCallback()`: Sets callback for progress reporting
 - `reportProgress()`: Reports progress during execution
 
-### ToolRouter (src/Core/ToolRouter.php)
+### ToolExecutor (src/Core/ToolExecutor.php)
 Manages tool registration and execution:
 - Maintains registry of available tools
 - Routes function calls to appropriate tool handlers
 - Logs all tool executions
 - Handles errors gracefully
+- Supports toolkits for grouped tool registration
 
 ### Tool System (src/Tools/*)
 Each tool is a class extending the abstract Tool class:

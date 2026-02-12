@@ -15,7 +15,6 @@ AI-powered coding agent written in PHP that helps with development tasks through
 - **Activity Tracking System**: Visual activity feed showing conversations, tool calls, and notifications
 - **Web Integration**: Fetch web content and search the web with Tavily integration
 - **Streaming Processing**: Async and background processing for long-running operations
-- **Multiple AI Models**: Support for OpenAI and Mistral models
 - **Centralized Prompt Templates**: Consistent prompts across all interactions
 - **Progress Reporting**: Real-time updates during task execution
 - **Process Management**: Advanced process spawning and worker management for parallel tasks
@@ -45,14 +44,14 @@ composer install
 ## Usage
 
 ```bash
-# Primary method - run directly with PHP
-php cli.php
-
-# Alternative - use composer script
+# Primary method - use composer script
 composer swarm
 
-# Or use the binary
-./bin/swarm
+# Alternative - run binary directly
+./bin/cli
+
+# Or use PHP directly
+php bin/cli
 ```
 
 Type your request in natural language and Swarm will:
@@ -70,6 +69,15 @@ Type your request in natural language and Swarm will:
 - **"What files are in the src directory?"** → Uses tools to explore filesystem
 
 Type `exit` or `quit` to stop.
+
+## Security
+
+⚠️ **Important Security Notes**:
+
+- The **Terminal tool is disabled by default**. Set `TERMINAL_ENABLED=true` in `.env` to enable command execution. Only enable this in trusted, isolated development environments.
+- The **WebFetch tool** includes SSRF protections and blocks access to private/local networks.
+- Never commit your `.env` file containing API keys.
+- See [SECURITY.md](SECURITY.md) for detailed security considerations.
 
 ## Architecture
 
@@ -169,7 +177,7 @@ src/
 ## Development
 
 ```bash
-# Run tests (236 tests, 1239 assertions)
+# Run tests
 composer test
 
 # Run specific test file
@@ -180,9 +188,6 @@ composer format
 
 # Static analysis
 composer check
-
-# Run test agent
-php test_agent.php
 ```
 
 ### Test Coverage
@@ -200,15 +205,14 @@ Environment variables (in `.env`):
 
 ### OpenAI Settings
 - `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `OPENAI_MODEL`: Model to use (default: gpt-4.1-nano)
+- `OPENAI_MODEL`: Model to use (default: gpt-4.1-nano - or use gpt-4.1-mini)
 - `OPENAI_TEMPERATURE`: Temperature for responses (default: 0.7)
-
-### Mistral Settings
-- `MISTRAL_API_KEY`: Mistral API key for alternative AI model (optional)
-- `MISTRAL_MODEL`: Mistral model to use (default: devstral-medium-latest)
 
 ### API Integrations
 - `TAVILY_API_KEY`: API key for Tavily web search/extract tools (optional)
+
+### Security Settings
+- `TERMINAL_ENABLED`: Enable/disable terminal command execution (default: false - disabled for security)
 
 ### Application Settings
 - `APP_ENV`: Application environment (local, production)
@@ -226,10 +230,9 @@ Environment variables (in `.env`):
 - `SWARM_TIMEOUT_RETRY_ENABLED`: Enable retry suggestion on timeout (default: true)
 
 **Note on Running the App**: 
-- When using `composer swarm`, Composer enforces its own 300-second timeout
-- For long-running operations, use `./bin/swarm` directly to avoid Composer timeouts
 - The main CLI process runs with unlimited execution time
-- Individual requests and subprocesses have configurable timeouts
+- Individual requests and subprocesses have configurable timeouts (see `SWARM_REQUEST_TIMEOUT` and `SWARM_SUBPROCESS_TIMEOUT`)
+- Composer scripts also run with unlimited timeout (`process-timeout: 0`)
 
 ## Advanced Features
 
