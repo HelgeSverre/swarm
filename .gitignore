@@ -41,4 +41,5 @@ coverage/
 # Node.js (for playwright)
 /node_modules/
 package-lock.json
-yarn.lockdocs/system_prompts_leaks/
+yarn.lock
+docs/system_prompts_leaks/
