@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MinimalTui\Core;
 
+use RuntimeException;
+
 /**
  * Terminal utilities for ANSI escape sequences, input handling, and terminal management
  */
@@ -115,14 +117,6 @@ class Terminal
     }
 
     /**
-     * Check if running in a terminal
-     */
-    protected function isTerminal(): bool
-    {
-        return stream_isatty(STDIN) && stream_isatty(STDOUT);
-    }
-
-    /**
      * Initialize terminal for TUI mode
      */
     public function initialize(): void
@@ -132,8 +126,8 @@ class Terminal
         }
 
         // Check if we're running in a terminal
-        if (!$this->isTerminal()) {
-            throw new \RuntimeException('This application requires a terminal to run.');
+        if (! $this->isTerminal()) {
+            throw new RuntimeException('This application requires a terminal to run.');
         }
 
         // Save current terminal state
@@ -379,5 +373,13 @@ class Terminal
             STR_PAD_BOTH => str_repeat($pad, (int) ($padLength / 2)) . $text . str_repeat($pad, (int) ceil($padLength / 2)),
             default => $text . str_repeat($pad, $padLength)
         };
+    }
+
+    /**
+     * Check if running in a terminal
+     */
+    protected function isTerminal(): bool
+    {
+        return stream_isatty(STDIN) && stream_isatty(STDOUT);
     }
 }

@@ -42,40 +42,55 @@ function formatTime(): string
 class ClaudeCodeChatDemo
 {
     private int $width = 120;
+
     private int $height = 40;
+
     private int $sidebarWidth = 35;
+
     private int $frame = 0;
+
     private float $startTime;
-    
+
     // Message system
     private array $messages = [];
+
     private array $currentTasks = [];
-    
+
     // Animation state
     private array $typewriterState = [];
+
     private array $spinnerState = [];
+
     private string $currentSpinner = '';
+
     private bool $showingThinking = false;
-    
+
     // Demo control
     private int $demoStep = 0;
+
     private float $lastStepTime = 0;
+
     private array $demoScenarios = [];
+
     private string $currentScenario = 'welcome';
+
     private bool $scenarioComplete = false;
-    
+
     // Activity stream (unified chat + tools + tasks)
     private array $activities = [];
+
     private int $scrollOffset = 0;
-    
+
     // Input handling
     private string $inputBuffer = '';
+
     private int $cursorPosition = 0;
+
     private bool $inputMode = false;
-    
+
     // Spinner characters for premium feel
     private array $spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    
+
     public function __construct()
     {
         $this->startTime = microtime(true);
@@ -87,17 +102,17 @@ class ClaudeCodeChatDemo
     public function run(): void
     {
         $this->initializeTerminal();
-        
+
         try {
             // Welcome sequence
             $this->startWelcomeSequence();
-            
+
             // Main render loop
             while (true) {
                 $this->update();
                 $this->render();
                 $this->handleInput();
-                
+
                 usleep(33333); // 30 FPS
                 $this->frame++;
             }
@@ -106,11 +121,17 @@ class ClaudeCodeChatDemo
         }
     }
 
+    public function handleSignal(int $signal): void
+    {
+        $this->cleanup();
+        exit(0);
+    }
+
     private function initializeTerminal(): void
     {
         echo ENTER_ALT_SCREEN;
         echo HIDE_CURSOR;
-        
+
         // Set raw mode for input
         system('stty -echo -icanon -isig min 0 time 1 2>/dev/null');
         stream_set_blocking(STDIN, false);
@@ -120,7 +141,7 @@ class ClaudeCodeChatDemo
     {
         echo SHOW_CURSOR;
         echo EXIT_ALT_SCREEN;
-        
+
         // Restore terminal
         system('stty sane 2>/dev/null');
         stream_set_blocking(STDIN, true);
@@ -134,12 +155,6 @@ class ClaudeCodeChatDemo
         }
     }
 
-    public function handleSignal(int $signal): void
-    {
-        $this->cleanup();
-        exit(0);
-    }
-
     private function updateTerminalSize(): void
     {
         $this->width = (int) exec('tput cols') ?: 120;
@@ -149,21 +164,21 @@ class ClaudeCodeChatDemo
     private function render(): void
     {
         echo CLEAR_SCREEN . HOME;
-        
+
         // Sleek header (minimal)
         $this->renderHeader();
-        
+
         // Main activity stream (left side)
         $this->renderActivityStream();
-        
+
         // Show thinking indicator if active
         if ($this->showingThinking) {
             $this->renderThinkingIndicator();
         }
-        
+
         // Sidebar for summary (right side)
         $this->renderSidebar();
-        
+
         // Minimal footer
         $this->renderFooter();
     }
@@ -172,12 +187,12 @@ class ClaudeCodeChatDemo
     {
         echo moveTo(1, 1);
         echo C_ICON . '🤖 ' . RESET . C_TEXT . BOLD . 'Claude Code' . RESET;
-        
+
         // Time on the right
         $time = formatTime();
-        $timeCol = $this->width - strlen($time);
+        $timeCol = $this->width - mb_strlen($time);
         echo moveTo(1, $timeCol) . C_MUTED . $time . RESET;
-        
+
         echo "\n\n";
     }
 
@@ -186,39 +201,42 @@ class ClaudeCodeChatDemo
         $startRow = 4;
         $maxRows = $this->height - 7; // Leave room for header and footer
         $mainAreaWidth = $this->width - $this->sidebarWidth - 6;
-        
+
         // Calculate total content height needed
         $totalContentHeight = $this->calculateTotalContentHeight($mainAreaWidth);
-        
+
         // Auto-scroll to follow newest content
         $this->updateScrollOffset($maxRows, $totalContentHeight);
-        
+
         // Render visible activities
         $currentRow = $startRow;
         $renderedHeight = 0;
         $activityStart = 0;
-        
+
         // Skip activities that are scrolled off screen
         foreach ($this->activities as $index => $activity) {
             $activityHeight = $this->calculateActivityHeight($activity, $mainAreaWidth) + 1;
-            
+
             if ($activityStart + $activityHeight <= $this->scrollOffset) {
                 $activityStart += $activityHeight;
+
                 continue;
             }
-            
-            if ($renderedHeight >= $maxRows) break;
-            
+
+            if ($renderedHeight >= $maxRows) {
+                break;
+            }
+
             // Calculate partial rendering if activity is partially visible
             $skipLines = max(0, $this->scrollOffset - $activityStart);
             $availableLines = min($activityHeight - $skipLines, $maxRows - $renderedHeight);
-            
+
             $activityRows = $this->renderActivity($activity, $currentRow, $mainAreaWidth, $index, $skipLines, $availableLines);
-            
+
             $currentRow += $activityRows;
             $renderedHeight += $activityRows;
             $activityStart += $activityHeight;
-            
+
             // Only add minimal spacing between different activity types, not after every activity
             if ($activityRows > 0 && $this->needsSpacing($activity, $this->activities[$index + 1] ?? null)) {
                 $currentRow++;
@@ -230,16 +248,16 @@ class ClaudeCodeChatDemo
     private function needsSpacing(array $currentActivity, ?array $nextActivity): bool
     {
         // No spacing needed if no next activity
-        if (!$nextActivity) {
+        if (! $nextActivity) {
             return false;
         }
-        
+
         // Only add spacing when transitioning from tools back to messages
-        if (in_array($currentActivity['type'], ['tool_start', 'tool_output', 'tool_complete']) && 
+        if (in_array($currentActivity['type'], ['tool_start', 'tool_output', 'tool_complete']) &&
             $nextActivity['type'] === 'message') {
             return true;
         }
-        
+
         // No spacing between messages or consecutive tool activities - keep it compact
         return false;
     }
@@ -250,12 +268,13 @@ class ClaudeCodeChatDemo
         foreach ($this->activities as $index => $activity) {
             $activityHeight = $this->calculateActivityHeight($activity, $width);
             $totalHeight += $activityHeight;
-            
+
             // Only add spacing where actually needed
             if ($this->needsSpacing($activity, $this->activities[$index + 1] ?? null)) {
                 $totalHeight += 1;
             }
         }
+
         return $totalHeight;
     }
 
@@ -264,19 +283,16 @@ class ClaudeCodeChatDemo
         switch ($activity['type']) {
             case 'message':
                 $lines = $this->wrapText($activity['content'] ?? '', $width - 10);
+
                 return count($lines);
-                
             case 'tool_start':
             case 'tool_complete':
                 return 1;
-                
             case 'tool_output':
                 return count($activity['output'] ?? []);
-                
             case 'task_list':
                 // Task lists are not rendered inline anymore, only in sidebar
                 return 0;
-                
             default:
                 return 1;
         }
@@ -290,7 +306,7 @@ class ClaudeCodeChatDemo
         } else {
             // Auto-scroll to show the newest content (bottom)
             $this->scrollOffset = $totalHeight - $maxRows;
-            
+
             // Add some padding to show thinking indicator
             if ($this->showingThinking) {
                 $this->scrollOffset = max(0, $this->scrollOffset - 2);
@@ -301,24 +317,19 @@ class ClaudeCodeChatDemo
     private function renderActivity(array $activity, int $startRow, int $width, int $index, int $skipLines = 0, int $maxLines = PHP_INT_MAX): int
     {
         $row = $startRow;
-        
+
         switch ($activity['type']) {
             case 'message':
                 return $this->renderMessageActivity($activity, $row, $width, $index, $skipLines, $maxLines);
-                
             case 'tool_start':
                 return $this->renderToolStart($activity, $row, $width, $skipLines, $maxLines);
-                
             case 'tool_output':
                 return $this->renderToolOutput($activity, $row, $width, $skipLines, $maxLines);
-                
             case 'tool_complete':
                 return $this->renderToolComplete($activity, $row, $width, $skipLines, $maxLines);
-                
             case 'task_list':
                 // Don't render task lists inline - they're shown in sidebar only
                 return 0;
-                
             default:
                 return 0;
         }
@@ -330,20 +341,20 @@ class ClaudeCodeChatDemo
         $lines = $this->wrapText($content, $width - 10);
         $rowsUsed = 0;
         $renderedLines = 0;
-        
+
         foreach ($lines as $lineIndex => $line) {
             // Skip lines that are scrolled off screen
             if ($lineIndex < $skipLines) {
                 continue;
             }
-            
+
             // Stop if we've reached the maximum lines to render
             if ($renderedLines >= $maxLines) {
                 break;
             }
-            
+
             echo moveTo($row + $renderedLines, 3);
-            
+
             if ($lineIndex === 0) {
                 $prefix = $activity['speaker'] === 'user' ? 'You: ' : 'Claude: ';
                 $color = $activity['speaker'] === 'user' ? C_USER : C_CLAUDE;
@@ -352,10 +363,10 @@ class ClaudeCodeChatDemo
                 $indent = $activity['speaker'] === 'user' ? '      ' : '        ';
                 echo $indent . C_TEXT . $line . RESET;
             }
-            
+
             $renderedLines++;
         }
-        
+
         return $renderedLines;
     }
 
@@ -364,40 +375,40 @@ class ClaudeCodeChatDemo
         if ($skipLines > 0 || $maxLines < 1) {
             return 0;
         }
-        
+
         echo moveTo($row, 5);
-        
+
         $icon = $this->getToolIcon($activity['tool']);
         echo C_ICON . $icon . RESET . ' ';
         echo C_ACTIVE . 'Using ' . $activity['tool'] . RESET;
-        
-        if (!empty($activity['file'])) {
+
+        if (! empty($activity['file'])) {
             echo C_TEXT . ' → ' . $activity['file'] . RESET;
         }
-        
+
         return 1;
     }
 
     private function renderToolOutput(array $activity, int $row, int $width, int $skipLines = 0, int $maxLines = PHP_INT_MAX): int
     {
         $renderedLines = 0;
-        
+
         foreach ($activity['output'] as $lineIndex => $line) {
             // Skip lines that are scrolled off screen
             if ($lineIndex < $skipLines) {
                 continue;
             }
-            
+
             // Stop if we've reached the maximum lines to render
             if ($renderedLines >= $maxLines) {
                 break;
             }
-            
+
             echo moveTo($row + $renderedLines, 7);
             echo C_MUTED . '│ ' . RESET . C_TEXT . $line . RESET;
             $renderedLines++;
         }
-        
+
         return $renderedLines;
     }
 
@@ -406,97 +417,97 @@ class ClaudeCodeChatDemo
         if ($skipLines > 0 || $maxLines < 1) {
             return 0;
         }
-        
+
         echo moveTo($row, 5);
-        
+
         $icon = $this->getToolIcon($activity['tool']);
         echo C_ICON . $icon . RESET . ' ';
         echo C_SUCCESS . '✓ ' . $activity['tool'] . ' completed' . RESET;
         echo C_TEXT . ' - ' . $activity['result'] . RESET;
-        
+
         return 1;
     }
 
     private function renderTaskList(array $activity, int $row, int $width, int $skipLines = 0, int $maxLines = PHP_INT_MAX): int
     {
         $renderedLines = 0;
-        
+
         foreach ($activity['tasks'] as $taskIndex => $task) {
             // Skip lines that are scrolled off screen
             if ($taskIndex < $skipLines) {
                 continue;
             }
-            
+
             // Stop if we've reached the maximum lines to render
             if ($renderedLines >= $maxLines) {
                 break;
             }
-            
+
             echo moveTo($row + $renderedLines, 7);
-            
+
             $icon = $this->getTaskIcon($task['status']);
             $color = $this->getTaskColor($task['status']);
-            
+
             echo $color . $icon . RESET . ' ' . C_TEXT . $task['description'] . RESET;
             $renderedLines++;
         }
-        
+
         return $renderedLines;
     }
 
     private function renderSidebar(): void
     {
         $sidebarStart = $this->width - $this->sidebarWidth + 1;
-        
+
         // Draw vertical separator
         for ($row = 3; $row <= $this->height - 3; $row++) {
             echo moveTo($row, $sidebarStart - 2);
             echo C_SEPARATOR . '│' . RESET;
         }
-        
+
         // Task list header
         echo moveTo(4, $sidebarStart);
         echo C_ICON . '📋 ' . RESET . C_TEXT . BOLD . 'Tasks' . RESET;
-        
+
         $row = 6;
         $hasAnyTasks = false;
-        
+
         // Find and render all tasks from the activity stream
         foreach ($this->activities as $activity) {
-            if ($activity['type'] === 'task_list' && !empty($activity['tasks'])) {
+            if ($activity['type'] === 'task_list' && ! empty($activity['tasks'])) {
                 $hasAnyTasks = true;
-                
+
                 foreach ($activity['tasks'] as $task) {
                     // Check if we have room (leave space for bottom margin)
                     if ($row >= $this->height - 4) {
                         break 2; // Break out of both loops
                     }
-                    
+
                     echo moveTo($row, $sidebarStart);
-                    
+
                     $icon = $this->getTaskIcon($task['status']);
                     $color = $this->getTaskColor($task['status']);
-                    
+
                     // Render with beautiful progress indicator
                     echo $color . $icon . RESET . ' ';
-                    
+
                     // Truncate task description to fit sidebar
                     $maxDescLength = $this->sidebarWidth - 4;
                     $description = $task['description'];
                     if ($this->graphemeLength($description) > $maxDescLength) {
                         $description = $this->graphemeSubstr($description, 0, $maxDescLength - 3) . '...';
                     }
-                    
+
                     echo C_TEXT . $description . RESET;
                     $row++;
                 }
-                
+
                 $row++; // Add spacing between task groups
             }
         }
-        
+
         // Show minimal message if no tasks yet
-        if (!$hasAnyTasks) {
+        if (! $hasAnyTasks) {
             echo moveTo($row, $sidebarStart);
             echo C_MUTED . 'No active tasks' . RESET;
         }
@@ -506,60 +517,59 @@ class ClaudeCodeChatDemo
     {
         $row = $this->height - 5;
         echo moveTo($row, 3);
-        
+
         $spinner = $this->spinnerChars[$this->frame % count($this->spinnerChars)];
         echo C_ACTIVE . $spinner . RESET . ' ' . C_TEXT . $this->currentSpinner . RESET;
     }
-
 
     private function renderFooter(): void
     {
         $footerRow = $this->height - 2;
         $mainAreaWidth = $this->width - $this->sidebarWidth - 6;
-        
+
         // Subtle separator for main area only
         echo moveTo($footerRow - 1, 3);
         echo C_SEPARATOR . str_repeat('─', $mainAreaWidth) . RESET;
-        
+
         echo moveTo($footerRow, 3);
-        
+
         if ($this->inputMode) {
             // Show input box with current message and cursor
             $prompt = 'You: ';
-            $inputAreaWidth = $mainAreaWidth - strlen($prompt) - 2;
-            
+            $inputAreaWidth = $mainAreaWidth - mb_strlen($prompt) - 2;
+
             // Display the input with proper truncation if needed
             $displayText = $this->inputBuffer;
             $displayCursor = $this->cursorPosition;
-            
+
             // If text is too long, scroll the view
             if ($this->graphemeLength($displayText) > $inputAreaWidth) {
                 $startPos = max(0, $displayCursor - $inputAreaWidth + 5);
                 $displayText = $this->graphemeSubstr($displayText, $startPos, $inputAreaWidth);
                 $displayCursor = min($displayCursor - $startPos, $inputAreaWidth);
             }
-            
+
             echo C_USER . $prompt . RESET;
-            
+
             // Render text with cursor
             if (empty($displayText)) {
                 echo C_MUTED . '│' . RESET; // Cursor at start
             } else {
                 $beforeCursor = $this->graphemeSubstr($displayText, 0, $displayCursor);
                 $afterCursor = $this->graphemeSubstr($displayText, $displayCursor);
-                
+
                 echo C_TEXT . $beforeCursor;
                 echo C_ACTIVE . '│' . RESET; // Cursor
                 echo C_TEXT . $afterCursor . RESET;
             }
-            
+
             // Controls hint for input mode
             echo moveTo($footerRow, $mainAreaWidth - 25);
             echo C_MUTED . '[Enter] Send  [Tab] Demo  [Q] Quit' . RESET;
         } else {
             // Demo mode
             echo C_MUTED . 'Demo mode - Press [Tab] to type messages' . RESET;
-            
+
             // Controls hint
             echo moveTo($footerRow, $mainAreaWidth - 15);
             echo C_MUTED . '[Any key] Demo  [Q] Quit' . RESET;
@@ -572,22 +582,22 @@ class ClaudeCodeChatDemo
         if ($activity['type'] !== 'message') {
             return $activity['content'] ?? '';
         }
-        
-        if (!isset($this->typewriterState[$index])) {
+
+        if (! isset($this->typewriterState[$index])) {
             return $activity['content'];
         }
-        
+
         $state = $this->typewriterState[$index];
         if ($state['complete']) {
             return $activity['content'];
         }
-        
+
         $elapsed = microtime(true) - $state['start_time'];
-        $targetChars = (int)($elapsed * 60); // 60 chars per second
+        $targetChars = (int) ($elapsed * 60); // 60 chars per second
         $visibleChars = min($targetChars, mb_strlen($activity['content']));
-        
+
         $visible = mb_substr($activity['content'], 0, $visibleChars);
-        
+
         // Add blinking cursor while typing
         if ($visibleChars < mb_strlen($activity['content'])) {
             if (($this->frame % 15) < 8) {
@@ -596,13 +606,13 @@ class ClaudeCodeChatDemo
         } else {
             $this->typewriterState[$index]['complete'] = true;
         }
-        
+
         return $visible;
     }
 
     private function getTaskIcon(string $status): string
     {
-        return match($status) {
+        return match ($status) {
             'completed' => '✓',
             'active' => '▶',
             'pending' => '○',
@@ -612,7 +622,7 @@ class ClaudeCodeChatDemo
 
     private function getTaskColor(string $status): string
     {
-        return match($status) {
+        return match ($status) {
             'completed' => C_SUCCESS,
             'active' => C_ACTIVE,
             'pending' => C_PENDING,
@@ -622,7 +632,7 @@ class ClaudeCodeChatDemo
 
     private function getToolIcon(string $toolName): string
     {
-        return match($toolName) {
+        return match ($toolName) {
             'ReadFile' => '📄',
             'WriteFile' => '📝',
             'EditFile' => '✏️',
@@ -637,7 +647,7 @@ class ClaudeCodeChatDemo
 
     private function getToolStatusColor(string $status): string
     {
-        return match($status) {
+        return match ($status) {
             'completed' => C_SUCCESS,
             'running' => C_ACTIVE,
             'pending' => C_PENDING,
@@ -657,17 +667,20 @@ class ClaudeCodeChatDemo
         if (function_exists('grapheme_substr')) {
             return $length !== null ? grapheme_substr($text, $start, $length) : grapheme_substr($text, $start);
         }
+
         return $length !== null ? mb_substr($text, $start, $length) : mb_substr($text, $start);
     }
 
     private function wrapText(string $text, int $width): array
     {
-        if (empty($text)) return [''];
-        
+        if (empty($text)) {
+            return [''];
+        }
+
         $words = explode(' ', $text);
         $lines = [];
         $currentLine = '';
-        
+
         foreach ($words as $word) {
             if (empty($currentLine)) {
                 $currentLine = $word;
@@ -678,11 +691,11 @@ class ClaudeCodeChatDemo
                 $currentLine = $word;
             }
         }
-        
-        if (!empty($currentLine)) {
+
+        if (! empty($currentLine)) {
             $lines[] = $currentLine;
         }
-        
+
         return empty($lines) ? [''] : $lines;
     }
 
@@ -694,7 +707,7 @@ class ClaudeCodeChatDemo
                 'steps' => [
                     ['type' => 'activity', 'activity_type' => 'message', 'speaker' => 'claude', 'content' => 'Hi! I\'m Claude, your AI coding assistant. I can help you build applications, fix bugs, and tackle complex development tasks.', 'delay' => 1.0],
                     ['type' => 'activity', 'activity_type' => 'message', 'speaker' => 'claude', 'content' => 'Try asking me something like "Create a login system" or press any key to see a demo!', 'delay' => 2.0],
-                ]
+                ],
             ],
             'login_system' => [
                 'steps' => [
@@ -703,10 +716,10 @@ class ClaudeCodeChatDemo
                     ['type' => 'activity', 'activity_type' => 'message', 'speaker' => 'claude', 'content' => 'I\'ll build a comprehensive authentication system for you. Let me work through this step by step:', 'delay' => 1.0],
                     ['type' => 'activity', 'activity_type' => 'task_list', 'tasks' => [
                         ['description' => 'Database schema design', 'status' => 'pending'],
-                        ['description' => 'User model implementation', 'status' => 'pending'], 
+                        ['description' => 'User model implementation', 'status' => 'pending'],
                         ['description' => 'Password hashing setup', 'status' => 'pending'],
                         ['description' => 'Session management', 'status' => 'pending'],
-                        ['description' => 'Security middleware', 'status' => 'pending']
+                        ['description' => 'Security middleware', 'status' => 'pending'],
                     ], 'delay' => 1.0],
                     ['type' => 'activity', 'activity_type' => 'tool_start', 'tool' => 'CreateFile', 'file' => 'database/migrations/create_users_table.php', 'delay' => 1.5],
                     ['type' => 'thinking', 'message' => 'Generating secure database schema...', 'delay' => 2.0],
@@ -717,7 +730,7 @@ class ClaudeCodeChatDemo
                         'Writing User model...',
                         'Adding password hashing methods',
                         'Implementing validation rules',
-                        'Setting up relationships'
+                        'Setting up relationships',
                     ], 'delay' => 2.0],
                     ['type' => 'activity', 'activity_type' => 'tool_complete', 'tool' => 'WriteFile', 'result' => '156 lines written', 'delay' => 1.0],
                     ['type' => 'activity', 'activity_type' => 'tool_start', 'tool' => 'EditFile', 'file' => 'config/auth.php', 'delay' => 1.0],
@@ -729,14 +742,14 @@ class ClaudeCodeChatDemo
                     ['type' => 'activity', 'activity_type' => 'tool_output', 'output' => [
                         'Running authentication tests...',
                         '✓ User registration test passed',
-                        '✓ Login validation test passed', 
+                        '✓ Login validation test passed',
                         '✓ Password hashing test passed',
-                        '✓ Session management test passed'
+                        '✓ Session management test passed',
                     ], 'delay' => 2.5],
                     ['type' => 'activity', 'activity_type' => 'tool_complete', 'tool' => 'TestRunner', 'result' => 'All tests passed', 'delay' => 1.0],
                     ['type' => 'activity', 'activity_type' => 'message', 'speaker' => 'claude', 'content' => '🎉 Authentication system complete! Added secure password hashing, session management, CSRF protection, and comprehensive testing.', 'delay' => 2.0],
-                ]
-            ]
+                ],
+            ],
         ];
     }
 
@@ -751,14 +764,14 @@ class ClaudeCodeChatDemo
     private function update(): void
     {
         $currentTime = microtime(true);
-        
+
         // Process current demo scenario
-        if (!$this->scenarioComplete && isset($this->demoScenarios[$this->currentScenario])) {
+        if (! $this->scenarioComplete && isset($this->demoScenarios[$this->currentScenario])) {
             $scenario = $this->demoScenarios[$this->currentScenario];
-            
+
             if ($this->demoStep < count($scenario['steps'])) {
                 $step = $scenario['steps'][$this->demoStep];
-                
+
                 if ($currentTime - $this->lastStepTime >= $step['delay']) {
                     $this->executeStep($step);
                     $this->demoStep++;
@@ -768,7 +781,7 @@ class ClaudeCodeChatDemo
                 $this->scenarioComplete = true;
             }
         }
-        
+
         // Update animations
         $this->updateAnimations();
     }
@@ -788,46 +801,42 @@ class ClaudeCodeChatDemo
     private function addActivity(array $step): void
     {
         $activityIndex = count($this->activities);
-        
+
         $activity = [
             'type' => $step['activity_type'],
-            'timestamp' => microtime(true)
+            'timestamp' => microtime(true),
         ];
-        
+
         // Add specific fields based on activity type
         switch ($step['activity_type']) {
             case 'message':
                 $activity['speaker'] = $step['speaker'];
                 $activity['content'] = $step['content'];
-                
+
                 // Initialize typewriter for Claude messages
                 if ($step['speaker'] === 'claude') {
                     $this->typewriterState[$activityIndex] = [
                         'start_time' => microtime(true),
-                        'complete' => false
+                        'complete' => false,
                     ];
                 }
                 break;
-                
             case 'tool_start':
                 $activity['tool'] = $step['tool'];
                 $activity['file'] = $step['file'] ?? '';
                 break;
-                
             case 'tool_output':
                 $activity['output'] = $step['output'];
                 break;
-                
             case 'tool_complete':
                 $activity['tool'] = $step['tool'];
                 $activity['result'] = $step['result'];
                 break;
-                
             case 'task_list':
                 $activity['tasks'] = $step['tasks'];
                 break;
         }
-        
+
         $this->activities[] = $activity;
         $this->hideThinking();
     }
@@ -847,7 +856,7 @@ class ClaudeCodeChatDemo
     {
         // Update typewriter states
         foreach ($this->typewriterState as &$state) {
-            if (!$state['complete']) {
+            if (! $state['complete']) {
                 // Already handled in getMessageContent
             }
         }
@@ -859,34 +868,36 @@ class ClaudeCodeChatDemo
         if ($input === false || $input === '') {
             return;
         }
-        
+
         // Handle various key inputs
         if ($input === 'q' || $input === 'Q' || $input === "\x03") { // Ctrl+C
             $this->cleanup();
             exit(0);
         }
-        
+
         // Tab to toggle input mode
         if ($input === "\t") {
-            $this->inputMode = !$this->inputMode;
+            $this->inputMode = ! $this->inputMode;
+
             return;
         }
-        
+
         // If not in input mode, trigger demo scenarios
-        if (!$this->inputMode) {
+        if (! $this->inputMode) {
             if ($this->scenarioComplete && $this->currentScenario === 'welcome') {
                 $this->currentScenario = 'login_system';
                 $this->demoStep = 0;
                 $this->lastStepTime = microtime(true);
                 $this->scenarioComplete = false;
             }
+
             return;
         }
-        
+
         // Input mode handling
         if ($input === "\n" || $input === "\r") {
             // Enter - submit message
-            if (!empty(trim($this->inputBuffer))) {
+            if (! empty(trim($this->inputBuffer))) {
                 $this->submitMessage(trim($this->inputBuffer));
                 $this->inputBuffer = '';
                 $this->cursorPosition = 0;
@@ -894,7 +905,7 @@ class ClaudeCodeChatDemo
         } elseif ($input === "\x7f" || $input === "\x08") {
             // Backspace
             if ($this->cursorPosition > 0) {
-                $this->inputBuffer = $this->graphemeSubstr($this->inputBuffer, 0, $this->cursorPosition - 1) . 
+                $this->inputBuffer = $this->graphemeSubstr($this->inputBuffer, 0, $this->cursorPosition - 1) .
                                   $this->graphemeSubstr($this->inputBuffer, $this->cursorPosition);
                 $this->cursorPosition--;
             }
@@ -910,8 +921,8 @@ class ClaudeCodeChatDemo
             }
         } elseif (ord($input[0]) >= 32 || mb_strlen($input) > 1) {
             // Regular character or multi-byte (emoji, etc.)
-            $this->inputBuffer = $this->graphemeSubstr($this->inputBuffer, 0, $this->cursorPosition) . 
-                               $input . 
+            $this->inputBuffer = $this->graphemeSubstr($this->inputBuffer, 0, $this->cursorPosition) .
+                               $input .
                                $this->graphemeSubstr($this->inputBuffer, $this->cursorPosition);
             $this->cursorPosition++;
         }
@@ -939,12 +950,12 @@ class ClaudeCodeChatDemo
             'database' => "I'll help you set up the database. Let me check your current configuration.",
             'api' => "I'll help you build that API. Let me analyze your requirements and create the endpoints.",
             'test' => "I'll help you write tests for that functionality. Let me examine the code structure.",
-            'default' => "I understand what you need. Let me break this down and help you implement it step by step.",
+            'default' => 'I understand what you need. Let me break this down and help you implement it step by step.',
         ];
 
         $response = $responses['default'];
         foreach ($responses as $keyword => $text) {
-            if ($keyword !== 'default' && stripos($userMessage, $keyword) !== false) {
+            if ($keyword !== 'default' && mb_stripos($userMessage, $keyword) !== false) {
                 $response = $text;
                 break;
             }
@@ -965,7 +976,7 @@ class ClaudeCodeChatDemo
     private function simulateToolUsage(string $userMessage): void
     {
         // Add tool usage simulation based on message content
-        if (stripos($userMessage, 'login') !== false) {
+        if (mb_stripos($userMessage, 'login') !== false) {
             $this->activities[] = [
                 'type' => 'tool_start',
                 'tool' => 'ReadFile',
@@ -999,12 +1010,12 @@ class ClaudeCodeChatDemo
 }
 
 // Initialize and run
-$demo = new ClaudeCodeChatDemo();
+$demo = new ClaudeCodeChatDemo;
 
 try {
     $demo->run();
 } catch (Exception $e) {
     echo SHOW_CURSOR . EXIT_ALT_SCREEN;
-    echo "Error: " . $e->getMessage() . "\n";
+    echo 'Error: ' . $e->getMessage() . "\n";
     exit(1);
 }

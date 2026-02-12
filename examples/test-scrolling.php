@@ -10,7 +10,7 @@ require_once 'claude-code-chat-demo.php';
 
 echo "Testing ClaudeCodeChatDemo scrolling functionality...\n";
 
-$demo = new ClaudeCodeChatDemo();
+$demo = new ClaudeCodeChatDemo;
 
 // Use reflection to access private methods for testing
 $reflection = new ReflectionClass($demo);
@@ -29,9 +29,9 @@ $wrapTextMethod->setAccessible(true);
 // Test cases
 echo "\n1. Testing grapheme length calculation:\n";
 $testStrings = [
-    "Hello world" => 11,
-    "Hello 👋 world" => 13,
-    "🚀 Building awesome apps 🎉" => 26,
+    'Hello world' => 11,
+    'Hello 👋 world' => 13,
+    '🚀 Building awesome apps 🎉' => 26,
 ];
 
 foreach ($testStrings as $text => $expected) {
@@ -40,17 +40,17 @@ foreach ($testStrings as $text => $expected) {
 }
 
 echo "\n2. Testing grapheme substring:\n";
-$text = "🚀 Hello world 👋";
+$text = '🚀 Hello world 👋';
 $substr = $graphemeSubstrMethod->invoke($demo, $text, 2, 5);
 echo "   Substring of '{$text}' (2, 5) -> '{$substr}'\n";
 
 echo "\n3. Testing text wrapping:\n";
-$longText = "This is a very long line of text that should be wrapped properly across multiple lines when rendered in the terminal interface";
+$longText = 'This is a very long line of text that should be wrapped properly across multiple lines when rendered in the terminal interface';
 $wrapped = $wrapTextMethod->invoke($demo, $longText, 40);
 echo "   Original: {$longText}\n";
-echo "   Wrapped into " . count($wrapped) . " lines:\n";
+echo '   Wrapped into ' . count($wrapped) . " lines:\n";
 foreach ($wrapped as $i => $line) {
-    echo "   Line " . ($i + 1) . ": '{$line}'\n";
+    echo '   Line ' . ($i + 1) . ": '{$line}'\n";
 }
 
 echo "\nScrolling functionality tests completed!\n";
