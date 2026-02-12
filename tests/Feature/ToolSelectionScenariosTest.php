@@ -86,7 +86,7 @@ test('all expected tools are registered', function () {
 
     // Verify schemas are properly formatted
     $schemas = $executor->getToolSchemas();
-    $toolNames = array_column($schemas, 'name');
+    $toolNames = array_column(array_column($schemas, 'function'), 'name');
 
     expect($toolNames)
         ->toContain('read_file')
@@ -119,29 +119,31 @@ test('tool schemas contain required fields', function () {
 
     foreach ($schemas as $schema) {
         expect($schema)
-            ->toHaveKeys(['name', 'description', 'parameters'])
-            ->and($schema['parameters'])
+            ->toHaveKeys(['type', 'function'])
+            ->and($schema['type'])->toBe('function')
+            ->and($schema['function'])->toHaveKeys(['name', 'description', 'parameters'])
+            ->and($schema['function']['parameters'])
             ->toHaveKeys(['type', 'properties', 'required']);
 
-        switch ($schema['name']) {
+        switch ($schema['function']['name']) {
             case 'read_file':
-                expect($schema['parameters']['properties'])
+                expect($schema['function']['parameters']['properties'])
                     ->toHaveKey('path');
                 break;
             case 'write_file':
-                expect($schema['parameters']['properties'])
+                expect($schema['function']['parameters']['properties'])
                     ->toHaveKeys(['path', 'content']);
                 break;
             case 'bash':
-                expect($schema['parameters']['properties'])
+                expect($schema['function']['parameters']['properties'])
                     ->toHaveKey('command');
                 break;
             case 'grep':
-                expect($schema['parameters']['properties'])
+                expect($schema['function']['parameters']['properties'])
                     ->toHaveKeys(['pattern', 'path', 'include']);
                 break;
             case 'glob':
-                expect($schema['parameters']['properties'])
+                expect($schema['function']['parameters']['properties'])
                     ->toHaveKeys(['pattern', 'path']);
                 break;
         }

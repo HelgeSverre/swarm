@@ -9,13 +9,14 @@ test('tavily search tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('tavily_search')
-        ->and($schema['description'])->toBe('Search the web using Tavily API for accurate and recent information')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['search_query', 'topic', 'time_range', 'days'])
-        ->and($schema['parameters']['properties']['topic']['enum'])->toBe(['general', 'news', 'research'])
-        ->and($schema['parameters']['properties']['time_range']['enum'])->toBe(['day', 'week', 'month', 'year'])
-        ->and($schema['parameters']['required'])->toBe(['search_query']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('tavily_search')
+        ->and($schema['function']['description'])->toBe('Search the web using Tavily API for accurate and recent information')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKeys(['search_query', 'topic', 'time_range', 'days'])
+        ->and($schema['function']['parameters']['properties']['topic']['enum'])->toBe(['general', 'news', 'research'])
+        ->and($schema['function']['parameters']['properties']['time_range']['enum'])->toBe(['day', 'week', 'month', 'year'])
+        ->and($schema['function']['parameters']['required'])->toBe(['search_query']);
 });
 
 test('tavily search executes successful search', function () {

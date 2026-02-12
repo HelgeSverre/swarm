@@ -12,17 +12,18 @@ test('tool schemas are properly formatted for OpenAI function calling', function
     $schemas = $executor->getToolSchemas();
 
     foreach ($schemas as $schema) {
-        // Each schema must have required fields for OpenAI
-        expect($schema)->toHaveKeys(['name', 'description', 'parameters'])
-            ->and($schema['name'])->toBeString()->not->toBeEmpty()
-            ->and($schema['description'])->toBeString()->not->toBeEmpty()
-            ->and($schema['parameters'])->toBeArray()
-            ->and($schema['parameters']['type'])->toBe('object')
-            ->and($schema['parameters']['properties'])->toBeArray()
-            ->and($schema['parameters']['required'])->toBeArray();
+        // Each schema must have the function wrapper
+        expect($schema)->toHaveKeys(['type', 'function'])
+            ->and($schema['type'])->toBe('function')
+            ->and($schema['function']['name'])->toBeString()->not->toBeEmpty()
+            ->and($schema['function']['description'])->toBeString()->not->toBeEmpty()
+            ->and($schema['function']['parameters'])->toBeArray()
+            ->and($schema['function']['parameters']['type'])->toBe('object')
+            ->and($schema['function']['parameters']['properties'])->toBeArray()
+            ->and($schema['function']['parameters']['required'])->toBeArray();
 
         // Each property should have type and description
-        foreach ($schema['parameters']['properties'] as $propName => $propDef) {
+        foreach ($schema['function']['parameters']['properties'] as $propName => $propDef) {
             expect($propDef)->toHaveKey('type')
                 ->and($propDef['type'])->toBeIn(['string', 'number', 'integer', 'boolean', 'array', 'object'])
                 ->and($propDef)->toHaveKey('description')
@@ -36,7 +37,7 @@ test('parameter names in schemas match tool execute method expectations', functi
     $readFile = new ReadFile;
     $schema = $readFile->toOpenAISchema();
 
-    expect($schema['parameters']['properties'])->toHaveKey('path');
+    expect($schema['function']['parameters']['properties'])->toHaveKey('path');
 
     // Test that the tool can execute with these parameters
     $testFile = sys_get_temp_dir() . '/test_param_mapping.txt';
@@ -53,14 +54,14 @@ test('required parameters are correctly defined in schemas', function () {
     $writeFile = new WriteFile;
     $schema = $writeFile->toOpenAISchema();
 
-    expect($schema['parameters']['required'])->toBe(['path', 'content']);
+    expect($schema['function']['parameters']['required'])->toBe(['path', 'content']);
 
     // Test Terminal tool
     $terminal = new Terminal;
     $schema = $terminal->toOpenAISchema();
 
-    expect($schema['parameters']['required'])->toBe(['command'])
-        ->and($schema['parameters']['properties']['timeout']['default'])->toBe(30);
+    expect($schema['function']['parameters']['required'])->toBe(['command'])
+        ->and($schema['function']['parameters']['properties']['timeout']['default'])->toBe(30);
 });
 
 test('tools can be dispatched with function call parameters', function () {
@@ -103,14 +104,14 @@ test('search tool parameter mapping works with router dependency', function () {
     $executor->register(new Grep);
 
     $schemas = $executor->getToolSchemas();
-    $searchSchema = null;
+    $searchFunction = null;
     foreach ($schemas as $schema) {
-        if ($schema['name'] === 'grep') {
-            $searchSchema = $schema;
+        if ($schema['function']['name'] === 'grep') {
+            $searchFunction = $schema['function'];
             break;
         }
     }
 
-    expect($searchSchema['parameters']['properties'])->toHaveKeys(['pattern', 'path', 'include'])
-        ->and($searchSchema['parameters']['required'])->toBe(['pattern']);
+    expect($searchFunction['parameters']['properties'])->toHaveKeys(['pattern', 'path', 'include'])
+        ->and($searchFunction['parameters']['required'])->toBe(['pattern']);
 });

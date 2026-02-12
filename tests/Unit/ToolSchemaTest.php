@@ -5,13 +5,14 @@ test('read file tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('read_file')
-        ->and($schema['description'])->toBe('Read contents of a file from the filesystem')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKey('path')
-        ->and($schema['parameters']['properties']['path']['type'])->toBe('string')
-        ->and($schema['parameters']['properties']['path']['description'])->toBe('Path to the file to read')
-        ->and($schema['parameters']['required'])->toBe(['path']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('read_file')
+        ->and($schema['function']['description'])->toBe('Read contents of a file from the filesystem')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKey('path')
+        ->and($schema['function']['parameters']['properties']['path']['type'])->toBe('string')
+        ->and($schema['function']['parameters']['properties']['path']['description'])->toBe('Path to the file to read')
+        ->and($schema['function']['parameters']['required'])->toBe(['path']);
 });
 
 test('write file tool generates correct schema', function () {
@@ -19,13 +20,14 @@ test('write file tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('write_file')
-        ->and($schema['description'])->toBe('Write content to a file')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['path', 'content'])
-        ->and($schema['parameters']['properties']['path']['type'])->toBe('string')
-        ->and($schema['parameters']['properties']['content']['type'])->toBe('string')
-        ->and($schema['parameters']['required'])->toBe(['path', 'content']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('write_file')
+        ->and($schema['function']['description'])->toBe('Write content to a file')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKeys(['path', 'content'])
+        ->and($schema['function']['parameters']['properties']['path']['type'])->toBe('string')
+        ->and($schema['function']['parameters']['properties']['content']['type'])->toBe('string')
+        ->and($schema['function']['parameters']['required'])->toBe(['path', 'content']);
 });
 
 test('tool executor collects schemas from registered tools', function () {
@@ -38,8 +40,8 @@ test('tool executor collects schemas from registered tools', function () {
 
     expect($schemas)->toBeArray()
         ->and($schemas)->toHaveCount(2)
-        ->and($schemas[0]['name'])->toBe('read_file')
-        ->and($schemas[1]['name'])->toBe('write_file');
+        ->and($schemas[0]['function']['name'])->toBe('read_file')
+        ->and($schemas[1]['function']['name'])->toBe('write_file');
 });
 
 test('read file tool executes correctly', function () {

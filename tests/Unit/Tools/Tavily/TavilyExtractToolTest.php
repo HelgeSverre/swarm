@@ -9,11 +9,12 @@ test('tavily extract tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('tavily_extract')
-        ->and($schema['description'])->toBe('Extract clean content from a URL and return it in markdown format')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['url'])
-        ->and($schema['parameters']['required'])->toBe(['url']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('tavily_extract')
+        ->and($schema['function']['description'])->toBe('Extract clean content from a URL and return it in markdown format')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKeys(['url'])
+        ->and($schema['function']['parameters']['required'])->toBe(['url']);
 });
 
 test('tavily extract executes successful extraction', function () {

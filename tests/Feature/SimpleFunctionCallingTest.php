@@ -8,25 +8,25 @@ test('function calling schemas are properly formatted', function () {
     $schemas = $executor->getToolSchemas();
 
     // Verify we have all expected tools
-    $toolNames = array_column($schemas, 'name');
+    $toolNames = array_column(array_column($schemas, 'function'), 'name');
     expect($toolNames)->toContain('read_file')
         ->and($toolNames)->toContain('write_file')
         ->and($toolNames)->toContain('bash')
         ->and($toolNames)->toContain('grep');
 
     // Verify bash tool schema is correct
-    $bashSchema = null;
+    $bashFunction = null;
     foreach ($schemas as $schema) {
-        if ($schema['name'] === 'bash') {
-            $bashSchema = $schema;
+        if ($schema['function']['name'] === 'bash') {
+            $bashFunction = $schema['function'];
             break;
         }
     }
 
-    expect($bashSchema)->not->toBeNull()
-        ->and($bashSchema['description'])->toContain('Execute bash commands')
-        ->and($bashSchema['parameters']['properties']['command'])->toHaveKey('type')
-        ->and($bashSchema['parameters']['required'])->toBe(['command']);
+    expect($bashFunction)->not->toBeNull()
+        ->and($bashFunction['description'])->toContain('Execute bash commands')
+        ->and($bashFunction['parameters']['properties']['command'])->toHaveKey('type')
+        ->and($bashFunction['parameters']['required'])->toBe(['command']);
 });
 
 test('tools execute correctly with function call parameters', function () {

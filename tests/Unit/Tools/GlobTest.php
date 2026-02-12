@@ -7,11 +7,12 @@ test('glob tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('glob')
-        ->and($schema['description'])->toContain('Fast file pattern matching tool')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['pattern', 'path'])
-        ->and($schema['parameters']['required'])->toBe(['pattern']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('glob')
+        ->and($schema['function']['description'])->toContain('Fast file pattern matching tool')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKeys(['pattern', 'path'])
+        ->and($schema['function']['parameters']['required'])->toBe(['pattern']);
 });
 
 test('glob tool finds files by simple pattern', function () {

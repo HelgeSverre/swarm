@@ -35,12 +35,10 @@ test('agent extracts tasks using function calling', function () {
     ]);
 
     $agent = new CodingAgent(
-        $executor,
-        $taskManager,
-        $client,
-        null,
-        'gpt-4.1-nano',
-        0.7
+        toolExecutor: $executor,
+        taskManager: $taskManager,
+        llmClient: $client,
+        model: 'gpt-4.1-nano',
     );
 
     // Use reflection to test protected method
@@ -105,12 +103,10 @@ test('agent executes task with function calling', function () {
     ]);
 
     $agent = new CodingAgent(
-        $executor,
-        $taskManager,
-        $client,
-        null,
-        'gpt-4.1-nano',
-        0.7
+        toolExecutor: $executor,
+        taskManager: $taskManager,
+        llmClient: $client,
+        model: 'gpt-4.1-nano',
     );
 
     // Use reflection to test protected method
@@ -160,12 +156,10 @@ test('agent handles no function call response', function () {
     ]);
 
     $agent = new CodingAgent(
-        new ToolExecutor,
-        new TaskManager,
-        $client,
-        null,
-        'gpt-4.1-nano',
-        0.7
+        toolExecutor: new ToolExecutor,
+        taskManager: new TaskManager,
+        llmClient: $client,
+        model: 'gpt-4.1-nano',
     );
 
     // Use reflection to test protected method
@@ -202,12 +196,10 @@ test('agent correctly passes tool schemas to OpenAI', function () {
     ]);
 
     $agent = new CodingAgent(
-        $executor,
-        $taskManager,
-        $client,
-        null,
-        'gpt-4.1-nano',
-        0.7
+        toolExecutor: $executor,
+        taskManager: $taskManager,
+        llmClient: $client,
+        model: 'gpt-4.1-nano',
     );
 
     // Get tool schemas from router
@@ -228,8 +220,8 @@ test('agent correctly passes tool schemas to OpenAI', function () {
         return $method === 'create'
             && isset($parameters['functions'])
             && count($parameters['functions']) > 0
-            && in_array('bash', array_column($parameters['functions'], 'name'))
-            && in_array('read_file', array_column($parameters['functions'], 'name'))
-            && in_array('write_file', array_column($parameters['functions'], 'name'));
+            && in_array('bash', array_column(array_column($parameters['tools'] ?? $parameters['functions'] ?? [], 'function'), 'name'))
+            && in_array('read_file', array_column(array_column($parameters['tools'] ?? $parameters['functions'] ?? [], 'function'), 'name'))
+            && in_array('write_file', array_column(array_column($parameters['tools'] ?? $parameters['functions'] ?? [], 'function'), 'name'));
     });
 });

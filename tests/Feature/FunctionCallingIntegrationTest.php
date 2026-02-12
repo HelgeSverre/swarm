@@ -36,12 +36,11 @@ test('agent correctly extracts tasks using function calling', function () {
     ]);
 
     $agent = new CodingAgent(
-        $executor,
-        $taskManager,
-        $client,
-        new NullLogger,
-        'gpt-4.1-mini',
-        0.7
+        toolExecutor: $executor,
+        taskManager: $taskManager,
+        llmClient: $client,
+        logger: new NullLogger,
+        model: 'gpt-4.1-mini',
     );
 
     // Use reflection to test protected method
@@ -110,17 +109,15 @@ test('agent selects correct tool based on task description', function () {
         ]);
 
         $agent = new CodingAgent(
-            $executor,
-            $taskManager,
-            $client,
-            null,
-            'gpt-4.1-mini',
-            0.7
+            toolExecutor: $executor,
+            taskManager: $taskManager,
+            llmClient: $client,
+            model: 'gpt-4.1-mini',
         );
 
         // Get tool schemas directly from router to verify they include the expected tool
         $toolSchemas = $executor->getToolSchemas();
-        $toolNames = array_column($toolSchemas, 'name');
+        $toolNames = array_column(array_column($toolSchemas, 'function'), 'name');
 
         expect($toolNames)->toContain($testCase['expectedTool']);
     }
@@ -154,12 +151,10 @@ test('agent handles function call responses correctly', function () {
     ]);
 
     $agent = new CodingAgent(
-        $executor,
-        $taskManager,
-        $client,
-        null,
-        'gpt-4.1-mini',
-        0.7
+        toolExecutor: $executor,
+        taskManager: $taskManager,
+        llmClient: $client,
+        model: 'gpt-4.1-mini',
     );
 
     // Use reflection to test protected method
@@ -199,12 +194,10 @@ test('agent handles no function call response correctly', function () {
     ]);
 
     $agent = new CodingAgent(
-        $executor,
-        $taskManager,
-        $client,
-        null,
-        'gpt-4.1-mini',
-        0.7
+        toolExecutor: $executor,
+        taskManager: $taskManager,
+        llmClient: $client,
+        model: 'gpt-4.1-mini',
     );
 
     // Use reflection to test protected method

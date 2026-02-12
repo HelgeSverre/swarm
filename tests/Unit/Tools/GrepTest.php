@@ -7,11 +7,12 @@ test('grep tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('grep')
-        ->and($schema['description'])->toContain('Fast content search tool')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['pattern', 'path', 'include'])
-        ->and($schema['parameters']['required'])->toBe(['pattern']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('grep')
+        ->and($schema['function']['description'])->toContain('Fast content search tool')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKeys(['pattern', 'path', 'include'])
+        ->and($schema['function']['parameters']['required'])->toBe(['pattern']);
 });
 
 test('grep tool searches content and returns matching files', function () {

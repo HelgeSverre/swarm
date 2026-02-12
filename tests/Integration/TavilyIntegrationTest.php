@@ -30,16 +30,17 @@ test('tools from toolkit generate proper schemas', function () {
     $executor->registerToolkit($toolkit);
 
     $schemas = $executor->getToolSchemas();
-    $schemaNames = array_column($schemas, 'name');
+    $schemaNames = array_column(array_column($schemas, 'function'), 'name');
 
     expect($schemaNames)->toContain('tavily_search')
         ->and($schemaNames)->toContain('tavily_extract');
 
     // Verify schema structure
     foreach ($schemas as $schema) {
-        if (in_array($schema['name'], ['tavily_search', 'tavily_extract'])) {
-            expect($schema)->toHaveKeys(['name', 'description', 'parameters'])
-                ->and($schema['parameters'])->toHaveKeys(['type', 'properties', 'required']);
+        if (in_array($schema['function']['name'], ['tavily_search', 'tavily_extract'])) {
+            expect($schema)->toHaveKeys(['type', 'function'])
+                ->and($schema['function'])->toHaveKeys(['name', 'description', 'parameters'])
+                ->and($schema['function']['parameters'])->toHaveKeys(['type', 'properties', 'required']);
         }
     }
 });

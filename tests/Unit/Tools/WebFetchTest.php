@@ -10,11 +10,12 @@ test('webfetch tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('web_fetch')
-        ->and($schema['description'])->toBe('Fetch content from a URL and convert HTML to text for AI processing')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['url', 'timeout'])
-        ->and($schema['parameters']['required'])->toBe(['url']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('web_fetch')
+        ->and($schema['function']['description'])->toBe('Fetch content from a URL and convert HTML to text for AI processing')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKeys(['url', 'timeout'])
+        ->and($schema['function']['parameters']['required'])->toBe(['url']);
 });
 
 test('webfetch converts HTML to text', function () {

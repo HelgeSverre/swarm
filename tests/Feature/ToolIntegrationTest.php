@@ -18,7 +18,7 @@ test('tool schemas are generated dynamically for all tools', function () {
     $executor = ToolExecutor::createWithDefaultTools();
 
     $schemas = $executor->getToolSchemas();
-    $toolNames = array_column($schemas, 'name');
+    $toolNames = array_column(array_column($schemas, 'function'), 'name');
 
     expect($schemas)->toBeArray();
 
@@ -39,12 +39,14 @@ test('tool schemas have proper structure for OpenAI', function () {
     $schemas = $executor->getToolSchemas();
 
     foreach ($schemas as $schema) {
-        expect($schema)->toHaveKeys(['name', 'description', 'parameters'])
-            ->and($schema['parameters'])->toHaveKeys(['type', 'properties', 'required'])
-            ->and($schema['parameters']['type'])->toBe('object');
+        expect($schema)->toHaveKeys(['type', 'function'])
+            ->and($schema['type'])->toBe('function')
+            ->and($schema['function'])->toHaveKeys(['name', 'description', 'parameters'])
+            ->and($schema['function']['parameters'])->toHaveKeys(['type', 'properties', 'required'])
+            ->and($schema['function']['parameters']['type'])->toBe('object');
 
         // Check each property has required fields
-        foreach ($schema['parameters']['properties'] as $prop) {
+        foreach ($schema['function']['parameters']['properties'] as $prop) {
             expect($prop)->toHaveKey('type')
                 ->and($prop)->toHaveKey('description');
         }

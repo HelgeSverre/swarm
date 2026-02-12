@@ -7,15 +7,16 @@ test('terminal tool generates correct schema', function () {
     $schema = $tool->toOpenAISchema();
 
     expect($schema)->toBeArray()
-        ->and($schema['name'])->toBe('bash')
-        ->and($schema['description'])->toBe('Execute bash commands in a terminal')
-        ->and($schema['parameters']['type'])->toBe('object')
-        ->and($schema['parameters']['properties'])->toHaveKeys(['command', 'timeout', 'directory'])
-        ->and($schema['parameters']['properties']['command']['type'])->toBe('string')
-        ->and($schema['parameters']['properties']['timeout']['type'])->toBe('number')
-        ->and($schema['parameters']['properties']['timeout']['default'])->toBe(30)
-        ->and($schema['parameters']['properties']['directory']['type'])->toBe('string')
-        ->and($schema['parameters']['required'])->toBe(['command']);
+        ->and($schema['type'])->toBe('function')
+        ->and($schema['function']['name'])->toBe('bash')
+        ->and($schema['function']['description'])->toBe('Execute bash commands in a terminal')
+        ->and($schema['function']['parameters']['type'])->toBe('object')
+        ->and($schema['function']['parameters']['properties'])->toHaveKeys(['command', 'timeout', 'directory'])
+        ->and($schema['function']['parameters']['properties']['command']['type'])->toBe('string')
+        ->and($schema['function']['parameters']['properties']['timeout']['type'])->toBe('number')
+        ->and($schema['function']['parameters']['properties']['timeout']['default'])->toBe(30)
+        ->and($schema['function']['parameters']['properties']['directory']['type'])->toBe('string')
+        ->and($schema['function']['parameters']['required'])->toBe(['command']);
 });
 
 test('terminal tool executes command successfully', function () {
