@@ -480,19 +480,18 @@ class CodingAgent
     {
         // Count votes for each classification
         $votes = [];
-        $confidenceSum = [];
 
-        foreach ($results as $approach => $result) {
+        foreach ($results as $result) {
             if (isset($result['request_type'])) {
                 $type = $result['request_type'];
                 $votes[$type] = ($votes[$type] ?? 0) + 1;
-                $confidenceSum[$type] = ($confidenceSum[$type] ?? 0) + ($result['confidence'] ?? 0);
             }
         }
 
         if (empty($votes)) {
-            // Fallback to simple classification if consistency check fails
-            return $this->fallbackClassification($userInput);
+            $this->logger?->warning('Using fallback classification due to consistency failure');
+
+            return $this->quickClassifyRequest($userInput);
         }
 
         // Select type with most votes, tie-breaking by confidence
@@ -581,25 +580,29 @@ class CodingAgent
             ];
         }
 
-        // For uncertain cases, use low-effort LLM classification
+        // For uncertain short inputs, try low-effort LLM classification
         if (mb_strlen($input) < 100) {
-            return $this->llmQuickClassification($input);
+            $llmResult = $this->llmQuickClassification($input);
+            if ($llmResult !== null) {
+                return $llmResult;
+            }
         }
 
-        // Default for complex cases - requires deeper analysis
+        // Default fallback for complex or unclassifiable cases
         return [
             'request_type' => 'conversation',
             'requires_tools' => false,
-            'confidence' => 0.6,
-            'complexity' => 'complex',
-            'reasoning' => 'Complex request requiring detailed analysis',
+            'confidence' => 0.5,
+            'complexity' => mb_strlen($input) >= 100 ? 'complex' : 'moderate',
+            'reasoning' => 'Default classification - requires deeper analysis',
         ];
     }
 
     /**
-     * Use LLM for quick classification with minimal reasoning effort
+     * Use LLM for quick classification with minimal reasoning effort.
+     * Returns null if the LLM call fails or returns an unusable response.
      */
-    protected function llmQuickClassification(string $input): array
+    protected function llmQuickClassification(string $input): ?array
     {
         try {
             $prompt = "Classify this request quickly (one word): '{$input}'
@@ -632,14 +635,7 @@ Confidence: 0.0-1.0";
             $this->logger?->debug('Quick LLM classification failed', ['error' => $e->getMessage()]);
         }
 
-        // Fallback
-        return [
-            'request_type' => 'conversation',
-            'requires_tools' => false,
-            'confidence' => 0.6,
-            'complexity' => 'moderate',
-            'reasoning' => 'Fallback classification',
-        ];
+        return null;
     }
 
     /**
@@ -679,34 +675,41 @@ Confidence: 0.0-1.0";
     }
 
     /**
-     * Generate a fallback response when LLM calls fail
+     * Generate a fallback response when LLM calls or processing fails
      */
-    protected function generateFallbackResponse(array $messages, Exception $originalError): string
+    protected function generateFallbackResponse(array|string $context, ?Exception $originalError = null): string
     {
-        // Try to extract the last user message for context
-        $lastUserMessage = null;
-        for ($i = count($messages) - 1; $i >= 0; $i--) {
-            if ($messages[$i]['role'] === 'user') {
-                $lastUserMessage = $messages[$i]['content'];
-                break;
+        // Extract user input: from messages array or direct string
+        $userSnippet = '';
+        if (is_array($context)) {
+            for ($i = count($context) - 1; $i >= 0; $i--) {
+                if ($context[$i]['role'] === 'user') {
+                    $userSnippet = $context[$i]['content'];
+                    break;
+                }
+            }
+        } else {
+            $userSnippet = $context;
+        }
+
+        $response = "I apologize, but I'm experiencing technical difficulties and cannot fully process your request right now.";
+
+        if ($userSnippet !== '') {
+            $truncated = mb_substr($userSnippet, 0, 100);
+            $response .= ' I can see you were asking about: ' . $truncated;
+            if (mb_strlen($userSnippet) > 100) {
+                $response .= '...';
             }
         }
 
-        $fallbackResponse = "I apologize, but I'm currently experiencing technical difficulties connecting to the AI service. ";
+        $response .= "\n\nPlease try again in a few moments, or rephrase your request.";
+        $response .= ' If the issue persists, you may want to restart the application or check system resources.';
 
-        if ($lastUserMessage) {
-            $fallbackResponse .= "I understand you're asking about: " . mb_substr($lastUserMessage, 0, 100);
-            if (mb_strlen($lastUserMessage) > 100) {
-                $fallbackResponse .= '...';
-            }
-            $fallbackResponse .= "\n\n";
+        if ($originalError) {
+            $response .= "\n\nError details: " . $originalError->getMessage();
         }
 
-        $fallbackResponse .= 'Please try your request again in a few moments. If the issue persists, ';
-        $fallbackResponse .= "you may want to check your internet connection or contact support.\n\n";
-        $fallbackResponse .= 'Error details: ' . $originalError->getMessage();
-
-        return $fallbackResponse;
+        return $response;
     }
 
     /**
@@ -729,35 +732,22 @@ Confidence: 0.0-1.0";
     }
 
     /**
-     * Handle errors with potential recovery
-     */
-    /**
-     * Enhanced processing with recovery mechanisms
+     * Process with channels, falling back to simplified conversation on failure
      */
     protected function processWithChannelsAndRecovery(string $userInput): AgentResponse
     {
         try {
             return $this->processWithChannels($userInput);
-        } catch (Exception $e) {
-            $this->logger?->warning('Primary processing failed, attempting recovery', [
-                'error' => $e->getMessage(),
+        } catch (Exception $primary) {
+            $this->logger?->warning('Primary processing failed, attempting simplified fallback', [
+                'error' => $primary->getMessage(),
             ]);
-
-            // Try simplified processing as fallback
-            return $this->simplifiedProcessing($userInput);
         }
-    }
 
-    /**
-     * Simplified processing fallback
-     */
-    protected function simplifiedProcessing(string $userInput): AgentResponse
-    {
+        // Simplified fallback: quick classification with basic conversation handler
         try {
-            // Simplified classification
-            $classification = $this->simpleClassification($userInput);
+            $classification = $this->quickClassifyRequest($userInput);
 
-            // Use basic conversation handler
             $handler = new ConversationHandler(
                 conversationBuffer: $this->conversationBuffer,
                 llmCallback: fn (array $messages, array $options = []) => $this->callLLMWithEnhancements($messages, $options)
@@ -765,7 +755,6 @@ Confidence: 0.0-1.0";
 
             $response = $handler->handle($userInput, $classification, []);
 
-            // Mark as fallback
             return AgentResponse::error(
                 error: 'Used simplified processing due to primary system issues',
                 partialContent: $response->content,
@@ -774,204 +763,90 @@ Confidence: 0.0-1.0";
                     'classification' => $classification,
                 ])
             );
-        } catch (Exception $e) {
-            // Final fallback - emergency response
+        } catch (Exception $fallback) {
             return AgentResponse::error(
-                error: 'All processing methods failed: ' . $e->getMessage(),
-                partialContent: $this->generateEmergencyResponse($userInput)
+                error: 'All processing methods failed: ' . $fallback->getMessage(),
+                partialContent: $this->generateFallbackResponse($userInput)
             );
         }
     }
 
     /**
-     * Enhanced error handling with multiple recovery strategies
+     * Handle errors with severity-based messaging and recovery suggestions
      */
     protected function handleErrorWithRecovery(Exception $error, string $input, float $processingTime): AgentResponse
-    {
-        // Determine error severity and appropriate response
-        $severity = $this->categorizeErrorSeverity($error);
-
-        $this->logger?->error('Error categorized', [
-            'severity' => $severity,
-            'error_type' => get_class($error),
-            'processing_time' => $processingTime,
-        ]);
-
-        // Generate contextual error message
-        $errorMessage = $this->generateContextualErrorMessage($error, $input, $severity);
-
-        // Add error to conversation buffer for learning (only for non-critical errors)
-        if ($severity !== 'critical') {
-            $this->conversationBuffer->addMessage('error', $errorMessage);
-        }
-
-        return AgentResponse::error(
-            error: $error->getMessage(),
-            partialContent: $errorMessage,
-            metadata: [
-                'error_type' => get_class($error),
-                'severity' => $severity,
-                'processing_time' => $processingTime,
-                'recovery_suggestions' => $this->getRecoverySuggestions($severity, $error),
-                'input_length' => mb_strlen($input),
-            ]
-        );
-    }
-
-    /**
-     * Categorize error severity for appropriate response
-     */
-    protected function categorizeErrorSeverity(Exception $error): string
     {
         $errorMessage = $error->getMessage();
         $errorClass = get_class($error);
 
-        // Critical errors - system level issues
-        if (str_contains($errorMessage, 'out of memory') ||
-            str_contains($errorMessage, 'segmentation fault') ||
-            str_contains($errorClass, 'Error')) {
-            return 'critical';
-        }
+        // Categorize severity based on error characteristics
+        $severity = match (true) {
+            str_contains($errorMessage, 'out of memory'),
+            str_contains($errorMessage, 'segmentation fault'),
+            str_contains($errorClass, 'Error') => 'critical',
 
-        // High errors - API or service failures
-        if (str_contains($errorMessage, 'API') ||
-            str_contains($errorMessage, 'network') ||
-            str_contains($errorMessage, 'timeout') ||
-            str_contains($errorMessage, 'authentication')) {
-            return 'high';
-        }
+            str_contains($errorMessage, 'API'),
+            str_contains($errorMessage, 'network'),
+            str_contains($errorMessage, 'timeout'),
+            str_contains($errorMessage, 'authentication') => 'high',
 
-        // Medium errors - processing issues
-        if (str_contains($errorMessage, 'JSON') ||
-            str_contains($errorMessage, 'invalid') ||
-            str_contains($errorMessage, 'format')) {
-            return 'medium';
-        }
+            str_contains($errorMessage, 'JSON'),
+            str_contains($errorMessage, 'invalid'),
+            str_contains($errorMessage, 'format') => 'medium',
 
-        // Low errors - user input issues
-        return 'low';
-    }
+            default => 'low',
+        };
 
-    /**
-     * Generate contextual error message based on error type and input
-     */
-    protected function generateContextualErrorMessage(Exception $error, string $input, string $severity): string
-    {
-        $baseMessage = match ($severity) {
+        $this->logger?->error('Error categorized', [
+            'severity' => $severity,
+            'error_type' => $errorClass,
+            'processing_time' => $processingTime,
+        ]);
+
+        // Build contextual user-facing message
+        $userMessage = match ($severity) {
             'critical' => "I'm experiencing a critical system issue and cannot process requests right now.",
             'high' => "I'm having trouble connecting to external services needed to help you.",
             'medium' => 'I encountered a processing issue with your request.',
-            'low' => "There's a problem with how I interpreted your request.",
-            default => 'I encountered an unexpected issue with your request.'
+            default => "There's a problem with how I interpreted your request.",
         };
 
-        // Add context about what the user was trying to do
         if (mb_strlen($input) > 0) {
-            $context = ' I can see you were asking about: ' . mb_substr($input, 0, 100);
+            $userMessage .= ' I can see you were asking about: ' . mb_substr($input, 0, 100);
             if (mb_strlen($input) > 100) {
-                $context .= '...';
+                $userMessage .= '...';
             }
-        } else {
-            $context = '';
         }
 
-        // Add recovery suggestions
-        $suggestions = match ($severity) {
+        $userMessage .= match ($severity) {
             'critical' => ' Please restart the application and try again. If the issue persists, contact system administrator.',
             'high' => ' Please check your internet connection and try again in a few moments.',
             'medium' => ' Please try rephrasing your request or break it into smaller parts.',
-            'low' => ' Please check your input and try again.',
-            default => ' Please try again or contact support if the issue persists.'
+            default => ' Please check your input and try again.',
         };
 
-        return $baseMessage . $context . $suggestions;
-    }
+        if ($severity !== 'critical') {
+            $this->conversationBuffer->addMessage('error', $userMessage);
+        }
 
-    /**
-     * Get specific recovery suggestions based on error
-     */
-    protected function getRecoverySuggestions(string $severity, Exception $error): array
-    {
-        return match ($severity) {
-            'critical' => [
-                'restart_application',
-                'check_system_resources',
-                'contact_administrator',
-            ],
-            'high' => [
-                'check_internet_connection',
-                'verify_api_credentials',
-                'try_again_later',
-                'use_offline_mode_if_available',
-            ],
-            'medium' => [
-                'rephrase_request',
-                'break_into_smaller_parts',
-                'check_input_format',
-                'try_simpler_language',
-            ],
-            'low' => [
-                'check_spelling',
-                'provide_more_context',
-                'use_specific_examples',
-            ],
-            default => ['try_again_later', 'contact_support']
+        $suggestions = match ($severity) {
+            'critical' => ['restart_application', 'check_system_resources', 'contact_administrator'],
+            'high' => ['check_internet_connection', 'verify_api_credentials', 'try_again_later', 'use_offline_mode_if_available'],
+            'medium' => ['rephrase_request', 'break_into_smaller_parts', 'check_input_format', 'try_simpler_language'],
+            default => ['check_spelling', 'provide_more_context', 'use_specific_examples'],
         };
-    }
 
-    /**
-     * Simple rule-based classification fallback
-     */
-    protected function simpleClassification(string $userInput): array
-    {
-        $input = mb_strtolower(trim($userInput));
-
-        // Rule-based classification
-        if (str_contains($input, 'show') || str_contains($input, 'example') || str_contains($input, 'demo')) {
-            return [
-                'request_type' => 'demonstration',
-                'requires_tools' => false,
-                'confidence' => 0.6,
-                'reasoning' => 'Rule-based: contains demonstration keywords',
-            ];
-        }
-
-        if (str_contains($input, 'explain') || str_contains($input, 'what is') || str_contains($input, 'how does')) {
-            return [
-                'request_type' => 'explanation',
-                'requires_tools' => false,
-                'confidence' => 0.6,
-                'reasoning' => 'Rule-based: contains explanation keywords',
-            ];
-        }
-
-        if (str_contains($input, 'create') || str_contains($input, 'implement') || str_contains($input, 'build')) {
-            return [
-                'request_type' => 'implementation',
-                'requires_tools' => true,
-                'confidence' => 0.6,
-                'reasoning' => 'Rule-based: contains implementation keywords',
-            ];
-        }
-
-        // Default to conversation
-        return [
-            'request_type' => 'conversation',
-            'requires_tools' => false,
-            'confidence' => 0.4,
-            'reasoning' => 'Rule-based: default classification',
-        ];
-    }
-
-    /**
-     * Generate emergency response when all else fails
-     */
-    protected function generateEmergencyResponse(string $userInput): string
-    {
-        return "I apologize, but I'm experiencing technical difficulties and cannot fully process your request right now. " .
-               "However, I can see you're asking about something related to: " . mb_substr($userInput, 0, 50) . "...\n\n" .
-               'Please try again in a moment, or rephrase your request. If the problem continues, ' .
-               'you may want to restart the application or check system resources.';
+        return AgentResponse::error(
+            error: $errorMessage,
+            partialContent: $userMessage,
+            metadata: [
+                'error_type' => $errorClass,
+                'severity' => $severity,
+                'processing_time' => $processingTime,
+                'recovery_suggestions' => $suggestions,
+                'input_length' => mb_strlen($input),
+            ]
+        );
     }
 
     /**
@@ -996,23 +871,6 @@ Confidence: 0.0-1.0";
                 ],
                 'required' => ['request_type', 'requires_tools', 'confidence', 'reasoning'],
             ],
-        ];
-    }
-
-    /**
-     * Fallback classification if self-consistent approach fails
-     */
-    protected function fallbackClassification(string $userInput): array
-    {
-        $this->logger?->warning('Using fallback classification due to consistency failure');
-
-        return [
-            'request_type' => 'conversation',
-            'requires_tools' => false,
-            'confidence' => 0.5,
-            'reasoning' => 'Fallback classification due to consistency check failure',
-            'complexity' => 'simple',
-            'estimated_effort' => 'low',
         ];
     }
 
