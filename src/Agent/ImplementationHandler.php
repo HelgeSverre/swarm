@@ -32,7 +32,6 @@ class ImplementationHandler implements RequestHandler
 
     public function handle(string $input, array $classification, array $analysis): AgentResponse
     {
-        // Extract and execute tasks using existing logic
         $tasks = $this->extractTasks($input);
 
         if (empty($tasks)) {
@@ -44,7 +43,6 @@ class ImplementationHandler implements RequestHandler
 
         $this->taskManager->addTasks($tasks);
 
-        // Execute tasks with enhanced monitoring
         foreach ($this->taskManager->getTasks() as $task) {
             if ($task->status === TaskStatus::Pending) {
                 $this->executeTaskWithMonitoring($task);
@@ -59,7 +57,7 @@ class ImplementationHandler implements RequestHandler
 
     protected function extractTasks(string $input): array
     {
-        ($this->progressCallback)('extracting_tasks', [
+        $this->reportProgress('extracting_tasks', [
             'phase' => 'analyzing_request',
             'input_length' => mb_strlen($input),
         ]);
@@ -70,24 +68,38 @@ class ImplementationHandler implements RequestHandler
                 tokenBudget: 2000
             );
 
-            $prompt = PromptTemplates::extractTasks($input);
-            $messages = array_merge($context, [
-                ['role' => 'system', 'content' => PromptTemplates::planningSystem()],
-                ['role' => 'user', 'content' => $prompt],
-            ]);
-
-            ($this->progressCallback)('extracting_tasks', [
+            $this->reportProgress('extracting_tasks', [
                 'phase' => 'calling_ai',
                 'context_size' => count($context),
             ]);
 
-            $response = ($this->llmCallback)($messages, [
-                'reasoning_effort' => 'medium',
-                'response_format' => [
-                    'type' => 'json_schema',
-                    'json_schema' => $this->getTaskExtractionSchema(),
+            $response = $this->callLLM(
+                context: $context,
+                systemPrompt: PromptTemplates::planningSystem(),
+                userPrompt: PromptTemplates::extractTasks($input),
+                options: [
+                    'reasoning_effort' => 'medium',
+                    'response_format' => [
+                        'type' => 'json_schema',
+                        'json_schema' => $this->buildJsonSchema('task_extraction', [
+                            'tasks' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'description' => ['type' => 'string'],
+                                        'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],
+                                        'complexity' => ['type' => 'string', 'enum' => ['simple', 'moderate', 'complex']],
+                                        'estimated_time' => ['type' => 'string'],
+                                    ],
+                                    'required' => ['description'],
+                                ],
+                            ],
+                            'reasoning' => ['type' => 'string'],
+                        ], required: ['tasks', 'reasoning']),
+                    ],
                 ],
-            ]);
+            );
 
             $data = json_decode($response, true);
 
@@ -109,7 +121,7 @@ class ImplementationHandler implements RequestHandler
             }
 
             $tasks = $data['tasks'];
-            ($this->progressCallback)('extracting_tasks', [
+            $this->reportProgress('extracting_tasks', [
                 'phase' => 'extraction_complete',
                 'task_count' => count($tasks),
             ]);
@@ -125,51 +137,20 @@ class ImplementationHandler implements RequestHandler
         }
     }
 
-    /**
-     * Get JSON schema for task extraction
-     */
-    protected function getTaskExtractionSchema(): array
-    {
-        return [
-            'name' => 'task_extraction',
-            'schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'tasks' => [
-                        'type' => 'array',
-                        'items' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'description' => ['type' => 'string'],
-                                'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],
-                                'complexity' => ['type' => 'string', 'enum' => ['simple', 'moderate', 'complex']],
-                                'estimated_time' => ['type' => 'string'],
-                            ],
-                            'required' => ['description'],
-                        ],
-                    ],
-                    'reasoning' => ['type' => 'string'],
-                ],
-                'required' => ['tasks', 'reasoning'],
-            ],
-        ];
-    }
-
     protected function executeTaskWithMonitoring(Task $task): void
     {
-        ($this->progressCallback)('executing_task', [
+        $this->reportProgress('executing_task', [
             'task_id' => $task->id,
             'task_description' => $task->description,
             'status' => $task->status->value,
         ]);
 
         try {
-            // First, plan the task if not already planned
             if ($task->status === TaskStatus::Pending) {
-                $this->planAndExecuteTask($task);
-            } else {
-                $this->executeExistingTask($task);
+                $task = $this->planTask($task);
             }
+
+            $this->executeTaskSteps($task);
         } catch (Exception $e) {
             $this->logger?->error('Task execution failed', [
                 'task_id' => $task->id,
@@ -177,18 +158,16 @@ class ImplementationHandler implements RequestHandler
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Task remains in current status - don't advance on failure
             throw $e;
         }
     }
 
     /**
-     * Plan and execute a pending task
+     * Plan a pending task and return the planned task
      */
-    protected function planAndExecuteTask(Task $task): void
+    protected function planTask(Task $task): Task
     {
-        // Plan the task first
-        ($this->progressCallback)('planning_task', [
+        $this->reportProgress('planning_task', [
             'task_id' => $task->id,
             'task_description' => $task->description,
             'phase' => 'analyzing_requirements',
@@ -199,31 +178,47 @@ class ImplementationHandler implements RequestHandler
             tokenBudget: 1500
         );
 
-        $contextStr = ! empty($context) ?
-            json_encode(array_slice($context, -3), JSON_PRETTY_PRINT) : 'No prior context';
+        $contextStr = $this->formatContextString($context);
 
-        $prompt = PromptTemplates::planTask(
-            description: $task->description,
-            context: $contextStr
-        );
-
-        $messages = array_merge($context, [
-            ['role' => 'system', 'content' => PromptTemplates::planningSystem()],
-            ['role' => 'user', 'content' => $prompt],
-        ]);
-
-        ($this->progressCallback)('planning_task', [
+        $this->reportProgress('planning_task', [
             'task_id' => $task->id,
             'phase' => 'calling_ai',
         ]);
 
-        $planResponse = ($this->llmCallback)($messages, [
-            'reasoning_effort' => 'medium',
-            'response_format' => [
-                'type' => 'json_schema',
-                'json_schema' => $this->getTaskPlanSchema(),
+        $planResponse = $this->callLLM(
+            context: $context,
+            systemPrompt: PromptTemplates::planningSystem(),
+            userPrompt: PromptTemplates::planTask(
+                description: $task->description,
+                context: $contextStr
+            ),
+            options: [
+                'reasoning_effort' => 'medium',
+                'response_format' => [
+                    'type' => 'json_schema',
+                    'json_schema' => $this->buildJsonSchema('task_plan', [
+                        'plan_summary' => ['type' => 'string'],
+                        'steps' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'description' => ['type' => 'string'],
+                                    'tool_needed' => ['type' => 'string'],
+                                    'expected_outcome' => ['type' => 'string'],
+                                ],
+                                'required' => ['description'],
+                            ],
+                        ],
+                        'estimated_complexity' => ['type' => 'string', 'enum' => ['simple', 'moderate', 'complex']],
+                        'potential_issues' => [
+                            'type' => 'array',
+                            'items' => ['type' => 'string'],
+                        ],
+                    ], required: ['plan_summary', 'steps']),
+                ],
             ],
-        ]);
+        );
 
         $planData = json_decode($planResponse, true);
 
@@ -238,34 +233,24 @@ class ImplementationHandler implements RequestHandler
             throw new Exception('Invalid task plan response: missing plan_summary');
         }
 
-        // Update task with plan
-        $plannedTask = $task->withPlan(
-            plan: $planData['plan_summary'],
-            steps: $planData['steps'] ?? []
-        );
+        $steps = $planData['steps'] ?? [];
 
         $this->taskManager->planTask(
             taskId: $task->id,
             plan: $planData['plan_summary'],
-            steps: $planData['steps'] ?? []
+            steps: $steps
         );
 
-        ($this->progressCallback)('planning_task', [
+        $this->reportProgress('planning_task', [
             'task_id' => $task->id,
             'phase' => 'plan_complete',
-            'step_count' => count($planData['steps'] ?? []),
+            'step_count' => count($steps),
         ]);
 
-        // Now execute the planned task
-        $this->executeTaskSteps($plannedTask);
-    }
-
-    /**
-     * Execute an already planned task
-     */
-    protected function executeExistingTask(Task $task): void
-    {
-        $this->executeTaskSteps($task);
+        return $task->withPlan(
+            plan: $planData['plan_summary'],
+            steps: $steps
+        );
     }
 
     /**
@@ -278,37 +263,29 @@ class ImplementationHandler implements RequestHandler
             tokenBudget: 1500
         );
 
-        $contextStr = ! empty($context) ?
-            json_encode(array_slice($context, -3), JSON_PRETTY_PRINT) : 'No prior context';
-
         $toolLog = implode("\n", array_slice(
             $this->toolExecutor->getExecutionLog(), -5
         ));
 
-        $prompt = PromptTemplates::executeTask(
-            task: $task,
-            context: $contextStr,
-            toolLog: $toolLog
-        );
-
-        // Get available tools for this request
         $availableTools = $this->toolExecutor->getToolSchemas();
         $toolNames = array_column(array_column($availableTools, 'function'), 'name');
 
-        $messages = array_merge($context, [
-            ['role' => 'system', 'content' => PromptTemplates::executionSystem(
+        $response = $this->callLLM(
+            context: $context,
+            systemPrompt: PromptTemplates::executionSystem(
                 toolDescriptions: implode(', ', $toolNames)
-            )],
-            ['role' => 'user', 'content' => $prompt],
-        ]);
+            ),
+            userPrompt: PromptTemplates::executeTask(
+                task: $task,
+                context: $this->formatContextString($context),
+                toolLog: $toolLog
+            ),
+            options: [
+                'tools' => $availableTools,
+                'reasoning_effort' => 'medium',
+            ],
+        );
 
-        // Execute with tools available
-        $response = ($this->llmCallback)($messages, [
-            'tools' => $availableTools,
-            'reasoning_effort' => 'medium',
-        ]);
-
-        // Task completion is handled by the task manager when tools complete successfully
         $this->logger?->info('Task execution completed', [
             'task_id' => $task->id,
             'response_length' => mb_strlen($response),
@@ -316,35 +293,49 @@ class ImplementationHandler implements RequestHandler
     }
 
     /**
-     * Get JSON schema for task planning
+     * Call the LLM with context messages, system prompt, and user prompt
      */
-    protected function getTaskPlanSchema(): array
+    protected function callLLM(array $context, string $systemPrompt, string $userPrompt, array $options = []): string
+    {
+        $messages = array_merge($context, [
+            ['role' => 'system', 'content' => $systemPrompt],
+            ['role' => 'user', 'content' => $userPrompt],
+        ]);
+
+        return ($this->llmCallback)($messages, $options);
+    }
+
+    /**
+     * Report progress through the callback
+     */
+    protected function reportProgress(string $operation, array $details): void
+    {
+        ($this->progressCallback)($operation, $details);
+    }
+
+    /**
+     * Format conversation context as a string for prompt injection
+     */
+    protected function formatContextString(array $context): string
+    {
+        if (empty($context)) {
+            return 'No prior context';
+        }
+
+        return json_encode(array_slice($context, -3), JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Build a JSON schema wrapper for OpenAI structured output
+     */
+    protected function buildJsonSchema(string $name, array $properties, array $required = []): array
     {
         return [
-            'name' => 'task_plan',
+            'name' => $name,
             'schema' => [
                 'type' => 'object',
-                'properties' => [
-                    'plan_summary' => ['type' => 'string'],
-                    'steps' => [
-                        'type' => 'array',
-                        'items' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'description' => ['type' => 'string'],
-                                'tool_needed' => ['type' => 'string'],
-                                'expected_outcome' => ['type' => 'string'],
-                            ],
-                            'required' => ['description'],
-                        ],
-                    ],
-                    'estimated_complexity' => ['type' => 'string', 'enum' => ['simple', 'moderate', 'complex']],
-                    'potential_issues' => [
-                        'type' => 'array',
-                        'items' => ['type' => 'string'],
-                    ],
-                ],
-                'required' => ['plan_summary', 'steps'],
+                'properties' => $properties,
+                'required' => $required,
             ],
         ];
     }
