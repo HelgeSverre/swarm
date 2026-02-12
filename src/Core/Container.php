@@ -123,7 +123,9 @@ class Container
                 taskManager: $this->getTaskManager(),
                 llmClient: $this->getOpenAIClient(),
                 logger: $this->app->logger(),
-                model: $this->app->config('openai.model', 'gpt-4o-mini')
+                model: $this->app->config('openai.model', 'gpt-4o-mini'),
+                reasoningEffort: $this->app->config('openai.reasoning_effort', 'medium'),
+                verbosity: $this->app->config('openai.verbosity', 'medium'),
             );
         }
 

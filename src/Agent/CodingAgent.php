@@ -43,7 +43,9 @@ class CodingAgent
         protected readonly TaskManager $taskManager,
         protected readonly OpenAI\Contracts\ClientContract $llmClient,
         protected readonly ?LoggerInterface $logger = null,
-        protected readonly string $model = 'gpt-4o-mini'
+        protected readonly string $model = 'gpt-4o-mini',
+        protected readonly string $reasoningEffort = 'medium',
+        protected readonly string $verbosity = 'medium',
     ) {
         $this->conversationBuffer = new ConversationBuffer;
     }
@@ -114,23 +116,18 @@ class CodingAgent
      */
     public function callLLMWithEnhancements(array $messages, array $options = []): string
     {
-        $defaultOptions = [
-            'model' => $this->model,
-            'messages' => $messages,
-            'max_completion_tokens' => 4000,
-            'temperature' => 0.7,
-        ];
-
-        // Use custom tools for direct code generation if available
-        if ($this->useCustomTools && isset($options['tools'])) {
-            $defaultOptions['tools'] = $options['tools'];
+        // Strip tools from options if custom tools are disabled
+        if (! $this->useCustomTools) {
+            unset($options['tools']);
         }
 
-        // Merge options (caller can override temperature, model, etc.)
-        $requestOptions = array_merge($defaultOptions, $options);
-
-        // Remove reasoning_effort if it was passed in options (not a valid API parameter)
-        unset($requestOptions['reasoning_effort']);
+        $requestOptions = ModelCapabilities::buildRequestOptions(
+            model: $options['model'] ?? $this->model,
+            messages: $messages,
+            options: $options,
+            reasoningEffort: $this->reasoningEffort,
+            verbosity: $this->verbosity,
+        );
 
         $this->logger?->debug('LLM call', [
             'model' => $requestOptions['model'],

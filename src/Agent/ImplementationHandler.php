@@ -293,17 +293,18 @@ class ImplementationHandler implements RequestHandler
 
         // Get available tools for this request
         $availableTools = $this->toolExecutor->getToolSchemas();
+        $toolNames = array_column(array_column($availableTools, 'function'), 'name');
 
         $messages = array_merge($context, [
             ['role' => 'system', 'content' => PromptTemplates::executionSystem(
-                toolDescriptions: implode(', ', array_keys($availableTools))
+                toolDescriptions: implode(', ', $toolNames)
             )],
             ['role' => 'user', 'content' => $prompt],
         ]);
 
         // Execute with tools available
         $response = ($this->llmCallback)($messages, [
-            'tools' => array_values($availableTools),
+            'tools' => $availableTools,
             'reasoning_effort' => 'medium',
         ]);
 

@@ -92,7 +92,8 @@ class WorkerProcess
                 llmClient: $openAI,
                 logger: $logger,
                 model: $app->config('openai.model', 'gpt-4o-mini'),
-                reasoningEffort: $app->config('openai.reasoning_effort', 'medium')
+                reasoningEffort: $app->config('openai.reasoning_effort', 'medium'),
+                verbosity: $app->config('openai.verbosity', 'medium'),
             );
 
             // Load conversation history from state file if it exists
