@@ -18,10 +18,9 @@ use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
- * Enhanced Coding Agent with GPT-5 capabilities and intelligent context management
+ * Enhanced Coding Agent with OpenAI GPT models and intelligent context management
  *
  * Key improvements:
- * - GPT-5 model with custom tools and reasoning effort control
  * - Intelligent conversation buffer with relevance-based context selection
  * - Self-consistent reasoning for better classification accuracy
  * - Multi-channel processing (analysis, planning, execution, reflection)
@@ -44,8 +43,7 @@ class CodingAgent
         protected readonly TaskManager $taskManager,
         protected readonly OpenAI\Contracts\ClientContract $llmClient,
         protected readonly ?LoggerInterface $logger = null,
-        protected readonly string $model = 'gpt-5-mini',
-        protected readonly string $reasoningEffort = 'medium'
+        protected readonly string $model = 'gpt-4o-mini'
     ) {
         $this->conversationBuffer = new ConversationBuffer;
     }
@@ -70,10 +68,9 @@ class CodingAgent
             );
         }
 
-        $this->logger?->info('Processing request with GPT-5 enhanced agent', [
+        $this->logger?->info('Processing request', [
             'input_length' => mb_strlen($userInput),
             'model' => $this->model,
-            'reasoning_effort' => $this->reasoningEffort,
         ]);
 
         // Add to intelligent conversation buffer
@@ -113,7 +110,7 @@ class CodingAgent
     }
 
     /**
-     * Enhanced LLM call with GPT-5 specific features
+     * Enhanced LLM call with retry logic
      */
     public function callLLMWithEnhancements(array $messages, array $options = []): string
     {
@@ -121,39 +118,22 @@ class CodingAgent
             'model' => $this->model,
             'messages' => $messages,
             'max_completion_tokens' => 4000,
+            'temperature' => 0.7,
         ];
 
-        // Add GPT-5 specific parameters
-        if ($this->model === 'gpt-5-mini' || str_starts_with($this->model, 'gpt-5')) {
-            if (isset($options['reasoning_effort'])) {
-                $defaultOptions['reasoning_effort'] = $options['reasoning_effort'];
-            } else {
-                $defaultOptions['reasoning_effort'] = $this->reasoningEffort;
-            }
-
-            // Use custom tools for direct code generation if available
-            if ($this->useCustomTools && isset($options['tools'])) {
-                $defaultOptions['tools'] = $options['tools'];
-            }
-
-            // GPT-5 models only support default temperature (1.0) - remove temperature parameter
-            // Note: Temperature control is handled internally by reasoning_effort
-            if (isset($defaultOptions['temperature'])) {
-                unset($defaultOptions['temperature']);
-            }
-        } else {
-            // For non-GPT-5 models, add temperature if not present
-            if (! isset($defaultOptions['temperature'])) {
-                $defaultOptions['temperature'] = 0.7; // Default for other models
-            }
+        // Use custom tools for direct code generation if available
+        if ($this->useCustomTools && isset($options['tools'])) {
+            $defaultOptions['tools'] = $options['tools'];
         }
 
-        // Merge options
+        // Merge options (caller can override temperature, model, etc.)
         $requestOptions = array_merge($defaultOptions, $options);
 
-        $this->logger?->debug('LLM call with GPT-5 enhancements', [
+        // Remove reasoning_effort if it was passed in options (not a valid API parameter)
+        unset($requestOptions['reasoning_effort']);
+
+        $this->logger?->debug('LLM call', [
             'model' => $requestOptions['model'],
-            'reasoning_effort' => $requestOptions['reasoning_effort'] ?? 'default',
             'message_count' => count($messages),
             'use_custom_tools' => $this->useCustomTools,
         ]);
@@ -166,14 +146,12 @@ class CodingAgent
             try {
                 $this->reportProgress('calling_openai', [
                     'model' => $requestOptions['model'],
-                    'reasoning_effort' => $requestOptions['reasoning_effort'] ?? 'default',
                     'attempt' => $retryCount + 1,
                     'max_retries' => $maxRetries + 1,
                 ]);
 
                 $response = $this->llmClient->chat()->create($requestOptions);
 
-                // Extract both content and reasoning from GPT-5 responses
                 $choice = $response->choices[0] ?? null;
                 if (! $choice) {
                     throw new RuntimeException('No choices in LLM response');
@@ -185,47 +163,17 @@ class CodingAgent
                 }
 
                 $content = $message->content ?? '';
-                $reasoning = null;
-
-                // GPT-5 models may include reasoning in the response
-                if ($this->model === 'gpt-5-mini' || str_starts_with($this->model, 'gpt-5')) {
-                    // Check for reasoning field (GPT-5 specific)
-                    if (property_exists($message, 'reasoning') && ! empty($message->reasoning)) {
-                        $reasoning = $message->reasoning;
-
-                        // Report reasoning content via progress callback
-                        $this->reportProgress('reasoning_received', [
-                            'reasoning_content' => $reasoning,
-                            'content_length' => mb_strlen($reasoning),
-                            'model' => $requestOptions['model'],
-                        ]);
-                    }
-
-                    // Handle case where reasoning is embedded in content (fallback)
-                    if (! $reasoning && str_contains($content, '"reasoning":')) {
-                        $this->logger?->debug('Found reasoning content embedded in response content');
-                    }
-                }
 
                 if (empty($content)) {
-                    // If no content but we have reasoning, that might be the issue
-                    if ($reasoning) {
-                        $this->logger?->warning('GPT-5 returned reasoning but no content', [
-                            'reasoning_length' => mb_strlen($reasoning),
-                            'full_response' => json_encode($response),
-                        ]);
-                    }
                     throw new RuntimeException('Empty content from LLM response');
                 }
 
                 // Add to conversation buffer
                 $this->conversationBuffer->addMessage('assistant', $content);
 
-                // Log successful response with reasoning info
+                // Log successful response
                 $this->logger?->debug('LLM response received', [
                     'content_length' => mb_strlen($content),
-                    'has_reasoning' => ! empty($reasoning),
-                    'reasoning_length' => $reasoning ? mb_strlen($reasoning) : 0,
                 ]);
 
                 return $content;
@@ -278,14 +226,6 @@ class CodingAgent
     public function getConversationStats(): array
     {
         return $this->conversationBuffer->getStats();
-    }
-
-    /**
-     * Get reasoning effort level for GPT-5
-     */
-    public function getReasoningEffort(): string
-    {
-        return $this->reasoningEffort;
     }
 
     /**
@@ -434,7 +374,6 @@ class CodingAgent
 
         try {
             $response = $this->callLLMWithEnhancements($messages, [
-                'reasoning_effort' => 'high', // Use deeper reasoning for analysis
                 'response_format' => ['type' => 'json_object'],
             ]);
 
@@ -677,7 +616,6 @@ Confidence: 0.0-1.0";
             ];
 
             $response = $this->callLLMWithEnhancements($messages, [
-                'reasoning_effort' => 'low', // Minimal reasoning for speed
                 'max_completion_tokens' => 100,
                 'response_format' => ['type' => 'json_object'],
             ]);
