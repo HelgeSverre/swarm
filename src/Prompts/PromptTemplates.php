@@ -110,7 +110,7 @@ class PromptTemplates
      */
     public static function classificationSystemWithAnalysis(string $approach, array $analysis): string
     {
-        $analysisContext = !empty($analysis) ? 
+        $analysisContext = ! empty($analysis) ?
             "\nPRIOR ANALYSIS: " . json_encode($analysis, JSON_PRETTY_PRINT) : '';
 
         return "You are an expert at understanding user intent using the {$approach} reasoning approach.
