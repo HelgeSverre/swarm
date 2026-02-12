@@ -206,6 +206,7 @@ class Application
                 'api_key' => $_ENV['OPENAI_API_KEY'] ?? getenv('OPENAI_API_KEY'),
                 'model' => $_ENV['OPENAI_MODEL'] ?? 'gpt-4o-mini',
                 'temperature' => (float) ($_ENV['OPENAI_TEMPERATURE'] ?? 0.7),
+                'reasoning_effort' => $_ENV['OPENAI_REASONING_EFFORT'] ?? 'medium',
             ],
             'logging' => [
                 'enabled' => filter_var($_ENV['LOG_ENABLED'] ?? false, FILTER_VALIDATE_BOOLEAN),

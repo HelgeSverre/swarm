@@ -99,13 +99,14 @@ class ToolExecutor
      */
     public function registerToolkit(Toolkit $toolkit): self
     {
-        foreach ($toolkit->tools() as $tool) {
+        $tools = $toolkit->provide();
+        foreach ($tools as $tool) {
             $this->register($tool);
         }
 
         $this->logger?->debug('Toolkit registered', [
             'toolkit' => get_class($toolkit),
-            'tools_count' => count($toolkit->tools()),
+            'tools_count' => count($tools),
         ]);
 
         return $this;

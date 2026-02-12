@@ -123,8 +123,8 @@ class Container
                 taskManager: $this->getTaskManager(),
                 llmClient: $this->getOpenAIClient(),
                 logger: $this->app->logger(),
-                model: $this->app->config('openai.model', 'gpt-4o-mini'),
-                temperature: $this->app->config('openai.temperature', 0.7)
+                model: $this->app->config('openai.model', 'gpt-5-mini'),
+                reasoningEffort: $this->app->config('openai.reasoning_effort', 'medium')
             );
         }
 
