@@ -106,6 +106,82 @@ class PromptTemplates
     }
 
     /**
+     * Enhanced classification system with analysis integration
+     */
+    public static function classificationSystemWithAnalysis(string $approach, array $analysis): string
+    {
+        $analysisContext = !empty($analysis) ? 
+            "\nPRIOR ANALYSIS: " . json_encode($analysis, JSON_PRETTY_PRINT) : '';
+
+        return "You are an expert at understanding user intent using the {$approach} reasoning approach.
+        
+        {$analysisContext}
+        
+        Using the {$approach} approach, classify this request step by step:
+        1. Apply your reasoning approach to understand the user's intent
+        2. Determine the request type (demonstration, implementation, explanation, query, conversation)
+        3. Assess if tools are required
+        4. Evaluate your confidence level
+        5. Explain your reasoning process
+        
+        Be thorough in your analysis and provide structured output.";
+    }
+
+    /**
+     * Demonstration prompt for code examples
+     */
+    public static function demonstrationPrompt(string $input): string
+    {
+        return "The user is asking for a code demonstration or example:
+
+\"{$input}\"
+
+Provide a clear, well-commented code example that demonstrates what they're asking about. 
+Use markdown formatting with proper syntax highlighting. Focus on showing working code 
+rather than explaining concepts.";
+    }
+
+    /**
+     * Explanation prompt for educational content
+     */
+    public static function explanationPrompt(string $input): string
+    {
+        return "The user wants an explanation of a coding concept:
+
+\"{$input}\"
+
+Provide a clear, educational explanation that helps them understand the concept. 
+Use code examples if helpful, but focus on explaining how and why things work 
+rather than just showing code.";
+    }
+
+    /**
+     * Query prompt for information requests
+     */
+    public static function queryPrompt(string $input): string
+    {
+        return "The user has a question or query:
+
+\"{$input}\"
+
+Provide a helpful, informative answer based on your knowledge. If you need to 
+search for information or use tools to get current data, explain what you're doing.";
+    }
+
+    /**
+     * Conversation prompt for general chat
+     */
+    public static function conversationPrompt(string $input): string
+    {
+        return "Continue the conversation with the user:
+
+\"{$input}\"
+
+Respond naturally and helpfully, maintaining context from our previous interactions. 
+Be conversational but still professional and informative.";
+    }
+
+    /**
      * Prompt for classifying user requests with Chain of Thought
      */
     public static function classifyRequest(string $input): string
