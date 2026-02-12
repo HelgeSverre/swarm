@@ -6,7 +6,7 @@ namespace HelgeSverre\Swarm\Agent;
 
 /**
  * Immutable response object from agent processing
- * 
+ *
  * Uses modern PHP patterns:
  * - Readonly properties for immutability
  * - Constructor property promotion
@@ -29,7 +29,7 @@ readonly class AgentResponse
      * Create successful response
      */
     public static function success(
-        string $content, 
+        string $content,
         array $metadata = [],
         ?float $processingTime = null
     ): self {
@@ -50,7 +50,7 @@ readonly class AgentResponse
         array $metadata = []
     ): self {
         return new self(
-            content: $partialContent ?? "Error: $error",
+            content: $partialContent ?? "Error: {$error}",
             success: false,
             metadata: $metadata,
             error: $error
@@ -103,7 +103,7 @@ readonly class AgentResponse
      */
     public function hasToolCalls(): bool
     {
-        return !empty($this->toolCalls);
+        return ! empty($this->toolCalls);
     }
 
     /**
