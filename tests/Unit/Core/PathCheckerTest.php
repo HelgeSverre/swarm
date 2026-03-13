@@ -88,6 +88,29 @@ test('validatePath throws exception for denied paths', function () {
         ->toThrow(PathNotAllowedException::class, 'Path access denied');
 });
 
+test('validateWritePath allows new files inside project directory', function () {
+    $targetPath = 'tests/runtime-kernel-test.txt';
+
+    $resolved = $this->pathChecker->validateWritePath($targetPath);
+
+    expect($resolved)->toBe($this->projectPath . '/tests/runtime-kernel-test.txt');
+});
+
+test('validateWritePath denies new files outside allowed roots', function () {
+    $targetPath = $this->tempDir . '/outside-write.txt';
+
+    expect(fn () => $this->pathChecker->validateWritePath($targetPath))
+        ->toThrow(PathNotAllowedException::class, 'Path access denied');
+});
+
+test('validateSearchPath allows explicitly allowed directories', function () {
+    $this->pathChecker->addAllowedPath($this->tempDir);
+
+    $resolved = $this->pathChecker->validateSearchPath($this->tempDir);
+
+    expect($resolved)->toBe(realpath($this->tempDir));
+});
+
 test('getAllowedPaths returns only explicitly added paths', function () {
     expect($this->pathChecker->getAllowedPaths())->toBe([]);
 

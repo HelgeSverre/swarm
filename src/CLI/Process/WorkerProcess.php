@@ -3,15 +3,13 @@
 namespace HelgeSverre\Swarm\CLI\Process;
 
 use Exception;
-use HelgeSverre\Swarm\Agent\CodingAgent;
+use HelgeSverre\Swarm\Application\Runtime\RuntimeKernel;
 use HelgeSverre\Swarm\Core\Application;
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Events\ProcessingEvent;
 use HelgeSverre\Swarm\Events\ToolCompletedEvent;
 use HelgeSverre\Swarm\Events\ToolStartedEvent;
-use HelgeSverre\Swarm\Task\TaskManager;
-use OpenAI;
 
 /**
  * Worker process that runs in a child process and streams progress updates
@@ -19,7 +17,7 @@ use OpenAI;
  */
 class WorkerProcess
 {
-    protected CodingAgent $agent;
+    protected \HelgeSverre\Swarm\Agent\CodingAgent $agent;
 
     protected ToolExecutor $toolExecutor;
 
@@ -41,13 +39,13 @@ class WorkerProcess
     /**
      * Process a request asynchronously with streaming updates
      */
-    public static function processRequest(string $input, int $timeout = 300): void
+    public static function processRequest(Application $app, string $input, int $timeout = 300): void
     {
         $worker = new self;
-        $worker->run($input, $timeout);
+        $worker->run($app, $input, $timeout);
     }
 
-    protected function run(string $input, int $timeout): void
+    protected function run(Application $app, string $input, int $timeout): void
     {
         set_time_limit($timeout);
         $this->registerSignalHandlers();
@@ -57,33 +55,18 @@ class WorkerProcess
         try {
             self::sendUpdate(['type' => 'status', 'status' => 'initializing', 'message' => 'Starting request processing...']);
 
-            $app = new Application(dirname(__DIR__, 2));
             $logger = $app->logger();
 
             self::sendUpdate(['type' => 'status', 'status' => 'initializing', 'message' => 'Setting up tools and services...']);
 
-            $eventBus = new EventBus;
-            EventBus::setInstance($eventBus);
-
-            $this->toolExecutor = ToolExecutor::createWithDefaultTools($logger);
-            $taskManager = new TaskManager($logger);
-
-            $apiKey = $app->config('openai.api_key');
-            if (! $apiKey) {
-                throw new Exception('OpenAI API key not found in environment');
-            }
-
-            $this->agent = new CodingAgent(
-                toolExecutor: $this->toolExecutor,
-                taskManager: $taskManager,
-                llmClient: OpenAI::client($apiKey),
-                logger: $logger,
-                model: $app->config('openai.model', 'gpt-4o-mini'),
-                reasoningEffort: $app->config('openai.reasoning_effort', 'medium'),
-                verbosity: $app->config('openai.verbosity', 'medium'),
-            );
+            $runtime = RuntimeKernel::bootWorker($app);
+            $eventBus = $runtime->eventBus;
+            $this->toolExecutor = $runtime->toolExecutor;
+            $taskManager = $runtime->taskManager;
+            $this->agent = $runtime->codingAgent;
 
             $this->restoreConversationHistory($logger);
+            $this->restoreTaskHistory($taskManager, $logger);
             $this->subscribeToEvents($eventBus);
 
             $logger?->info('Processing user request (streaming)', ['input' => $input]);
@@ -137,19 +120,8 @@ class WorkerProcess
 
     protected function restoreConversationHistory(mixed $logger): void
     {
-        $stateFile = getcwd() . '/.swarm.json';
-
-        if (! file_exists($stateFile)) {
-            return;
-        }
-
-        $stateContent = file_get_contents($stateFile);
-        if (empty(mb_trim($stateContent))) {
-            return;
-        }
-
-        $state = json_decode($stateContent, true);
-        if (! $state || ! isset($state['conversation_history']) || ! is_array($state['conversation_history'])) {
+        $state = $this->loadState();
+        if (! isset($state['conversation_history']) || ! is_array($state['conversation_history'])) {
             return;
         }
 
@@ -157,6 +129,37 @@ class WorkerProcess
         $logger?->debug('Restored conversation history', [
             'count' => count($state['conversation_history']),
         ]);
+    }
+
+    protected function restoreTaskHistory(\HelgeSverre\Swarm\Task\TaskManager $taskManager, mixed $logger): void
+    {
+        $state = $this->loadState();
+        if (! isset($state['task_history']) || ! is_array($state['task_history'])) {
+            return;
+        }
+
+        $taskManager->setTaskHistory($state['task_history']);
+        $logger?->debug('Restored task history', [
+            'count' => count($state['task_history']),
+        ]);
+    }
+
+    protected function loadState(): array
+    {
+        $stateFile = getcwd() . '/.swarm.json';
+
+        if (! file_exists($stateFile)) {
+            return [];
+        }
+
+        $stateContent = file_get_contents($stateFile);
+        if (empty(mb_trim($stateContent))) {
+            return [];
+        }
+
+        $state = json_decode($stateContent, true);
+
+        return is_array($state) ? $state : [];
     }
 
     protected function subscribeToEvents(EventBus $eventBus): void

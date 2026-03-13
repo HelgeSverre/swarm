@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\Swarm\CLI;
 
 use Exception;
+use HelgeSverre\Swarm\CLI\Command\CommandAction;
 use HelgeSverre\Swarm\Core\PathChecker;
 use HelgeSverre\Swarm\Traits\Loggable;
 use RuntimeException;
@@ -51,13 +52,24 @@ class CommandHandler
      */
     public function handle(string $input): CommandResult
     {
-        // Check if this is a registered command
-        if (isset($this->handlers[$input])) {
+        $input = trim($input);
+        if ($input === '') {
+            return CommandResult::ignored();
+        }
+
+        [$command, $arguments] = $this->parseCommandInput($input);
+
+        if ($arguments !== null && $arguments !== '' && ! $this->supportsArguments($command)) {
+            return CommandResult::ignored();
+        }
+
+        if (isset($this->handlers[$command])) {
             try {
-                $this->lastResult = call_user_func($this->handlers[$input]);
+                $handler = $this->handlers[$command];
+                $this->lastResult = $handler($arguments);
                 $this->logDebug('Command handled', [
-                    'command' => $input,
-                    'action' => $this->lastResult->action,
+                    'command' => $command,
+                    'action' => $this->lastResult->action?->value,
                 ]);
 
                 return $this->lastResult;
@@ -67,20 +79,11 @@ class CommandHandler
                     'error' => $e->getMessage(),
                 ]);
 
-                return new CommandResult(
-                    handled: true,
-                    action: 'error',
-                    data: ['error' => $e->getMessage()]
-                );
+                return CommandResult::error($e->getMessage());
             }
         }
 
-        // Not a command
-        return new CommandResult(
-            handled: false,
-            action: null,
-            data: []
-        );
+        return CommandResult::ignored();
     }
 
     /**
@@ -113,11 +116,7 @@ class CommandHandler
     public function handleAddDirectory(string $path): CommandResult
     {
         if (! $this->pathChecker || ! $this->stateManager) {
-            return new CommandResult(
-                handled: true,
-                action: 'error',
-                data: ['error' => 'Path management not available']
-            );
+            return CommandResult::error('Path management not available');
         }
 
         // Expand user path if needed
@@ -126,11 +125,7 @@ class CommandHandler
         }
 
         if (! is_dir($path)) {
-            return new CommandResult(
-                handled: true,
-                action: 'error',
-                data: ['error' => "Directory does not exist: {$path}"]
-            );
+            return CommandResult::error("Directory does not exist: {$path}");
         }
 
         if ($this->pathChecker->addAllowedPath($path)) {
@@ -139,18 +134,13 @@ class CommandHandler
             $state['allowed_directories'] = $this->pathChecker->getAllowedPaths();
             $this->stateManager->save($state);
 
-            return new CommandResult(
-                handled: true,
-                action: 'show_help',
-                data: ['message' => "Directory added to allow-list: {$path}"]
+            return CommandResult::success(
+                CommandAction::ShowHelp,
+                ['message' => "Directory added to allow-list: {$path}"]
             );
         }
 
-        return new CommandResult(
-            handled: true,
-            action: 'error',
-            data: ['error' => "Failed to add directory: {$path}"]
-        );
+        return CommandResult::error("Failed to add directory: {$path}");
     }
 
     /**
@@ -159,11 +149,7 @@ class CommandHandler
     public function handleRemoveDirectory(string $path): CommandResult
     {
         if (! $this->pathChecker || ! $this->stateManager) {
-            return new CommandResult(
-                handled: true,
-                action: 'error',
-                data: ['error' => 'Path management not available']
-            );
+            return CommandResult::error('Path management not available');
         }
 
         // Expand user path if needed
@@ -177,18 +163,13 @@ class CommandHandler
             $state['allowed_directories'] = $this->pathChecker->getAllowedPaths();
             $this->stateManager->save($state);
 
-            return new CommandResult(
-                handled: true,
-                action: 'show_help',
-                data: ['message' => "Directory removed from allow-list: {$path}"]
+            return CommandResult::success(
+                CommandAction::ShowHelp,
+                ['message' => "Directory removed from allow-list: {$path}"]
             );
         }
 
-        return new CommandResult(
-            handled: true,
-            action: 'error',
-            data: ['error' => "Failed to remove directory (not in allow-list): {$path}"]
-        );
+        return CommandResult::error("Failed to remove directory (not in allow-list): {$path}");
     }
 
     /**
@@ -196,83 +177,59 @@ class CommandHandler
      */
     protected function registerDefaultCommands(): void
     {
-        $this->registerCommand('help', function () {
-            return new CommandResult(
-                handled: true,
-                action: 'show_help',
-                data: ['message' => 'Commands: exit, quit, clear, save, clear-state, help, test-error, add-dir, list-dirs, remove-dir']
+        $this->registerCommand('help', function (?string $arguments = null) {
+            return CommandResult::success(
+                CommandAction::ShowHelp,
+                ['message' => 'Commands: exit, quit, clear, save, clear-state, help, test-error, add-dir <path>, list-dirs, remove-dir <path>']
             );
         });
 
-        $this->registerCommand('exit', function () {
-            return new CommandResult(
-                handled: true,
-                action: 'exit',
-                data: []
+        $this->registerCommand('exit', function (?string $arguments = null) {
+            return CommandResult::success(CommandAction::Exit);
+        });
+
+        $this->registerCommand('quit', function (?string $arguments = null) {
+            return CommandResult::success(CommandAction::Exit);
+        });
+
+        $this->registerCommand('clear', function (?string $arguments = null) {
+            return CommandResult::success(
+                CommandAction::ClearHistory,
+                ['message' => 'History cleared']
             );
         });
 
-        $this->registerCommand('quit', function () {
-            return new CommandResult(
-                handled: true,
-                action: 'exit',
-                data: []
-            );
+        $this->registerCommand('save', function (?string $arguments = null) {
+            return CommandResult::success(CommandAction::SaveState);
         });
 
-        $this->registerCommand('clear', function () {
-            return new CommandResult(
-                handled: true,
-                action: 'clear_history',
-                data: ['message' => 'History cleared']
-            );
+        $this->registerCommand('clear-state', function (?string $arguments = null) {
+            return CommandResult::success(CommandAction::ClearState);
         });
 
-        $this->registerCommand('save', function () {
-            return new CommandResult(
-                handled: true,
-                action: 'save_state',
-                data: []
-            );
-        });
-
-        $this->registerCommand('clear-state', function () {
-            return new CommandResult(
-                handled: true,
-                action: 'clear_state',
-                data: []
-            );
-        });
-
-        $this->registerCommand('test-error', function () {
+        $this->registerCommand('test-error', function (?string $arguments = null) {
             $this->logInfo('Test error command invoked');
             throw new RuntimeException('Test exception to verify error logging');
         });
 
-        // Allow-list management commands
-        $this->registerCommand('add-dir', function () {
+        $this->registerCommand('add-dir', function (?string $path = null) {
             if (! $this->pathChecker || ! $this->stateManager) {
-                return new CommandResult(
-                    handled: true,
-                    action: 'error',
-                    data: ['error' => 'Path management not available']
+                return CommandResult::error('Path management not available');
+            }
+
+            if ($path === null || $path === '') {
+                return CommandResult::success(
+                    CommandAction::ShowHelp,
+                    ['message' => 'Usage: add-dir <directory-path>']
                 );
             }
 
-            return new CommandResult(
-                handled: true,
-                action: 'prompt_for_path',
-                data: ['message' => 'Enter directory path to add to allow-list:']
-            );
+            return $this->handleAddDirectory($path);
         });
 
-        $this->registerCommand('list-dirs', function () {
+        $this->registerCommand('list-dirs', function (?string $arguments = null) {
             if (! $this->pathChecker) {
-                return new CommandResult(
-                    handled: true,
-                    action: 'error',
-                    data: ['error' => 'Path management not available']
-                );
+                return CommandResult::error('Path management not available');
             }
 
             $projectPath = $this->pathChecker->getProjectPath();
@@ -285,83 +242,36 @@ class CommandHandler
                 $message .= "Allowed directories:\n" . implode("\n", array_map(fn ($p) => "  - {$p}", $allowedPaths));
             }
 
-            return new CommandResult(
-                handled: true,
-                action: 'show_help',
-                data: ['message' => $message]
-            );
+            return CommandResult::success(CommandAction::ShowHelp, ['message' => $message]);
         });
 
-        $this->registerCommand('remove-dir', function () {
+        $this->registerCommand('remove-dir', function (?string $path = null) {
             if (! $this->pathChecker || ! $this->stateManager) {
-                return new CommandResult(
-                    handled: true,
-                    action: 'error',
-                    data: ['error' => 'Path management not available']
+                return CommandResult::error('Path management not available');
+            }
+
+            if ($path === null || $path === '') {
+                return CommandResult::success(
+                    CommandAction::ShowHelp,
+                    ['message' => 'Usage: remove-dir <directory-path>']
                 );
             }
 
-            $allowedPaths = $this->pathChecker->getAllowedPaths();
-            if (empty($allowedPaths)) {
-                return new CommandResult(
-                    handled: true,
-                    action: 'show_help',
-                    data: ['message' => 'No allowed directories to remove.']
-                );
-            }
-
-            return new CommandResult(
-                handled: true,
-                action: 'prompt_for_path_removal',
-                data: [
-                    'message' => 'Enter directory path to remove from allow-list:',
-                    'available_paths' => $allowedPaths,
-                ]
-            );
+            return $this->handleRemoveDirectory($path);
         });
     }
-}
 
-/**
- * Result of command execution
- */
-class CommandResult
-{
-    public function __construct(
-        public readonly bool $handled,
-        public readonly ?string $action,
-        public readonly array $data
-    ) {}
-
-    /**
-     * Check if command requires exit
-     */
-    public function isExit(): bool
+    protected function parseCommandInput(string $input): array
     {
-        return $this->action === 'exit';
+        $parts = preg_split('/\s+/', $input, limit: 2);
+        $command = $parts[0] ?? $input;
+        $arguments = isset($parts[1]) ? trim($parts[1]) : null;
+
+        return [$command, $arguments];
     }
 
-    /**
-     * Check if command had an error
-     */
-    public function hasError(): bool
+    protected function supportsArguments(string $command): bool
     {
-        return $this->action === 'error';
-    }
-
-    /**
-     * Get error message if any
-     */
-    public function getError(): ?string
-    {
-        return $this->data['error'] ?? null;
-    }
-
-    /**
-     * Get message if any
-     */
-    public function getMessage(): ?string
-    {
-        return $this->data['message'] ?? null;
+        return in_array($command, ['add-dir', 'remove-dir'], true);
     }
 }

@@ -6,8 +6,9 @@ namespace HelgeSverre\Swarm\CLI\Process;
 
 use Exception;
 use HelgeSverre\Swarm\Agent\AgentResponse;
+use HelgeSverre\Swarm\CLI\Process\Message\WorkerUpdate;
+use HelgeSverre\Swarm\CLI\Process\Message\WorkerUpdateType;
 use HelgeSverre\Swarm\Core\Application;
-use HelgeSverre\Swarm\Traits\EventAware;
 use HelgeSverre\Swarm\Traits\Loggable;
 
 /**
@@ -16,7 +17,7 @@ use HelgeSverre\Swarm\Traits\Loggable;
  */
 class ProcessManager
 {
-    use EventAware, Loggable;
+    use Loggable;
 
     protected Application $app;
 
@@ -71,12 +72,12 @@ class ProcessManager
             }
 
             foreach ($updates as $update) {
-                $update['processId'] = $processId;
-                $allUpdates[] = $update;
+                $workerUpdate = WorkerUpdate::fromArray($update)->withProcessId($processId);
+                $allUpdates[] = $workerUpdate;
 
-                if (($update['type'] ?? '') === 'status' && ($update['status'] ?? '') === 'completed') {
+                if ($workerUpdate->isCompletedStatus()) {
                     $this->activeProcesses[$processId]['complete'] = true;
-                    $this->activeProcesses[$processId]['result'] = $update;
+                    $this->activeProcesses[$processId]['result'] = $workerUpdate;
                 }
             }
         }
@@ -93,7 +94,7 @@ class ProcessManager
 
         return new ProcessResult(
             success: true,
-            response: $process['result']['response'] ?? null,
+            response: $process['result'] instanceof WorkerUpdate ? $process['result']->response() : null,
             error: null
         );
     }
@@ -111,17 +112,17 @@ class ProcessManager
     /**
      * Process a single update from the streaming processor
      */
-    public function processUpdate(array $update): UpdateResult
+    public function processUpdate(array|WorkerUpdate $update): UpdateResult
     {
-        $type = $update['type'] ?? 'status';
+        $workerUpdate = $update instanceof WorkerUpdate ? $update : WorkerUpdate::fromArray($update);
 
-        return match ($type) {
-            'progress' => $this->handleProgressUpdate($update),
-            'state_sync' => $this->handleStateSyncUpdate($update),
-            'task_status' => $this->handleTaskStatusUpdate($update),
-            'status' => $this->handleStatusUpdate($update),
-            'error' => $this->handleErrorUpdate($update),
-            default => new UpdateResult(false, $type, $update)
+        return match ($workerUpdate->type) {
+            WorkerUpdateType::Progress => $this->handleProgressUpdate($workerUpdate),
+            WorkerUpdateType::StateSync => $this->handleStateSyncUpdate($workerUpdate),
+            WorkerUpdateType::TaskStatus => $this->handleTaskStatusUpdate($workerUpdate),
+            WorkerUpdateType::Status => $this->handleStatusUpdate($workerUpdate),
+            WorkerUpdateType::Error => $this->handleErrorUpdate($workerUpdate),
+            default => new UpdateResult(false, $workerUpdate->type->value, $workerUpdate->toArray())
         };
     }
 
@@ -151,40 +152,44 @@ class ProcessManager
         return $this->getActiveProcessCount() > 0;
     }
 
-    protected function handleProgressUpdate(array $update): UpdateResult
+    protected function handleProgressUpdate(WorkerUpdate $update): UpdateResult
     {
-        return new UpdateResult(false, 'progress', $update);
+        return new UpdateResult(false, WorkerUpdateType::Progress->value, $update->toArray());
     }
 
-    protected function handleStateSyncUpdate(array $update): UpdateResult
+    protected function handleStateSyncUpdate(WorkerUpdate $update): UpdateResult
     {
-        return new UpdateResult(false, 'state_sync', $update);
+        return new UpdateResult(false, WorkerUpdateType::StateSync->value, $update->toArray());
     }
 
-    protected function handleTaskStatusUpdate(array $update): UpdateResult
+    protected function handleTaskStatusUpdate(WorkerUpdate $update): UpdateResult
     {
-        return new UpdateResult(false, 'task_status', $update);
+        return new UpdateResult(false, WorkerUpdateType::TaskStatus->value, $update->toArray());
     }
 
-    protected function handleStatusUpdate(array $update): UpdateResult
+    protected function handleStatusUpdate(WorkerUpdate $update): UpdateResult
     {
-        $status = $update['status'] ?? '';
+        $status = $update->status() ?? '';
 
         if ($status === 'completed') {
-            return new UpdateResult(true, 'completed', $update);
+            return new UpdateResult(true, 'completed', $update->toArray());
         } elseif ($status === 'error') {
-            throw new Exception($update['error'] ?? 'Unknown error occurred');
+            $payload = $update->toArray();
+
+            throw new Exception($payload['error'] ?? 'Unknown error occurred');
         }
 
-        return new UpdateResult(false, 'status', $update);
+        return new UpdateResult(false, WorkerUpdateType::Status->value, $update->toArray());
     }
 
-    protected function handleErrorUpdate(array $update): UpdateResult
+    protected function handleErrorUpdate(WorkerUpdate $update): UpdateResult
     {
-        // Log error but don't stop unless it's fatal
-        $this->logError('Process error', ['error' => $update['message'] ?? 'Unknown error']);
+        $payload = $update->toArray();
 
-        return new UpdateResult(false, 'error', $update);
+        // Log error but don't stop unless it's fatal
+        $this->logError('Process error', ['error' => $payload['message'] ?? 'Unknown error']);
+
+        return new UpdateResult(false, WorkerUpdateType::Error->value, $payload);
     }
 }
 

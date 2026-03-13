@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace HelgeSverre\Swarm\Core;
 
+use HelgeSverre\Swarm\Application\Runtime\RuntimeContext;
+use HelgeSverre\Swarm\Application\Runtime\RuntimeKernel;
 use HelgeSverre\Swarm\Agent\CodingAgent;
+use HelgeSverre\Swarm\CLI\CommandHandler;
+use HelgeSverre\Swarm\CLI\Process\ProcessManager;
+use HelgeSverre\Swarm\CLI\StateManager;
 use HelgeSverre\Swarm\CLI\Terminal\FullTerminalUI;
 use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Task\TaskManager;
-use OpenAI;
-use RuntimeException;
+use OpenAI\Contracts\ClientContract;
 
 /**
  * Service container for dependency management
@@ -17,6 +21,8 @@ use RuntimeException;
  */
 class Container
 {
+    protected ?RuntimeContext $runtimeContext = null;
+
     protected ?CodingAgent $codingAgent = null;
 
     protected ?FullTerminalUI $ui = null;
@@ -25,15 +31,30 @@ class Container
 
     protected ?TaskManager $taskManager = null;
 
-    protected ?OpenAI\Contracts\ClientContract $openAIClient = null;
+    protected ?ClientContract $openAIClient = null;
 
     protected ?EventBus $eventBus = null;
 
     protected ?PathChecker $pathChecker = null;
 
+    protected ?StateManager $stateManager = null;
+
+    protected ?CommandHandler $commandHandler = null;
+
+    protected ?ProcessManager $processManager = null;
+
     public function __construct(
         protected Application $app
     ) {}
+
+    protected function getRuntimeContext(): RuntimeContext
+    {
+        if ($this->runtimeContext === null) {
+            $this->runtimeContext = RuntimeKernel::bootCli($this->app);
+        }
+
+        return $this->runtimeContext;
+    }
 
     /**
      * Get or create the EventBus instance
@@ -41,8 +62,7 @@ class Container
     public function getEventBus(): EventBus
     {
         if ($this->eventBus === null) {
-            // Use the singleton instance
-            $this->eventBus = EventBus::getInstance();
+            $this->eventBus = $this->getRuntimeContext()->eventBus;
         }
 
         return $this->eventBus;
@@ -51,14 +71,10 @@ class Container
     /**
      * Get or create the OpenAI client
      */
-    public function getOpenAIClient(): OpenAI\Contracts\ClientContract
+    public function getOpenAIClient(): ClientContract
     {
         if ($this->openAIClient === null) {
-            $apiKey = $this->app->config('openai.api_key');
-            if (! $apiKey) {
-                throw new RuntimeException('OpenAI API key not configured');
-            }
-            $this->openAIClient = OpenAI::client($apiKey);
+            $this->openAIClient = $this->getRuntimeContext()->openAIClient;
         }
 
         return $this->openAIClient;
@@ -70,15 +86,7 @@ class Container
     public function getPathChecker(): PathChecker
     {
         if ($this->pathChecker === null) {
-            // Load allowed directories from state
-            $stateManager = new \HelgeSverre\Swarm\CLI\StateManager;
-            $state = $stateManager->load();
-            $allowedPaths = $state['allowed_directories'] ?? [];
-
-            $this->pathChecker = new PathChecker(
-                $this->app->projectPath(),
-                $allowedPaths
-            );
+            $this->pathChecker = $this->getRuntimeContext()->pathChecker;
         }
 
         return $this->pathChecker;
@@ -90,11 +98,7 @@ class Container
     public function getToolExecutor(): ToolExecutor
     {
         if ($this->toolExecutor === null) {
-            // ToolExecutor now uses traits for EventBus and Logger
-            $this->toolExecutor = ToolExecutor::createWithDefaultTools(
-                $this->app->logger(),
-                $this->getPathChecker()
-            );
+            $this->toolExecutor = $this->getRuntimeContext()->toolExecutor;
         }
 
         return $this->toolExecutor;
@@ -106,7 +110,7 @@ class Container
     public function getTaskManager(): TaskManager
     {
         if ($this->taskManager === null) {
-            $this->taskManager = new TaskManager($this->app->logger());
+            $this->taskManager = $this->getRuntimeContext()->taskManager;
         }
 
         return $this->taskManager;
@@ -118,18 +122,39 @@ class Container
     public function getCodingAgent(): CodingAgent
     {
         if ($this->codingAgent === null) {
-            $this->codingAgent = new CodingAgent(
-                toolExecutor: $this->getToolExecutor(),
-                taskManager: $this->getTaskManager(),
-                llmClient: $this->getOpenAIClient(),
-                logger: $this->app->logger(),
-                model: $this->app->config('openai.model', 'gpt-4o-mini'),
-                reasoningEffort: $this->app->config('openai.reasoning_effort', 'medium'),
-                verbosity: $this->app->config('openai.verbosity', 'medium'),
-            );
+            $this->codingAgent = $this->getRuntimeContext()->codingAgent;
         }
 
         return $this->codingAgent;
+    }
+
+    public function getStateManager(): StateManager
+    {
+        if ($this->stateManager === null) {
+            $this->stateManager = $this->getRuntimeContext()->stateManager;
+        }
+
+        return $this->stateManager;
+    }
+
+    public function getCommandHandler(): CommandHandler
+    {
+        if ($this->commandHandler === null) {
+            $this->commandHandler = $this->getRuntimeContext()->commandHandler
+                ?? new CommandHandler($this->getPathChecker(), $this->getStateManager());
+        }
+
+        return $this->commandHandler;
+    }
+
+    public function getProcessManager(): ProcessManager
+    {
+        if ($this->processManager === null) {
+            $this->processManager = $this->getRuntimeContext()->processManager
+                ?? new ProcessManager($this->app);
+        }
+
+        return $this->processManager;
     }
 
     /**
@@ -138,7 +163,9 @@ class Container
     public function getUI(): FullTerminalUI
     {
         if ($this->ui === null) {
-            $this->ui = new FullTerminalUI($this->getEventBus());
+            $this->ui = $this->getRuntimeContext()->ui instanceof FullTerminalUI
+                ? $this->getRuntimeContext()->ui
+                : new FullTerminalUI($this->getEventBus());
         }
 
         return $this->ui;
@@ -149,12 +176,17 @@ class Container
      */
     public function reset(): void
     {
+        $this->runtimeContext = null;
         $this->codingAgent = null;
         $this->ui = null;
         $this->toolExecutor = null;
         $this->taskManager = null;
         $this->openAIClient = null;
         $this->eventBus = null;
+        $this->pathChecker = null;
+        $this->stateManager = null;
+        $this->commandHandler = null;
+        $this->processManager = null;
     }
 
     /**
@@ -169,6 +201,9 @@ class Container
             'tasks' => $this->taskManager !== null,
             'openai' => $this->openAIClient !== null,
             'events' => $this->eventBus !== null,
+            'state' => $this->stateManager !== null,
+            'commands' => $this->commandHandler !== null,
+            'processes' => $this->processManager !== null,
             default => false
         };
     }

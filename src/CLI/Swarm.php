@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace HelgeSverre\Swarm\CLI;
 
 use Exception;
+use HelgeSverre\Swarm\CLI\Command\CommandAction;
 use HelgeSverre\Swarm\CLI\Process\ProcessManager;
+use HelgeSverre\Swarm\CLI\Process\Message\WorkerUpdateType;
 use HelgeSverre\Swarm\Core\Application;
 use HelgeSverre\Swarm\Core\Container;
-use HelgeSverre\Swarm\Core\LoggerRegistry;
 use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Events\ProcessCompleteEvent;
 use HelgeSverre\Swarm\Events\ProcessProgressEvent;
 use HelgeSverre\Swarm\Events\StateUpdateEvent;
 use HelgeSverre\Swarm\Events\UserInputEvent;
-use HelgeSverre\Swarm\Traits\EventAware;
 use HelgeSverre\Swarm\Traits\Loggable;
 
 /**
@@ -23,7 +23,7 @@ use HelgeSverre\Swarm\Traits\Loggable;
  */
 class Swarm
 {
-    use EventAware, Loggable;
+    use Loggable;
 
     protected Container $container;
 
@@ -32,6 +32,8 @@ class Swarm
     protected CommandHandler $commandHandler;
 
     protected ProcessManager $processManager;
+
+    protected EventBus $eventBus;
 
     protected bool $running = false;
 
@@ -44,12 +46,14 @@ class Swarm
         ?Container $container = null,
         ?StateManager $stateManager = null,
         ?CommandHandler $commandHandler = null,
-        ?ProcessManager $processManager = null
+        ?ProcessManager $processManager = null,
+        ?EventBus $eventBus = null,
     ) {
         $this->container = $container ?? new Container($app);
-        $this->stateManager = $stateManager ?? new StateManager;
-        $this->commandHandler = $commandHandler ?? new CommandHandler;
-        $this->processManager = $processManager ?? new ProcessManager($app);
+        $this->stateManager = $stateManager ?? $this->container->getStateManager();
+        $this->commandHandler = $commandHandler ?? $this->container->getCommandHandler();
+        $this->processManager = $processManager ?? $this->container->getProcessManager();
+        $this->eventBus = $eventBus ?? $this->container->getEventBus();
 
         $this->setupEventListeners();
         $this->registerShutdownHandlers();
@@ -60,12 +64,6 @@ class Swarm
      */
     public static function createFromEnvironment(Application $app): self
     {
-        // Setup LoggerRegistry from Application
-        LoggerRegistry::setLogger($app->logger());
-
-        // Set the EventBus instance to ensure all components use the same one
-        EventBus::setInstance(EventBus::getInstance());
-
         return new self($app);
     }
 
@@ -161,7 +159,7 @@ class Swarm
     protected function setupEventListeners(): void
     {
         // Handle user input events
-        $this->subscribe(UserInputEvent::class, function (UserInputEvent $event) {
+        $this->eventBus->on(UserInputEvent::class, function (UserInputEvent $event) {
             $this->handleUserInput($event->input);
         });
     }
@@ -206,24 +204,24 @@ class Swarm
     protected function processCommand(CommandResult $result): void
     {
         switch ($result->action) {
-            case 'exit':
+            case CommandAction::Exit:
                 $this->shutdown();
                 break;
-            case 'save_state':
+            case CommandAction::SaveState:
                 $this->saveState();
                 $this->container->getUI()->showNotification('State saved to .swarm.json', 'success');
                 break;
-            case 'clear_state':
+            case CommandAction::ClearState:
                 $this->clearState();
                 break;
-            case 'clear_history':
+            case CommandAction::ClearHistory:
                 // Clear history in UI
                 $this->container->getUI()->refresh(['history' => []]);
                 break;
-            case 'show_help':
+            case CommandAction::ShowHelp:
                 $this->container->getUI()->showNotification($result->getMessage() ?? '', 'info');
                 break;
-            case 'error':
+            case CommandAction::Error:
                 $this->container->getUI()->showNotification($result->getError() ?? 'Command failed', 'error');
                 break;
         }
@@ -275,24 +273,25 @@ class Swarm
         }
 
         foreach ($updates as $update) {
-            $processId = $update['processId'];
+            $payload = $update->toArray();
+            $processId = $update->processId ?? '';
 
             $this->logDebug('Processing update from worker', [
                 'processId' => $processId,
-                'type' => $update['type'],
-                'status' => $update['status'] ?? null,
+                'type' => $update->type->value,
+                'status' => $update->status(),
             ]);
 
             // Emit progress events for UI updates
-            $this->emit(new ProcessProgressEvent(
+            $this->eventBus->emit(new ProcessProgressEvent(
                 processId: $processId,
-                type: $update['type'],
-                data: $update
+                type: $update->type->value,
+                data: $payload
             ));
 
             // Handle state_sync updates to update task list
-            if ($update['type'] === 'state_sync' && isset($update['data'])) {
-                $data = $update['data'];
+            if ($update->type === WorkerUpdateType::StateSync && isset($payload['data'])) {
+                $data = $payload['data'];
 
                 // Update synced state with task data
                 if (isset($data['tasks'])) {
@@ -315,8 +314,8 @@ class Swarm
             }
 
             // Handle completion
-            if ($update['type'] === 'status' && $update['status'] === 'completed') {
-                $this->handleProcessComplete($processId, $update);
+            if ($update->isCompletedStatus()) {
+                $this->handleProcessComplete($processId, $payload);
             }
         }
     }
@@ -336,7 +335,7 @@ class Swarm
                 ];
 
                 // UI will update via events
-                $this->emit(new ProcessCompleteEvent($processId, $response));
+                $this->eventBus->emit(new ProcessCompleteEvent($processId, $response));
             }
         }
 
@@ -374,7 +373,7 @@ class Swarm
      */
     protected function emitStateUpdate(): void
     {
-        $this->emit(new StateUpdateEvent(
+        $this->eventBus->emit(new StateUpdateEvent(
             tasks: $this->syncedState['tasks'] ?? [],
             currentTask: $this->syncedState['current_task'] ?? null,
             conversationHistory: $this->syncedState['conversation_history'] ?? [],

@@ -4,8 +4,10 @@ namespace HelgeSverre\Swarm\Tools;
 
 use Exception;
 use FilesystemIterator;
+use HelgeSverre\Swarm\Contracts\FileAccessPolicy;
 use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Core\ToolResponse;
+use HelgeSverre\Swarm\Exceptions\PathNotAllowedException;
 use InvalidArgumentException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -18,7 +20,8 @@ class Grep extends Tool
         protected readonly int $maxResults = 1000,
         protected readonly int $maxFileSize = 10 * 1024 * 1024, // 10MB
         protected readonly array $excludePatterns = ['.git', 'node_modules', 'vendor', '.cache', 'tmp'],
-        protected readonly bool $preferNativeRipgrep = true
+        protected readonly bool $preferNativeRipgrep = true,
+        protected readonly ?FileAccessPolicy $fileAccessPolicy = null,
     ) {}
 
     public function name(): string
@@ -61,7 +64,14 @@ class Grep extends Tool
         $include = $params['include'] ?? null;
 
         // Validate and normalize the search path
-        $searchPath = $this->validateAndNormalizePath($path);
+        try {
+            $searchPath = $this->fileAccessPolicy
+                ? $this->fileAccessPolicy->validateSearchPath($path)
+                : $this->validateAndNormalizePath($path);
+        } catch (PathNotAllowedException $e) {
+            return ToolResponse::error($e->getMessage());
+        }
+
         if (! $searchPath) {
             return ToolResponse::error("Invalid or inaccessible path: {$path}");
         }

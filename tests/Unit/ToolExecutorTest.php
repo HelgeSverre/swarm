@@ -2,6 +2,9 @@
 
 use HelgeSverre\Swarm\Core\ToolExecutor;
 use HelgeSverre\Swarm\Core\ToolResponse;
+use HelgeSverre\Swarm\Events\EventBus;
+use HelgeSverre\Swarm\Events\ToolCompletedEvent;
+use HelgeSverre\Swarm\Events\ToolStartedEvent;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
 
 test('can register and dispatch tools', function () {
@@ -72,4 +75,30 @@ test('logs failed tool execution', function () {
         'status' => 'failed',
         'error' => 'Tool failed',
     ]);
+});
+
+test('emits tool lifecycle events on the provided event bus', function () {
+    $eventBus = new EventBus;
+    $startedEvents = [];
+    $completedEvents = [];
+
+    $eventBus->on(ToolStartedEvent::class, function (ToolStartedEvent $event) use (&$startedEvents): void {
+        $startedEvents[] = $event;
+    });
+    $eventBus->on(ToolCompletedEvent::class, function (ToolCompletedEvent $event) use (&$completedEvents): void {
+        $completedEvents[] = $event;
+    });
+
+    $executor = ToolExecutor::createWithDefaultTools(eventBus: $eventBus);
+    $executor->registerTool('evented_tool', function ($params) {
+        return ToolResponse::success(['ok' => $params['value']]);
+    });
+
+    $executor->dispatch('evented_tool', ['value' => 42]);
+
+    expect($startedEvents)->toHaveCount(1)
+        ->and($startedEvents[0]->tool)->toBe('evented_tool')
+        ->and($completedEvents)->toHaveCount(1)
+        ->and($completedEvents[0]->tool)->toBe('evented_tool')
+        ->and($completedEvents[0]->result->getData())->toBe(['ok' => 42]);
 });

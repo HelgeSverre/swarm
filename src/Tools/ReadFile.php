@@ -2,8 +2,8 @@
 
 namespace HelgeSverre\Swarm\Tools;
 
+use HelgeSverre\Swarm\Contracts\FileAccessPolicy;
 use HelgeSverre\Swarm\Contracts\Tool;
-use HelgeSverre\Swarm\Core\PathChecker;
 use HelgeSverre\Swarm\Core\ToolResponse;
 use HelgeSverre\Swarm\Exceptions\PathNotAllowedException;
 use InvalidArgumentException;
@@ -11,7 +11,7 @@ use InvalidArgumentException;
 class ReadFile extends Tool
 {
     public function __construct(
-        protected readonly ?PathChecker $pathChecker = null
+        protected readonly ?FileAccessPolicy $fileAccessPolicy = null
     ) {}
 
     public function name(): string
@@ -43,10 +43,9 @@ class ReadFile extends Tool
     {
         $path = $params['path'] ?? throw new InvalidArgumentException('path required');
 
-        // Validate path if PathChecker is available
-        if ($this->pathChecker) {
+        if ($this->fileAccessPolicy) {
             try {
-                $validatedPath = $this->pathChecker->validatePath($path);
+                $validatedPath = $this->fileAccessPolicy->validateReadPath($path);
                 $path = $validatedPath;
             } catch (PathNotAllowedException $e) {
                 return ToolResponse::error($e->getMessage());

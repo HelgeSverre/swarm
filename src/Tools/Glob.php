@@ -4,8 +4,10 @@ namespace HelgeSverre\Swarm\Tools;
 
 use Exception;
 use FilesystemIterator;
+use HelgeSverre\Swarm\Contracts\FileAccessPolicy;
 use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Core\ToolResponse;
+use HelgeSverre\Swarm\Exceptions\PathNotAllowedException;
 use InvalidArgumentException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -14,7 +16,8 @@ class Glob extends Tool
 {
     public function __construct(
         protected readonly int $maxResults = 10000,
-        protected readonly array $excludePatterns = ['.git', 'node_modules', 'vendor', '.cache', 'tmp']
+        protected readonly array $excludePatterns = ['.git', 'node_modules', 'vendor', '.cache', 'tmp'],
+        protected readonly ?FileAccessPolicy $fileAccessPolicy = null,
     ) {}
 
     public function name(): string
@@ -52,7 +55,14 @@ class Glob extends Tool
         $path = $params['path'] ?? getcwd();
 
         // Validate and normalize the search path
-        $searchPath = $this->validateAndNormalizePath($path);
+        try {
+            $searchPath = $this->fileAccessPolicy
+                ? $this->fileAccessPolicy->validateSearchPath($path)
+                : $this->validateAndNormalizePath($path);
+        } catch (PathNotAllowedException $e) {
+            return ToolResponse::error($e->getMessage());
+        }
+
         if (! $searchPath) {
             return ToolResponse::error("Invalid or inaccessible path: {$path}");
         }

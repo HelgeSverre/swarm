@@ -3,8 +3,10 @@
 namespace HelgeSverre\Swarm\Core;
 
 use Exception;
+use HelgeSverre\Swarm\Contracts\FileAccessPolicy;
 use HelgeSverre\Swarm\Contracts\Tool;
 use HelgeSverre\Swarm\Contracts\Toolkit;
+use HelgeSverre\Swarm\Events\EventBus;
 use HelgeSverre\Swarm\Events\ToolCompletedEvent;
 use HelgeSverre\Swarm\Events\ToolStartedEvent;
 use HelgeSverre\Swarm\Exceptions\ToolNotFoundException;
@@ -15,13 +17,12 @@ use HelgeSverre\Swarm\Tools\Tavily\TavilyToolkit;
 use HelgeSverre\Swarm\Tools\Terminal;
 use HelgeSverre\Swarm\Tools\WebFetch;
 use HelgeSverre\Swarm\Tools\WriteFile;
-use HelgeSverre\Swarm\Traits\EventAware;
 use HelgeSverre\Swarm\Traits\Loggable;
 use Psr\Log\LoggerInterface;
 
 class ToolExecutor
 {
-    use EventAware, Loggable;
+    use Loggable;
 
     protected array $tools = [];
 
@@ -30,29 +31,25 @@ class ToolExecutor
     protected array $executionLog = [];
 
     public function __construct(
-        protected readonly ?LoggerInterface $logger = null
+        protected readonly ?LoggerInterface $logger = null,
+        protected readonly EventBus $eventBus = new EventBus,
     ) {}
 
     /**
      * Create a ToolExecutor instance with all default tools registered
      */
-    public static function createWithDefaultTools(?LoggerInterface $logger = null, ?PathChecker $pathChecker = null): self
+    public static function createWithDefaultTools(
+        ?LoggerInterface $logger = null,
+        ?FileAccessPolicy $fileAccessPolicy = null,
+        ?EventBus $eventBus = null,
+    ): self
     {
-        $executor = new self($logger);
+        $executor = new self($logger, $eventBus ?? new EventBus);
 
-        // Register filesystem tools with PathChecker if provided
-        if ($pathChecker) {
-            $executor->register(new ReadFile);
-            $executor->register(new WriteFile);
-            $executor->register(new Glob);
-            $executor->register(new Grep);
-        } else {
-            // Fallback for tools without path checking
-            $executor->register(new ReadFile);
-            $executor->register(new WriteFile);
-            $executor->register(new Glob);
-            $executor->register(new Grep);
-        }
+        $executor->register(new ReadFile($fileAccessPolicy));
+        $executor->register(new WriteFile($fileAccessPolicy));
+        $executor->register(new Glob(fileAccessPolicy: $fileAccessPolicy));
+        $executor->register(new Grep(fileAccessPolicy: $fileAccessPolicy));
 
         // Register non-filesystem tools
         $executor->register(new Terminal);
@@ -177,13 +174,13 @@ class ToolExecutor
 
         try {
             // Emit tool started event
-            $this->emit(new ToolStartedEvent($tool, $params));
+            $this->eventBus->emit(new ToolStartedEvent($tool, $params));
 
             $response = $this->tools[$tool]($params);
             $duration = microtime(true) - $startTime;
 
             // Emit tool completed event
-            $this->emit(new ToolCompletedEvent($tool, $params, $response, $duration));
+            $this->eventBus->emit(new ToolCompletedEvent($tool, $params, $response, $duration));
 
             $this->logExecution($logId, $tool, $params, 'completed', $response, $duration);
 

@@ -39,7 +39,7 @@ if ($input === false) {
 
 try {
     // Process the request with streaming updates
-    WorkerProcess::processRequest($input, $timeout);
+    WorkerProcess::processRequest($app, $input, $timeout);
     exit(0);
 } catch (Exception $e) {
     // Write error to stderr

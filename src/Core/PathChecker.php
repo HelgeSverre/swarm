@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace HelgeSverre\Swarm\Core;
 
+use HelgeSverre\Swarm\Contracts\FileAccessPolicy;
 use HelgeSverre\Swarm\Exceptions\PathNotAllowedException;
 use InvalidArgumentException;
 
 /**
  * Validates file system paths against project directory and allow-list
  */
-class PathChecker
+class PathChecker implements FileAccessPolicy
 {
     protected string $projectPath;
 
@@ -39,19 +40,7 @@ class PathChecker
             return false;
         }
 
-        // Always allow paths within project directory
-        if (str_starts_with($resolved, $this->projectPath . '/') || $resolved === $this->projectPath) {
-            return true;
-        }
-
-        // Check allow-list
-        foreach ($this->allowedPaths as $allowedPath) {
-            if (str_starts_with($resolved, $allowedPath . '/') || $resolved === $allowedPath) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->isResolvedPathAllowed($resolved);
     }
 
     /**
@@ -59,19 +48,60 @@ class PathChecker
      */
     public function validatePath(string $path): string
     {
+        return $this->validateReadPath($path);
+    }
+
+    public function validateReadPath(string $path): string
+    {
         $resolved = $this->resolvePath($path);
 
         if ($resolved === false) {
             throw new PathNotAllowedException("Path does not exist or is not accessible: {$path}");
         }
 
-        if (! $this->isAllowed($path)) {
-            throw new PathNotAllowedException(
-                "Path access denied. Only files within the project directory or allow-listed directories are permitted.\n" .
-                "Project directory: {$this->projectPath}\n" .
-                "Requested path: {$resolved}\n" .
-                'Use /add-dir command to add trusted directories to the allow-list.'
-            );
+        if (! $this->isResolvedPathAllowed($resolved)) {
+            throw $this->pathAccessDenied($resolved);
+        }
+
+        return $resolved;
+    }
+
+    public function validateWritePath(string $path): string
+    {
+        $normalized = $this->normalizePath($path);
+        $existingTarget = realpath($normalized);
+
+        if ($existingTarget !== false) {
+            if (! $this->isResolvedPathAllowed($existingTarget)) {
+                throw $this->pathAccessDenied($existingTarget);
+            }
+
+            return $existingTarget;
+        }
+
+        $parentDirectory = realpath(dirname($normalized));
+
+        if ($parentDirectory === false || ! is_dir($parentDirectory) || ! is_writable($parentDirectory)) {
+            throw new PathNotAllowedException("Parent directory does not exist or is not writable: " . dirname($normalized));
+        }
+
+        if (! $this->isResolvedPathAllowed($parentDirectory)) {
+            throw $this->pathAccessDenied($normalized);
+        }
+
+        return $normalized;
+    }
+
+    public function validateSearchPath(string $path): string
+    {
+        $resolved = $this->resolvePath($path);
+
+        if ($resolved === false || ! is_dir($resolved)) {
+            throw new PathNotAllowedException("Path does not exist or is not accessible: {$path}");
+        }
+
+        if (! $this->isResolvedPathAllowed($resolved)) {
+            throw $this->pathAccessDenied($resolved);
         }
 
         return $resolved;
@@ -158,5 +188,60 @@ class PathChecker
         }
 
         return realpath($path);
+    }
+
+    protected function normalizePath(string $path): string
+    {
+        $absolute = str_starts_with($path, '/')
+            ? $path
+            : $this->projectPath . '/' . ltrim($path, '/');
+
+        $segments = explode('/', str_replace('\\', '/', $absolute));
+        $normalized = [];
+
+        foreach ($segments as $index => $segment) {
+            if ($segment === '' && $index === 0) {
+                continue;
+            }
+
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+
+            if ($segment === '..') {
+                array_pop($normalized);
+
+                continue;
+            }
+
+            $normalized[] = $segment;
+        }
+
+        return '/' . implode('/', $normalized);
+    }
+
+    protected function isResolvedPathAllowed(string $resolved): bool
+    {
+        if (str_starts_with($resolved, $this->projectPath . '/') || $resolved === $this->projectPath) {
+            return true;
+        }
+
+        foreach ($this->allowedPaths as $allowedPath) {
+            if (str_starts_with($resolved, $allowedPath . '/') || $resolved === $allowedPath) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function pathAccessDenied(string $requestedPath): PathNotAllowedException
+    {
+        return new PathNotAllowedException(
+            "Path access denied. Only files within the project directory or allow-listed directories are permitted.\n" .
+            "Project directory: {$this->projectPath}\n" .
+            "Requested path: {$requestedPath}\n" .
+            'Use /add-dir command to add trusted directories to the allow-list.'
+        );
     }
 }

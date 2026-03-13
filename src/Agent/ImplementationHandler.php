@@ -26,7 +26,7 @@ class ImplementationHandler implements RequestHandler
         private readonly TaskManager $taskManager,
         private readonly ConversationBuffer $conversationBuffer,
         private readonly ?LoggerInterface $logger,
-        private readonly Closure $progressCallback,
+        private readonly AgentProgressReporter $progressReporter,
         private readonly Closure $llmCallback
     ) {}
 
@@ -310,7 +310,7 @@ class ImplementationHandler implements RequestHandler
      */
     protected function reportProgress(string $operation, array $details): void
     {
-        ($this->progressCallback)($operation, $details);
+        $this->progressReporter->report($operation, $details);
     }
 
     /**
