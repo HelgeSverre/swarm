@@ -2,6 +2,15 @@
 
 use HelgeSverre\Swarm\Tools\Terminal;
 
+beforeEach(function () {
+    $this->originalTerminalEnabled = getenv('TERMINAL_ENABLED');
+    putenv('TERMINAL_ENABLED=true');
+});
+
+afterEach(function () {
+    putenv($this->originalTerminalEnabled !== false ? "TERMINAL_ENABLED={$this->originalTerminalEnabled}" : 'TERMINAL_ENABLED');
+});
+
 test('terminal tool generates correct schema', function () {
     $tool = new Terminal;
     $schema = $tool->toOpenAISchema();

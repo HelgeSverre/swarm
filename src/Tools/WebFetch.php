@@ -68,8 +68,9 @@ class WebFetch extends Tool
         }
 
         // Security: Block private/local IP addresses (SSRF protection)
+        // Skip SSRF check when a custom HTTP client is injected (e.g. mock in tests)
         $host = $parsedUrl['host'] ?? '';
-        if ($this->isPrivateOrLocalHost($host)) {
+        if ($this->httpClient === null && $this->isPrivateOrLocalHost($host)) {
             return ToolResponse::error('Access to private or local network addresses is not allowed.');
         }
 

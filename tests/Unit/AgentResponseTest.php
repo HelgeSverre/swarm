@@ -9,8 +9,8 @@ test('can create success response', function () {
     expect($response->isSuccess())->toBeTrue();
 });
 
-test('returns empty string for null message', function () {
-    $response = new AgentResponse;
+test('returns empty string for default response', function () {
+    $response = new AgentResponse('', success: false);
 
     expect($response->getMessage())->toBe('');
     expect($response->isSuccess())->toBeFalse();

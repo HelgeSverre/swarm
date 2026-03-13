@@ -65,6 +65,9 @@ test('required parameters are correctly defined in schemas', function () {
 });
 
 test('tools can be dispatched with function call parameters', function () {
+    $originalEnv = getenv('TERMINAL_ENABLED');
+    putenv('TERMINAL_ENABLED=true');
+
     $executor = ToolExecutor::createWithDefaultTools();
     $executor->register(new Terminal);
 
@@ -77,6 +80,8 @@ test('tools can be dispatched with function call parameters', function () {
 
     expect($result->isSuccess())->toBeTrue()
         ->and($result->getData()['stdout'])->toContain('Hello from function call');
+
+    putenv($originalEnv !== false ? "TERMINAL_ENABLED={$originalEnv}" : 'TERMINAL_ENABLED');
 });
 
 test('default parameters work correctly when not provided in function call', function () {
