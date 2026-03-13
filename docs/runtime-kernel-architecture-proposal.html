@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Swarm Runtime Kernel Architecture Proposal</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: #fffaf2;
+      --ink: #1f1e1a;
+      --muted: #5e5a52;
+      --line: #d8cdbd;
+      --accent: #9b5b2a;
+      --accent-soft: #f2dec7;
+      --danger: #a3362a;
+      --ok: #2c6b4f;
+      --shadow: 0 12px 30px rgba(77, 53, 26, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      background:
+        radial-gradient(circle at top left, rgba(155, 91, 42, 0.10), transparent 26%),
+        linear-gradient(180deg, #f9f2e8 0%, var(--bg) 100%);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+
+    main {
+      width: min(1100px, calc(100vw - 32px));
+      margin: 28px auto 60px;
+    }
+
+    .hero,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px 30px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -100px -100px auto;
+      width: 260px;
+      height: 260px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(155, 91, 42, 0.14), transparent 70%);
+      pointer-events: none;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 10px;
+      line-height: 1.1;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.4rem);
+      letter-spacing: -0.03em;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      margin-bottom: 14px;
+    }
+
+    p {
+      margin: 0 0 12px;
+      color: var(--muted);
+    }
+
+    code {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.92em;
+      background: #f6ebdf;
+      padding: 0.1rem 0.35rem;
+      border-radius: 6px;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-bottom: 14px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .panel {
+      padding: 22px 22px 20px;
+      margin-top: 18px;
+    }
+
+    .lead {
+      font-size: 1.08rem;
+      max-width: 780px;
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      padding-left: 14px;
+      color: var(--ink);
+      font-weight: 600;
+      margin-top: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    .card h3 {
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+
+    .good {
+      color: var(--ok);
+      font-weight: 700;
+    }
+
+    .bad {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .diagram {
+      margin-top: 10px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .layer {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(246, 236, 223, 0.65));
+    }
+
+    .layer-title {
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 10px;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.8);
+      font-size: 0.92rem;
+      color: var(--ink);
+    }
+
+    ol {
+      margin: 12px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    li + li {
+      margin-top: 9px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-top: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--ink);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .footer {
+      margin-top: 18px;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="badge">Primary Recommendation</div>
+      <h1>Introduce a Shared Runtime Kernel</h1>
+      <p class="lead">
+        Replace the current parent-process graph, worker-process graph, and global service singletons with one explicit
+        composition root that builds the same service graph for both execution modes. Make runtime boundaries typed,
+        inject policy explicitly, and move orchestration into narrow adapters.
+      </p>
+      <p class="callout">
+        One change, applied consistently: <code>RuntimeKernel</code> becomes the only place where services are wired,
+        policies are chosen, and process/UI adapters are attached.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Why This Change First</h2>
+      <div class="grid three">
+        <article class="card">
+          <h3>Fixes split-brain runtime state</h3>
+          <p>
+            Parent and worker stop assembling different graphs. Both receive a <code>RuntimeContext</code> built from the same rules.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Centralizes file access policy</h3>
+          <p>
+            Filesystem tools no longer invent their own path rules. They all depend on one injected <code>FileAccessPolicy</code>.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Removes hidden globals</h3>
+          <p>
+            Eventing and logging become constructor dependencies, not static registries that vary by initialization order.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Target Shape</h2>
+      <div class="diagram">
+        <div class="layer">
+          <div class="layer-title">Presentation Adapters</div>
+          <div class="chips">
+            <span class="chip">CLI Shell Adapter</span>
+            <span class="chip">Worker Stream Adapter</span>
+            <span class="chip">TUI Presenter</span>
+            <span class="chip">TUI Renderer</span>
+            <span class="chip">Input Controller</span>
+          </div>
+        </div>
+        <div class="layer">
+          <div class="layer-title">Application Layer</div>
+          <div class="chips">
+            <span class="chip">RuntimeKernel</span>
+            <span class="chip">RuntimeContext</span>
+            <span class="chip">RequestPipeline</span>
+            <span class="chip">HandlerRegistry</span>
+            <span class="chip">CommandDispatcher</span>
+            <span class="chip">WorkerMessageMapper</span>
+          </div>
+        </div>
+        <div class="layer">
+          <div class="layer-title">Domain Services</div>
+          <div class="chips">
+            <span class="chip">AgentSession</span>
+            <span class="chip">ConversationStore</span>
+            <span class="chip">TaskStore</span>
+            <span class="chip">RequestClassifier</span>
+            <span class="chip">PromptCatalog</span>
+            <span class="chip">ToolPolicy</span>
+          </div>
+        </div>
+        <div class="layer">
+          <div class="layer-title">Infrastructure</div>
+          <div class="chips">
+            <span class="chip">OpenAI Client Adapter</span>
+            <span class="chip">State File Store</span>
+            <span class="chip">Process Transport</span>
+            <span class="chip">Terminal Driver</span>
+            <span class="chip">Filesystem Tools</span>
+            <span class="chip">HTTP/Web Tools</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Core Interfaces</h2>
+      <div class="grid two">
+        <article class="card">
+          <h3>Composition Root</h3>
+          <p><code>RuntimeKernel::forCli(AppConfig $config, ProjectContext $project)</code></p>
+          <p><code>RuntimeKernel::forWorker(AppConfig $config, ProjectContext $project, StreamSink $sink)</code></p>
+          <p>Both methods return the same <code>RuntimeContext</code> shape.</p>
+        </article>
+        <article class="card">
+          <h3>Shared Policy Contracts</h3>
+          <p><code>FileAccessPolicy</code>, <code>EventPublisher</code>, <code>LogSink</code>, <code>StateStore</code>, <code>PromptCatalog</code></p>
+          <p>These replace per-class ad hoc choices and static service lookups.</p>
+        </article>
+        <article class="card">
+          <h3>Typed Boundaries</h3>
+          <p><code>CliCommand</code>, <code>CommandAction</code>, <code>WorkerMessage</code>, <code>WorkerMessageType</code></p>
+          <p>Commands and worker updates stop being loose string protocols.</p>
+        </article>
+        <article class="card">
+          <h3>Narrower Agent Core</h3>
+          <p><code>CodingAgent</code> becomes a thin facade over <code>RequestPipeline</code>, <code>RequestClassifier</code>, and <code>HandlerRegistry</code>.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Before vs After</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Concern</th>
+            <th>Current</th>
+            <th>Proposed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Service wiring</td>
+            <td><span class="bad">Different graphs</span> in <code>Swarm</code>, <code>Container</code>, and <code>WorkerProcess</code></td>
+            <td><span class="good">One graph</span> from <code>RuntimeKernel</code></td>
+          </tr>
+          <tr>
+            <td>Filesystem policy</td>
+            <td><span class="bad">Spread across tools</span>, cwd checks, optional <code>PathChecker</code></td>
+            <td><span class="good">One injected policy</span> used by every filesystem tool</td>
+          </tr>
+          <tr>
+            <td>Events and logs</td>
+            <td><span class="bad">Static globals</span> with hidden lifecycle</td>
+            <td><span class="good">Explicit dependencies</span> per runtime context</td>
+          </tr>
+          <tr>
+            <td>Command/update contracts</td>
+            <td><span class="bad">Stringly typed</span> and prone to drift</td>
+            <td><span class="good">Enums or message DTOs</span> with one mapper</td>
+          </tr>
+          <tr>
+            <td>Agent coordination</td>
+            <td><span class="bad">God module</span> with manual handler creation</td>
+            <td><span class="good">Pipeline + registry</span> with smaller services</td>
+          </tr>
+          <tr>
+            <td>TUI design</td>
+            <td><span class="bad">All concerns in one class</span></td>
+            <td><span class="good">Presenter + renderer + terminal driver</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Concrete Migration Sequence</h2>
+      <ol>
+        <li>
+          Build <code>RuntimeKernel</code> and <code>RuntimeContext</code> without changing behavior. Make both
+          <code>Swarm</code> and <code>WorkerProcess</code> resolve services from it.
+        </li>
+        <li>
+          Introduce <code>FileAccessPolicy</code> and inject it into <code>ReadFile</code>, <code>WriteFile</code>,
+          <code>Glob</code>, and <code>Grep</code>. Remove duplicate cwd-based checks.
+        </li>
+        <li>
+          Replace <code>EventAware</code> and <code>Loggable</code> globals with injected <code>EventPublisher</code>
+          and <code>LogSink</code>. Keep adapters for temporary compatibility.
+        </li>
+        <li>
+          Split <code>CodingAgent</code> into <code>RequestPipeline</code>, <code>RequestClassifier</code>,
+          <code>HandlerRegistry</code>, and <code>ErrorRecoveryPolicy</code>.
+        </li>
+        <li>
+          Replace string actions and update types with typed messages. Make one translation point for UI and worker transport.
+        </li>
+        <li>
+          Break <code>FullTerminalUI</code> into <code>TerminalDriver</code>, <code>InputController</code>,
+          <code>TuiViewModel</code>, and <code>TuiRenderer</code>.
+        </li>
+      </ol>
+    </section>
+
+    <section class="panel">
+      <h2>Minimal New Structure</h2>
+      <div class="grid two">
+        <article class="card">
+          <h3>Suggested directories</h3>
+          <p><code>src/Application/Runtime/</code></p>
+          <p><code>src/Application/Pipeline/</code></p>
+          <p><code>src/Application/Contracts/</code></p>
+          <p><code>src/Infrastructure/State/</code></p>
+          <p><code>src/Infrastructure/Tools/</code></p>
+          <p><code>src/Presentation/CLI/</code></p>
+          <p><code>src/Presentation/TUI/</code></p>
+        </article>
+        <article class="card">
+          <h3>Likely first extractions</h3>
+          <p><code>RuntimeKernel</code></p>
+          <p><code>RuntimeContext</code></p>
+          <p><code>FileAccessPolicy</code></p>
+          <p><code>WorkerMessage</code></p>
+          <p><code>CommandAction</code></p>
+          <p><code>RequestPipeline</code></p>
+        </article>
+      </div>
+      <p class="footer">
+        This is intentionally evolutionary. The kernel lands first, then policy and message contracts, then the large-class splits.
+      </p>
+    </section>
+  </main>
+</body>
+</html>
