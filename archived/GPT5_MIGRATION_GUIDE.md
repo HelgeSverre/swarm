@@ -5,6 +5,7 @@
 This guide provides a comprehensive migration plan for upgrading the Swarm agent system from GPT-4.1 to GPT-5. GPT-5 represents a significant leap in capabilities with improved performance, unified architecture, and new API features that can substantially enhance your agent system.
 
 ## Table of Contents
+
 1. [GPT-5 vs GPT-4.1 Comparison](#gpt-5-vs-gpt-41-comparison)
 2. [API Changes and New Features](#api-changes-and-new-features)
 3. [Migration Requirements](#migration-requirements)
@@ -18,14 +19,14 @@ This guide provides a comprehensive migration plan for upgrading the Swarm agent
 
 ### Performance Improvements
 
-| Metric | GPT-4.1 | GPT-5 | Improvement |
-|--------|---------|-------|-------------|
-| AIME 2025 (Math) | ~70% | 94.6% | +35% |
-| SWE-bench Verified (Coding) | ~45% | 74.9% | +66% |
-| Aider Polyglot | ~60% | 88% | +47% |
-| Factual Errors | Baseline | 45% fewer | -45% |
-| Context Window | 128k tokens | 1M tokens | 8x |
-| Response Speed | Baseline | 30% faster | +30% |
+| Metric                      | GPT-4.1     | GPT-5      | Improvement |
+| --------------------------- | ----------- | ---------- | ----------- |
+| AIME 2025 (Math)            | ~70%        | 94.6%      | +35%        |
+| SWE-bench Verified (Coding) | ~45%        | 74.9%      | +66%        |
+| Aider Polyglot              | ~60%        | 88%        | +47%        |
+| Factual Errors              | Baseline    | 45% fewer  | -45%        |
+| Context Window              | 128k tokens | 1M tokens  | 8x          |
+| Response Speed              | Baseline    | 30% faster | +30%        |
 
 ### Key Capability Enhancements
 
@@ -115,20 +116,22 @@ OPENAI_MAX_COMPLETION_TOKENS=4096
 
 ### Model Selection Strategy
 
-| Model | Use Case | Cost/1M tokens | Speed |
-|-------|----------|----------------|-------|
-| gpt-5-nano | Simple tasks, high volume | $1.50 | Fastest |
-| gpt-5-mini | Standard operations | $3.00 | Fast |
-| gpt-5 | Complex reasoning, critical tasks | $15.00 | Standard |
+| Model      | Use Case                          | Cost/1M tokens | Speed    |
+| ---------- | --------------------------------- | -------------- | -------- |
+| gpt-5-nano | Simple tasks, high volume         | $1.50          | Fastest  |
+| gpt-5-mini | Standard operations               | $3.00          | Fast     |
+| gpt-5      | Complex reasoning, critical tasks | $15.00         | Standard |
 
 ### Cost Optimization
 
 Migration typically reduces costs by 30-40% through:
+
 - Unified architecture eliminates multi-model overhead
 - Better first-attempt success rates reduce retries
 - Efficient token usage with improved understanding
 
 Example calculation for 10M tokens/day:
+
 - GPT-4.1 multi-model: ~$3,200/month
 - GPT-5-mini unified: ~$2,400/month
 - **Savings: $800/month (25%)**
@@ -152,12 +155,12 @@ class CodingAgent
         protected readonly string $reasoningEffort = 'medium',  // New
         protected readonly string $verbosity = 'medium'  // New
     ) {}
-    
+
     // Updated OpenAI call with GPT-5 parameters
     protected function callOpenAI(string $prompt, ?string $systemPrompt = null): string
     {
         $messages = $this->buildMessagesWithHistory($prompt, $systemPrompt);
-        
+
         $parameters = [
             'model' => $this->model,
             'messages' => $messages,
@@ -166,12 +169,12 @@ class CodingAgent
             'verbosity' => $this->verbosity,  // New
             'max_completion_tokens' => 4096,  // Replaces max_tokens
         ];
-        
+
         // Enable Responses API for complex tasks
         if ($this->requiresChainOfThought($prompt)) {
             $parameters['use_responses_api'] = true;
         }
-        
+
         $result = $this->llmClient->chat()->create($parameters);
         // ... rest of implementation
     }
@@ -189,7 +192,7 @@ class ToolExecutor
     public function getToolSchemasForGPT5(): array
     {
         $schemas = [];
-        
+
         foreach ($this->tools as $tool) {
             if ($tool->supportsCustomFormat()) {
                 // Custom tool format for GPT-5
@@ -204,22 +207,22 @@ class ToolExecutor
                 $schemas[] = $tool->toOpenAISchema();
             }
         }
-        
+
         return $schemas;
     }
-    
+
     // Handle custom tool responses
     public function dispatchCustomTool(string $name, string $content): ToolResult
     {
         $tool = $this->tools[$name] ?? null;
-        
+
         if (!$tool) {
             throw new RuntimeException("Tool not found: {$name}");
         }
-        
+
         // Parse plaintext content based on tool type
         $parameters = $tool->parseCustomContent($content);
-        
+
         return $tool->execute($parameters);
     }
 }
@@ -236,12 +239,12 @@ protected function planTask(Task $task): void
         'task_id' => $task->id,
         'description' => $task->description
     ]);
-    
+
     $messages = $this->buildMessagesWithHistory(
         PromptTemplates::planTask($task->description, $this->buildContext()),
         PromptTemplates::planningSystemGPT5()  // Updated prompt
     );
-    
+
     $result = $this->llmClient->chat()->create([
         'model' => $this->model,
         'messages' => $messages,
@@ -253,10 +256,10 @@ protected function planTask(Task $task): void
             'json_schema' => $this->getTaskPlanSchema(),
         ],
     ]);
-    
+
     // Process enhanced planning with better accuracy
     $planData = json_decode($result->choices[0]->message->content, true);
-    
+
     // GPT-5 provides more reliable structured outputs
     $this->taskManager->planTask(
         $task->id,
@@ -297,11 +300,11 @@ IMPORTANT: Use CAPITALIZED TEXT for emphasis instead of markdown bold.
 Prefer bullet points over paragraphs for clarity.
 PROMPT;
     }
-    
+
     public static function executionSystemGPT5(array $tools): string
     {
         $toolList = implode("\n", array_map(fn($t) => "- {$t['name']}: {$t['description']}", $tools));
-        
+
         return <<<PROMPT
 You are executing coding tasks with GPT-5's enhanced capabilities.
 
@@ -350,13 +353,13 @@ public function processMultimodalRequest(array $inputs): AgentResponse
             ]
         ]
     ];
-    
+
     // Single GPT-5 call handles all modalities
     $response = $this->llmClient->chat()->create([
         'model' => 'gpt-5',
         'messages' => $messages,
     ]);
-    
+
     return AgentResponse::success($response->choices[0]->message->content);
 }
 ```
@@ -368,7 +371,7 @@ public function processMultimodalRequest(array $inputs): AgentResponse
 protected function determineReasoningEffort(string $taskDescription): string
 {
     $complexity = $this->assessComplexity($taskDescription);
-    
+
     return match($complexity) {
         'trivial' => 'minimal',
         'simple' => 'low',
@@ -386,7 +389,7 @@ protected function determineReasoningEffort(string $taskDescription): string
 protected function executeWithRetry(callable $operation, int $maxRetries = 2): mixed
 {
     $retries = 0;
-    
+
     while ($retries < $maxRetries) {
         try {
             return $operation();
@@ -395,9 +398,9 @@ protected function executeWithRetry(callable $operation, int $maxRetries = 2): m
                 // Switch to higher reasoning for retry
                 $this->reasoningEffort = 'high';
             }
-            
+
             $retries++;
-            
+
             if ($retries >= $maxRetries) {
                 throw $e;
             }
@@ -434,21 +437,21 @@ class GPT5BenchmarkTest extends TestCase
     public function test_code_generation_accuracy(): void
     {
         $results = [];
-        
+
         foreach (['gpt-4.1', 'gpt-5-mini'] as $model) {
             $agent = new CodingAgent(model: $model);
-            
+
             $start = microtime(true);
             $response = $agent->processRequest('Create a REST API controller');
             $duration = microtime(true) - $start;
-            
+
             $results[$model] = [
                 'duration' => $duration,
                 'token_usage' => $response->getTokenUsage(),
                 'success' => $response->isSuccess(),
             ];
         }
-        
+
         // GPT-5 should be faster and more efficient
         $this->assertLessThan(
             $results['gpt-4.1']['duration'],
@@ -465,10 +468,10 @@ class GPT5BenchmarkTest extends TestCase
 public function test_backward_compatibility(): void
 {
     $testCases = $this->loadHistoricalTestCases();
-    
+
     foreach ($testCases as $case) {
         $response = $this->agent->processRequest($case['input']);
-        
+
         $this->assertResponseQuality(
             $response,
             $case['expected_quality'],
@@ -481,24 +484,28 @@ public function test_backward_compatibility(): void
 ## Migration Checklist
 
 ### Phase 1: Preparation (Week 1)
+
 - [ ] Review current GPT-4.1 usage patterns
 - [ ] Identify high-impact migration targets
 - [ ] Set up GPT-5 API access
 - [ ] Create testing environment
 
 ### Phase 2: Implementation (Week 2-3)
+
 - [ ] Update CodingAgent with GPT-5 parameters
 - [ ] Implement custom tools support
 - [ ] Migrate prompt templates
 - [ ] Add multimodal capabilities
 
 ### Phase 3: Testing (Week 3-4)
+
 - [ ] Run parallel A/B tests
 - [ ] Benchmark performance improvements
 - [ ] Validate cost reductions
 - [ ] Test error handling
 
 ### Phase 4: Rollout (Week 4-5)
+
 - [ ] Deploy to staging environment
 - [ ] Monitor performance metrics
 - [ ] Gradual production rollout
@@ -507,21 +514,25 @@ public function test_backward_compatibility(): void
 ## Best Practices
 
 ### 1. Model Selection
+
 - Start with `gpt-5-mini` for initial migration
 - Use `gpt-5-nano` for high-volume, simple tasks
 - Reserve `gpt-5` for complex, critical operations
 
 ### 2. Reasoning Configuration
+
 - Use `minimal` reasoning for simple operations
 - Apply `medium` for standard tasks
 - Reserve `high` for complex planning and debugging
 
 ### 3. Cost Management
+
 - Monitor token usage closely during migration
 - Implement request batching where possible
 - Use prompt caching for repeated patterns
 
 ### 4. Error Handling
+
 - Implement graceful fallbacks during transition
 - Log all migration issues for analysis
 - Maintain GPT-4.1 as backup during initial rollout
@@ -531,6 +542,7 @@ public function test_backward_compatibility(): void
 Migrating to GPT-5 offers substantial improvements in performance, reliability, and cost-efficiency for your Swarm agent system. The unified architecture, enhanced reasoning capabilities, and custom tools feature will significantly improve your agent's ability to handle complex coding tasks.
 
 Key benefits:
+
 - **45% fewer errors** in factual accuracy
 - **30-40% cost reduction** through unified architecture
 - **8x larger context window** for complex projects

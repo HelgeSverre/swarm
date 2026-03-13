@@ -7,6 +7,7 @@ This document summarizes all changes made to prepare the Swarm codebase for publ
 ### Documentation Fixes
 
 #### README.md
+
 - **CLI Entrypoints**: Fixed usage instructions to reflect actual binary paths (`bin/cli` instead of `cli.php` and `bin/swarm`)
 - **Timeout Documentation**: Corrected composer timeout information (process-timeout: 0 = unlimited)
 - **Model Name**: Kept `gpt-4.1-nano` as default (confirmed as valid model)
@@ -16,10 +17,12 @@ This document summarizes all changes made to prepare the Swarm codebase for publ
 - **Security Section**: Added prominent security warnings about Terminal tool and SSRF protections
 
 #### CLAUDE.md
+
 - **ToolRouter → ToolExecutor**: Fixed class name references to match actual implementation
 - **Toolkit Support**: Added mention of toolkit support for ToolExecutor
 
 #### .env.example
+
 - **Removed Mistral**: Removed `MISTRAL_API_KEY` and `MISTRAL_MODEL` variables
 - **Added TERMINAL_ENABLED**: Added security flag (default: false)
 - **Cleaned API Keys**: Removed redaction markers, left empty for users to fill
@@ -27,11 +30,13 @@ This document summarizes all changes made to prepare the Swarm codebase for publ
 ### Security Hardening
 
 #### Terminal Tool (src/Tools/Terminal.php)
+
 - **Environment Gate**: Added `TERMINAL_ENABLED` check that fails by default
 - **Clear Error Message**: Returns helpful error when tool is disabled
 - **Default State**: Disabled for security (requires explicit opt-in)
 
 #### WebFetch Tool (src/Tools/WebFetch.php)
+
 - **Scheme Validation**: Only allows http/https schemes (blocks file://, php://, etc.)
 - **SSRF Protection**: Added `isPrivateOrLocalHost()` method to block:
   - Private IP ranges (RFC1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
@@ -44,15 +49,18 @@ This document summarizes all changes made to prepare the Swarm codebase for publ
 ### Dependency Management
 
 #### composer.json
+
 - **Moved spatie/ray**: Moved from `require` to `require-dev` (debugging tool, not runtime dependency)
 
 ### Repository Hygiene
 
 #### .gitignore
+
 - **Added logs/**: Ensures log directory is not committed
 - **.env**: Already present, verified
 
 #### New Files Created
+
 - **SECURITY.md**: Comprehensive security policy including:
   - Vulnerability reporting instructions
   - Terminal tool security considerations
@@ -62,13 +70,16 @@ This document summarizes all changes made to prepare the Swarm codebase for publ
   - Best practices for users
 
 #### Deleted Files
+
 - **review.md**: Removed temporary review file
 - **todo.txt**: Removed temporary todo file
 
 ### Configuration
 
 #### .env.example
+
 Added new security configuration:
+
 ```env
 TERMINAL_ENABLED=false
 ```
@@ -123,6 +134,7 @@ Based on the oracle's review, the following items were identified but not implem
 ## Public Release Readiness: ✅ READY
 
 The codebase is now ready for public release with:
+
 - Proper security controls on dangerous features
 - Accurate documentation
 - Clear security policy

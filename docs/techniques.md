@@ -36,7 +36,7 @@ Text: I think the vacation is okay.
 **Example**:
 
 ```
-A "whatpu" is a small, furry animal native to Tanzania. 
+A "whatpu" is a small, furry animal native to Tanzania.
 An example of a sentence that uses the word whatpu is:
 We were traveling in Africa and we saw these very cute whatpus.
 ```
@@ -51,7 +51,7 @@ We were traveling in Africa and we saw these very cute whatpus.
 **Example**:
 
 ```
-Problem: The odd numbers in this group add up to an even number: 15, 32, 5, 13, 82, 7, 1. 
+Problem: The odd numbers in this group add up to an even number: 15, 32, 5, 13, 82, 7, 1.
 Reasoning: Add all odd numbers: 15 + 5 + 13 + 7 + 1 = 41. 41 is odd, so NO.
 ```
 
@@ -484,7 +484,7 @@ Thought: "Based on the results, I need to..."
 ### Choosing Techniques
 
 | Task Type             | Recommended Technique      |
-|-----------------------|----------------------------|
+| --------------------- | -------------------------- |
 | Simple classification | Zero-shot                  |
 | Complex with examples | Few-shot                   |
 | Multi-step reasoning  | Chain-of-Thought           |
@@ -497,7 +497,7 @@ Thought: "Based on the results, I need to..."
 ### Cost Considerations
 
 | Technique        | Relative Cost | Why                   |
-|------------------|---------------|-----------------------|
+| ---------------- | ------------- | --------------------- |
 | Zero-shot        | Low           | Single call           |
 | Few-shot         | Low-Medium    | Longer prompts        |
 | CoT              | Medium        | Reasoning tokens      |
@@ -547,8 +547,8 @@ Thought: "Based on the results, I need to..."
 
 ---
 
-*This reference combines insights from promptingguide.ai and practical agent implementation patterns for building
-production-ready agentic systems.*
+_This reference combines insights from promptingguide.ai and practical agent implementation patterns for building
+production-ready agentic systems._
 
 Here’s an extraction of the **prompt templates** and **techniques** used in the agent application in `Cormanz/smartgpt`:
 
@@ -573,6 +573,7 @@ The `.fill()` method replaces placeholders (e.g., `[task]`, `[assets]`) with act
   `Personality: [personality]`
 
 - **CONCISE_PLAN**
+
   ```
   This is your task:
   [task]
@@ -588,6 +589,7 @@ The `.fill()` method replaces placeholders (e.g., `[task]`, `[assets]`) with act
   Guides the agent to spawn subtasks, using thoughts, reasoning, and self-criticism.
 
 - **Decision Prompt (for spawning agents, brainstorming, final response):**
+
   ```
   Focus on using thoughts, reasoning, and self-criticism to complete your goals.
 
@@ -617,12 +619,13 @@ The `.fill()` method replaces placeholders (e.g., `[task]`, `[assets]`) with act
   ```
 
 - **NEW_THOUGHTS**
+
   ```
   Your previous request gave back the response:
   [response]
   You may now make another decision, either `spawn_agent`, `brainstorm`, or `final_response`.
   Try to use `thoughts` to think about what your previous response gave you, your long-term ideas, and where to go next.
-  Assets: 
+  Assets:
   [assets]
 
   {
@@ -638,6 +641,7 @@ The `.fill()` method replaces placeholders (e.g., `[task]`, `[assets]`) with act
 #### In `methodical.rs`:
 
 - **SUMMARIZE_MEMORIES**
+
   ```
   Please summarize all important actions you took out.
   Please also summarize all observations of information you have collected.
@@ -655,6 +659,7 @@ The `.fill()` method replaces placeholders (e.g., `[task]`, `[assets]`) with act
   ```
 
 - **CREATE_PLAN**
+
   ```
   [tools]
 
@@ -674,8 +679,9 @@ The `.fill()` method replaces placeholders (e.g., `[task]`, `[assets]`) with act
   ```
 
 - **NEXT_STEP**
+
   ```
-  Now you will carry out the next step: 
+  Now you will carry out the next step:
   [step]
 
   You must carry out this step with one entire action.
@@ -697,6 +703,7 @@ The `.fill()` method replaces placeholders (e.g., `[task]`, `[assets]`) with act
   ```
 
 - **SAVE_ASSET**
+
   ```
   Now, you will write this asset:
   [asset]

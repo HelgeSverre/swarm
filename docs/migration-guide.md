@@ -31,6 +31,7 @@ Phase 4 (Weeks 7-8): Deployment
 ## Pre-Migration Checklist
 
 ### Prerequisites
+
 - [ ] PHP 8.3+ with all required extensions
 - [ ] Current Swarm agent running and tested
 - [ ] Database backup completed
@@ -38,6 +39,7 @@ Phase 4 (Weeks 7-8): Deployment
 - [ ] Performance baseline established
 
 ### Risk Assessment
+
 - [ ] Identify critical system dependencies
 - [ ] Document current performance metrics
 - [ ] Plan rollback procedures
@@ -53,6 +55,7 @@ Phase 4 (Weeks 7-8): Deployment
 **Objective**: Add chain-of-thought reasoning to request classification.
 
 **Files to Modify**:
+
 - `src/Prompts/PromptTemplates.php`
 - `src/Agent/CodingAgent.php`
 
@@ -66,7 +69,7 @@ Phase 4 (Weeks 7-8): Deployment
 /**
  * Chain-of-thought classification with reasoning transparency
  */
-public static function chainOfThoughtClassification(string $input): string 
+public static function chainOfThoughtClassification(string $input): string
 {
     return "Analyze this request using systematic reasoning:
 
@@ -78,7 +81,7 @@ REASONING PROCESS:
    - Are there any action verbs that indicate intent?
    - What technical terms or concepts are mentioned?
 
-2. INTENT ANALYSIS  
+2. INTENT ANALYSIS
    - What is the user ultimately trying to accomplish?
    - Is this a request for information or action?
    - What level of complexity is implied?
@@ -151,13 +154,14 @@ protected function classifyRequest(string $input): array
     if ($this->useEnhancedClassification) {
         return $this->classifyRequestWithCoT($input);
     }
-    
+
     // Fallback to original implementation
     return $this->originalClassifyRequest($input);
 }
 ```
 
 **Testing Strategy**:
+
 ```bash
 # Run classification tests
 composer test -- --filter=ClassificationTest
@@ -171,6 +175,7 @@ php tests/PromptTesting/ClassificationABTest.php
 **Objective**: Implement safety validation for tool execution.
 
 **New Files**:
+
 - `src/Core/ToolSafetyFramework.php`
 - `src/Core/RiskAssessment.php`
 - `src/Enums/RiskLevel.php`
@@ -212,21 +217,21 @@ class ToolSafetyFramework
             'format', '> /dev/', 'curl', 'wget'
         ],
         'write_file' => [
-            '.env', 'config.php', 'database.php', '.key', 
+            '.env', 'config.php', 'database.php', '.key',
             '.secret', 'passwd', 'shadow'
         ]
     ];
-    
+
     protected array $destructiveOperations = [
         'delete', 'remove', 'drop', 'truncate', 'destroy'
     ];
-    
+
     public function assessRisk(string $tool, array $params): RiskAssessment
     {
         $riskLevel = $this->calculateRiskLevel($tool, $params);
         $warnings = $this->identifyWarnings($tool, $params);
         $alternatives = $this->suggestSaferAlternatives($tool, $params);
-        
+
         return new RiskAssessment([
             'tool' => $tool,
             'parameters' => $params,
@@ -237,7 +242,7 @@ class ToolSafetyFramework
             'reasoning' => $this->explainRiskAssessment($tool, $params, $riskLevel)
         ]);
     }
-    
+
     protected function calculateRiskLevel(string $tool, array $params): RiskLevel
     {
         // Check for dangerous patterns
@@ -248,22 +253,22 @@ class ToolSafetyFramework
                 }
             }
         }
-        
+
         // Check for destructive operations
         foreach ($this->destructiveOperations as $operation) {
             if ($this->containsPattern($params, $operation)) {
                 return RiskLevel::MEDIUM;
             }
         }
-        
+
         // Check for system file access
         if ($this->accessesSystemFiles($tool, $params)) {
             return RiskLevel::MEDIUM;
         }
-        
+
         return RiskLevel::LOW;
     }
-    
+
     protected function containsPattern(array $params, string $pattern): bool
     {
         $searchString = strtolower(json_encode($params));
@@ -280,14 +285,14 @@ class ToolSafetyFramework
 protected function executeTask(Task $task): void
 {
     // ... existing code ...
-    
+
     if ($toolCall) {
         // Add safety assessment
         $safetyAssessment = $this->toolSafetyFramework->assessRisk(
-            $toolCall['name'], 
+            $toolCall['name'],
             $toolCall['arguments']
         );
-        
+
         if ($safetyAssessment->requires_confirmation) {
             $this->reportProgress('safety_warning', [
                 'message' => 'Operation requires safety review',
@@ -295,7 +300,7 @@ protected function executeTask(Task $task): void
                 'warnings' => $safetyAssessment->warnings,
                 'alternatives' => $safetyAssessment->alternatives
             ]);
-            
+
             // In production, this would prompt user for confirmation
             // For now, we'll log and proceed with caution
             $this->logger?->warning('High-risk operation detected', [
@@ -304,13 +309,14 @@ protected function executeTask(Task $task): void
                 'risk_assessment' => $safetyAssessment->toArray()
             ]);
         }
-        
+
         // Continue with existing tool execution...
     }
 }
 ```
 
 **Testing Strategy**:
+
 ```bash
 # Test safety framework
 composer test -- --filter=SafetyTest
@@ -324,6 +330,7 @@ php tests/Safety/DangerousOperationTest.php
 **Objective**: Implement smart context selection for better relevance.
 
 **New Files**:
+
 - `src/Core/ContextManager.php`
 - `src/Core/RelevanceScorer.php`
 
@@ -341,27 +348,27 @@ class ContextManager
 {
     protected RelevanceScorer $relevanceScorer;
     protected int $maxContextTokens;
-    
+
     public function __construct(RelevanceScorer $relevanceScorer, int $maxContextTokens = 4000)
     {
         $this->relevanceScorer = $relevanceScorer;
         $this->maxContextTokens = $maxContextTokens;
     }
-    
+
     public function buildOptimalContext(string $currentTask, array $fullHistory): array
     {
         // 1. Score all messages for relevance
         $scoredHistory = $this->scoreHistoryRelevance($fullHistory, $currentTask);
-        
+
         // 2. Select messages within token budget
         $selectedMessages = $this->selectWithinBudget($scoredHistory);
-        
+
         // 3. Add project context
         $projectContext = $this->analyzeProjectStructure();
-        
+
         // 4. Include recent errors for learning
         $errorContext = $this->extractRecentErrors($fullHistory);
-        
+
         return [
             'conversation_history' => $selectedMessages,
             'project_context' => $projectContext,
@@ -373,21 +380,21 @@ class ContextManager
             ]
         ];
     }
-    
+
     protected function scoreHistoryRelevance(array $history, string $currentTask): array
     {
         return array_map(function($message) use ($currentTask) {
             $relevanceScore = $this->relevanceScorer->calculateSimilarity(
-                $message['content'], 
+                $message['content'],
                 $currentTask
             );
-            
+
             // Apply recency boost (more recent = higher score)
             $recencyBoost = $this->calculateRecencyBoost($message['timestamp']);
-            
+
             // Apply role boost (errors and tool results are valuable for learning)
             $roleBoost = $this->calculateRoleBoost($message['role']);
-            
+
             return [
                 'message' => $message,
                 'relevance_score' => $relevanceScore,
@@ -397,27 +404,27 @@ class ContextManager
             ];
         }, $history);
     }
-    
+
     protected function selectWithinBudget(array $scoredHistory): array
     {
         // Sort by total score (highest first)
         usort($scoredHistory, fn($a, $b) => $b['total_score'] <=> $a['total_score']);
-        
+
         $selected = [];
         $currentTokens = 0;
-        
+
         foreach ($scoredHistory as $scoredMessage) {
             $messageTokens = $this->estimateMessageTokens($scoredMessage['message']);
-            
+
             if ($currentTokens + $messageTokens <= $this->maxContextTokens) {
                 $selected[] = $scoredMessage['message'];
                 $currentTokens += $messageTokens;
             }
         }
-        
+
         // Sort selected messages chronologically for context
         usort($selected, fn($a, $b) => $a['timestamp'] <=> $b['timestamp']);
-        
+
         return $selected;
     }
 }
@@ -438,44 +445,44 @@ class RelevanceScorer
         'medium' => ['create', 'implement', 'build', 'generate', 'code'],
         'low' => ['hello', 'thanks', 'please', 'help']
     ];
-    
+
     public function calculateSimilarity(string $text1, string $text2): float
     {
         // Simple keyword-based similarity (can be enhanced with embeddings later)
         $keywords1 = $this->extractKeywords($text1);
         $keywords2 = $this->extractKeywords($text2);
-        
+
         $intersection = array_intersect($keywords1, $keywords2);
         $union = array_unique(array_merge($keywords1, $keywords2));
-        
+
         if (empty($union)) {
             return 0.0;
         }
-        
+
         // Jaccard similarity with keyword weighting
         $weightedIntersection = $this->applyKeywordWeights($intersection);
         $weightedUnion = $this->applyKeywordWeights($union);
-        
+
         return $weightedIntersection / $weightedUnion;
     }
-    
+
     protected function extractKeywords(string $text): array
     {
         // Simple keyword extraction (tokenize and filter)
         $words = preg_split('/\W+/', strtolower($text));
-        
+
         // Remove stop words and short words
         $stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
-        
+
         return array_filter($words, function($word) use ($stopWords) {
             return strlen($word) > 2 && !in_array($word, $stopWords);
         });
     }
-    
+
     protected function applyKeywordWeights(array $keywords): float
     {
         $totalWeight = 0;
-        
+
         foreach ($keywords as $keyword) {
             if (in_array($keyword, $this->keywordWeights['high'])) {
                 $totalWeight += 3.0;
@@ -487,7 +494,7 @@ class RelevanceScorer
                 $totalWeight += 1.0;
             }
         }
-        
+
         return $totalWeight;
     }
 }
@@ -515,19 +522,19 @@ protected function buildMessagesWithHistory(string $currentPrompt, ?string $syst
 
     // Use enhanced context management
     $contextData = $this->contextManager->buildOptimalContext($currentPrompt, $this->conversationHistory);
-    
+
     $messages = [
         ['role' => 'system', 'content' => $systemPrompt],
     ];
-    
+
     // Add project context if available
     if (!empty($contextData['project_context'])) {
         $messages[] = [
-            'role' => 'system', 
+            'role' => 'system',
             'content' => 'Project Context: ' . json_encode($contextData['project_context'])
         ];
     }
-    
+
     // Add optimally selected conversation history
     foreach ($contextData['conversation_history'] as $msg) {
         if (!in_array($msg['role'], ['tool', 'error'])) {
@@ -537,18 +544,19 @@ protected function buildMessagesWithHistory(string $currentPrompt, ?string $syst
             ];
         }
     }
-    
+
     // Add current user message
     $messages[] = ['role' => 'user', 'content' => $currentPrompt];
-    
+
     // Log context optimization stats
     $this->logger?->debug('Context optimization', $contextData['context_stats']);
-    
+
     return $messages;
 }
 ```
 
 **Testing Strategy**:
+
 ```bash
 # Test context management
 composer test -- --filter=ContextTest
@@ -560,6 +568,7 @@ php tests/Performance/LongConversationTest.php
 ### Phase 1 Validation
 
 **Success Criteria**:
+
 - [ ] Classification accuracy improved by 20%+
 - [ ] Safety framework blocks dangerous operations
 - [ ] Context selection reduces irrelevant information by 40%+
@@ -568,6 +577,7 @@ php tests/Performance/LongConversationTest.php
 
 **Rollback Plan**:
 If any issues are detected:
+
 1. Set feature flags to false
 2. Revert to original implementations
 3. Investigate and fix issues
@@ -582,6 +592,7 @@ If any issues are detected:
 **Objective**: Implement separate analysis, planning, execution, and reflection channels.
 
 **New Files**:
+
 - `src/Enums/ReasoningPhase.php`
 - `src/Core/MultiChannelReasoning.php`
 - `src/ValueObjects/ReasoningResult.php`
@@ -599,7 +610,7 @@ namespace HelgeSverre\Swarm\Enums;
 enum ReasoningPhase: string
 {
     case ANALYSIS = 'analysis';
-    case PLANNING = 'planning';  
+    case PLANNING = 'planning';
     case EXECUTION = 'execution';
     case REFLECTION = 'reflection';
 }
@@ -621,41 +632,41 @@ class MultiChannelReasoning
 {
     protected $llmClient;
     protected $logger;
-    
+
     public function processTask(Task $task, array $context): ReasoningResult
     {
         $result = new ReasoningResult(['task' => $task]);
-        
+
         try {
             // Phase 1: Private Analysis (internal reasoning)
             $result->analysis = $this->privateAnalysis($task, $context);
-            
+
             // Phase 2: Structured Planning (user-visible)
             $result->planning = $this->structuredPlanning($task, $result->analysis);
-            
+
             // Phase 3: Guided Execution (tool usage)
             $result->execution = $this->guidedExecution($task, $result->planning);
-            
+
             // Phase 4: Reflection and Validation
             $result->reflection = $this->validateAndReflect($result);
-            
+
             return $result;
-            
+
         } catch (Exception $e) {
             $this->logger?->error('Multi-channel reasoning failed', [
                 'task_id' => $task->id,
                 'error' => $e->getMessage(),
                 'phase' => $result->getCurrentPhase()
             ]);
-            
+
             throw $e;
         }
     }
-    
+
     protected function privateAnalysis(Task $task, array $context): AnalysisResult
     {
         $prompt = PromptTemplates::privateAnalysis($task, $context);
-        
+
         $response = $this->llmClient->chat()->create([
             'model' => 'gpt-4',
             'messages' => [['role' => 'user', 'content' => $prompt]],
@@ -716,7 +727,7 @@ class MultiChannelReasoning
                 ]
             ]
         ]);
-        
+
         return new AnalysisResult(json_decode($response->choices[0]->message->content, true));
     }
 }
@@ -798,6 +809,7 @@ Provide a clear, structured plan that builds user confidence.";
 ```
 
 **Testing Strategy**:
+
 ```bash
 # Test multi-channel reasoning
 composer test -- --filter=MultiChannelTest
@@ -811,6 +823,7 @@ php tests/Integration/ComplexTaskTest.php
 **Objective**: Generate multiple reasoning paths and select the most consistent answer.
 
 **New Files**:
+
 - `src/Core/SelfConsistencyFramework.php`
 - `src/ValueObjects/ConsistentResult.php`
 
@@ -826,22 +839,22 @@ class SelfConsistencyFramework
 {
     protected $llmClient;
     protected int $defaultAttempts = 3;
-    
+
     public function generateConsistentSolution(string $problem, int $attempts = null): ConsistentResult
     {
         $attempts = $attempts ?? $this->defaultAttempts;
         $solutions = [];
-        
+
         // Generate multiple reasoning paths
         for ($i = 0; $i < $attempts; $i++) {
             $solution = $this->generateSingleSolution($problem, $i);
             $solutions[] = $solution;
         }
-        
+
         // Analyze consistency and select best answer
         return $this->selectMostConsistent($solutions);
     }
-    
+
     protected function generateSingleSolution(string $problem, int $attempt): ReasoningSolution
     {
         $approaches = [
@@ -849,9 +862,9 @@ class SelfConsistencyFramework
             1 => "Approach 2 - User Perspective: Consider the problem from the end user's perspective and work backwards.",
             2 => "Approach 3 - Edge Case Analysis: Start by identifying edge cases and potential failures, then build a robust solution."
         ];
-        
+
         $approach = $approaches[$attempt] ?? $approaches[0];
-        
+
         $prompt = "REASONING ATTEMPT #{$attempt + 1}:
 
 PROBLEM: {$problem}
@@ -901,9 +914,9 @@ Provide your complete reasoning and final solution.";
                 ]
             ]
         ]);
-        
+
         $data = json_decode($response->choices[0]->message->content, true);
-        
+
         return new ReasoningSolution([
             'attempt' => $attempt,
             'approach' => $data['approach_used'],
@@ -913,24 +926,24 @@ Provide your complete reasoning and final solution.";
             'potential_issues' => $data['potential_issues'] ?? []
         ]);
     }
-    
+
     protected function selectMostConsistent(array $solutions): ConsistentResult
     {
         // Calculate consistency scores between solutions
         $consistencyMatrix = $this->calculateConsistencyMatrix($solutions);
-        
+
         // Find the solution with highest average consistency
         $consistencyScores = array_map(function($i) use ($consistencyMatrix) {
             $scores = array_column($consistencyMatrix[$i], 'score');
             return array_sum($scores) / count($scores);
         }, array_keys($solutions));
-        
+
         $bestIndex = array_keys($consistencyScores, max($consistencyScores))[0];
         $bestSolution = $solutions[$bestIndex];
-        
+
         // Extract consensus points
         $consensus = $this->extractConsensus($solutions);
-        
+
         return new ConsistentResult([
             'selected_solution' => $bestSolution,
             'all_solutions' => $solutions,
@@ -940,11 +953,11 @@ Provide your complete reasoning and final solution.";
             'agreement_level' => $this->calculateAgreementLevel($solutions)
         ]);
     }
-    
+
     protected function calculateConsistencyMatrix(array $solutions): array
     {
         $matrix = [];
-        
+
         for ($i = 0; $i < count($solutions); $i++) {
             $matrix[$i] = [];
             for ($j = 0; $j < count($solutions); $j++) {
@@ -955,15 +968,15 @@ Provide your complete reasoning and final solution.";
                 }
             }
         }
-        
+
         return $matrix;
     }
-    
+
     protected function compareSolutions(ReasoningSolution $solution1, ReasoningSolution $solution2): array
     {
         // Simple similarity comparison (can be enhanced with more sophisticated methods)
         $similarity = $this->calculateTextSimilarity($solution1->solution, $solution2->solution);
-        
+
         return [
             'score' => $similarity,
             'reasoning' => "Solutions have {$similarity}% similarity"
@@ -975,6 +988,7 @@ Provide your complete reasoning and final solution.";
 ### Phase 2 Validation
 
 **Success Criteria**:
+
 - [ ] Multi-channel reasoning provides clearer task breakdown
 - [ ] Self-consistency improves solution quality by 25%+
 - [ ] Error recovery reduces failed executions by 50%+
@@ -990,6 +1004,7 @@ Provide your complete reasoning and final solution.";
 **Objective**: Implement comprehensive monitoring for production deployment.
 
 **New Files**:
+
 - `src/Monitoring/PromptPerformanceMonitor.php`
 - `src/Monitoring/MetricsCollector.php`
 
@@ -1005,7 +1020,7 @@ class PromptPerformanceMonitor
 {
     protected MetricsCollector $metrics;
     protected array $thresholds;
-    
+
     public function __construct(MetricsCollector $metrics)
     {
         $this->metrics = $metrics;
@@ -1016,7 +1031,7 @@ class PromptPerformanceMonitor
             'token_efficiency' => 0.80   // 80%
         ];
     }
-    
+
     public function trackExecution(PromptExecution $execution): void
     {
         $this->metrics->record([
@@ -1029,15 +1044,15 @@ class PromptPerformanceMonitor
             'user_satisfaction' => $execution->userFeedback,
             'timestamp' => microtime(true)
         ]);
-        
+
         // Real-time threshold checking
         $this->checkThresholds($execution);
     }
-    
+
     public function generateDailyReport(): PerformanceReport
     {
         $data = $this->metrics->query('24h');
-        
+
         return new PerformanceReport([
             'period' => '24h',
             'total_executions' => count($data),
@@ -1049,19 +1064,19 @@ class PromptPerformanceMonitor
             'recommendations' => $this->generateRecommendations($data)
         ]);
     }
-    
+
     protected function checkThresholds(PromptExecution $execution): void
     {
         $alerts = [];
-        
+
         if ($execution->responseTime > $this->thresholds['response_time']) {
             $alerts[] = "Slow response time: {$execution->responseTime}s";
         }
-        
+
         if (!$execution->success) {
             $alerts[] = "Execution failed: {$execution->errorType}";
         }
-        
+
         if (!empty($alerts)) {
             $this->triggerAlert($execution, $alerts);
         }
@@ -1074,6 +1089,7 @@ class PromptPerformanceMonitor
 **Objective**: Implement production-grade security measures.
 
 **Enhanced Files**:
+
 - `src/Core/ToolSafetyFramework.php` (add more sophisticated checks)
 - `src/Security/SecurityValidator.php` (new)
 
@@ -1090,31 +1106,31 @@ class SecurityValidator
     protected array $maliciousPatterns = [
         // Code injection
         '/eval\s*\(/i',
-        '/exec\s*\(/i', 
+        '/exec\s*\(/i',
         '/system\s*\(/i',
         '/shell_exec\s*\(/i',
-        
+
         // File system attacks
         '/\.\.\//',
         '/\.\.\\\\/',
         '/\/etc\/passwd/',
         '/\/etc\/shadow/',
-        
+
         // Network attacks
         '/curl\s+.*\|\s*sh/i',
         '/wget\s+.*\|\s*sh/i',
-        
+
         // SQL injection
         '/union\s+select/i',
         '/drop\s+table/i',
         '/delete\s+from/i',
-        
+
         // XSS patterns
         '/<script/i',
         '/javascript:/i',
         '/on\w+\s*=/i'
     ];
-    
+
     public function validateRequest(AgentRequest $request): SecurityValidation
     {
         $validations = [
@@ -1124,14 +1140,14 @@ class SecurityValidator
             'authentication' => $this->validateAuthentication($request),
             'authorization' => $this->checkAuthorization($request)
         ];
-        
+
         $riskLevel = $this->calculateRiskLevel($validations);
         $allPassed = array_reduce($validations, fn($carry, $v) => $carry && $v->passed, true);
-        
+
         if (!$allPassed || $riskLevel === RiskLevel::HIGH) {
             $this->logSecurityIncident($request, $validations, $riskLevel);
         }
-        
+
         return new SecurityValidation([
             'passed' => $allPassed && $riskLevel !== RiskLevel::HIGH,
             'validations' => $validations,
@@ -1139,18 +1155,18 @@ class SecurityValidator
             'recommendations' => $this->generateSecurityRecommendations($validations)
         ]);
     }
-    
+
     protected function scanForMaliciousContent(AgentRequest $request): ValidationResult
     {
         $content = $request->input . ' ' . json_encode($request->parameters);
         $detectedPatterns = [];
-        
+
         foreach ($this->maliciousPatterns as $pattern) {
             if (preg_match($pattern, $content)) {
                 $detectedPatterns[] = $pattern;
             }
         }
-        
+
         if (!empty($detectedPatterns)) {
             return new ValidationResult([
                 'passed' => false,
@@ -1159,7 +1175,7 @@ class SecurityValidator
                 'risk_level' => RiskLevel::HIGH
             ]);
         }
-        
+
         return new ValidationResult(['passed' => true]);
     }
 }
@@ -1168,6 +1184,7 @@ class SecurityValidator
 ### Phase 3 Validation
 
 **Success Criteria**:
+
 - [ ] Performance monitoring captures all metrics
 - [ ] Security validation blocks 100% of test attacks
 - [ ] System handles production load without degradation
@@ -1250,7 +1267,7 @@ if [ "$ENVIRONMENT" = "production" ]; then
     php artisan feature:enable enhanced_classification --percentage=10
     sleep 300  # Wait 5 minutes
     php artisan feature:enable enhanced_classification --percentage=50
-    sleep 300  # Wait 5 minutes  
+    sleep 300  # Wait 5 minutes
     php artisan feature:enable enhanced_classification --percentage=100
 fi
 
@@ -1280,7 +1297,7 @@ return [
             'token_usage' => ['threshold' => 100000, 'alert' => true]
         ]
     ],
-    
+
     'alerts' => [
         'email' => env('ALERT_EMAIL'),
         'slack' => env('ALERT_SLACK_WEBHOOK'),
@@ -1343,18 +1360,21 @@ echo "Rollback completed. System reverted to safe state."
 ## Success Metrics
 
 ### Performance Metrics
+
 - **Classification Accuracy**: Target 95%+ (baseline: 75%)
 - **Response Time**: Target <3s (baseline: 5s)
 - **Error Recovery**: Target 90% auto-recovery (baseline: 40%)
 - **User Satisfaction**: Target 90%+ (baseline: 70%)
 
 ### Business Metrics
+
 - **Development Velocity**: Target 50% improvement
 - **Code Quality**: Target 30% fewer bugs
 - **Developer Adoption**: Target 95% team adoption
 - **Support Tickets**: Target 40% reduction
 
 ### Technical Metrics
+
 - **System Uptime**: Target 99.9%
 - **Security Incidents**: Target 0 breaches
 - **Performance Regression**: Target 0 degradation

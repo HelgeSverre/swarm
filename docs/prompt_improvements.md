@@ -36,11 +36,13 @@ This document synthesizes key insights from analyzing system prompts of leading 
 ### 1. Multi-Channel Reasoning (OpenAI O3)
 
 **Observation**: O3 uses separate reasoning channels for analysis vs. execution:
+
 - **Analysis Channel**: Private reasoning invisible to users
 - **Execution Channel**: User-visible actions and outputs
 - **Reflection Channel**: Validation and error correction
 
 **Application to Swarm**: Implement structured reasoning phases:
+
 ```php
 enum ReasoningPhase {
     case ANALYSIS;      // Private reasoning about the request
@@ -53,12 +55,14 @@ enum ReasoningPhase {
 ### 2. Context-Aware Prompting (Claude Sonnet 4)
 
 **Observation**: Claude uses sophisticated context management:
+
 - Dynamic context selection based on task type
 - Relevance scoring for conversation history
 - Project-specific context injection
 - Memory consolidation for long conversations
 
 **Application to Swarm**: Implement smart context filtering:
+
 ```php
 class ContextManager {
     public function buildRelevantContext(string $taskType, array $history): array {
@@ -75,12 +79,14 @@ class ContextManager {
 ### 3. Safety-First Tool Execution (Warp 2.0)
 
 **Observation**: Warp validates every tool execution:
+
 - Malicious operation detection
 - User confirmation for destructive actions
 - Dependency validation before execution
 - Rollback capabilities for failed operations
 
 **Application to Swarm**: Implement comprehensive safety framework:
+
 ```php
 class ToolSafetyFramework {
     public function validateOperation(string $tool, array $params): SafetyResult {
@@ -97,12 +103,14 @@ class ToolSafetyFramework {
 ### 4. Structured Output with Validation (Canvas)
 
 **Observation**: Canvas uses multiple structured output formats:
+
 - Task-specific schemas with validation
 - Progressive iteration with error recovery
 - Format validation with automatic retry
 - User feedback integration loops
 
 **Application to Swarm**: Enhanced structured outputs with validation:
+
 ```php
 class StructuredOutputManager {
     public function generateWithValidation(string $prompt, array $schema): Result {
@@ -115,7 +123,7 @@ class StructuredOutputManager {
             }
             $prompt = $this->enhancePromptWithErrors($prompt, $validation->getErrors());
         } while (++$attempts < 3);
-        
+
         throw new ValidationException("Failed to generate valid output after 3 attempts");
     }
 }
@@ -124,6 +132,7 @@ class StructuredOutputManager {
 ### 5. Error Recovery and Learning (Multiple Systems)
 
 **Observation**: Leading systems implement sophisticated error recovery:
+
 - Pattern recognition for common failures
 - Automatic retry with modified approaches
 - Learning from error contexts
@@ -136,6 +145,7 @@ class StructuredOutputManager {
 **Technique**: Generate multiple reasoning paths and select the most consistent answer.
 
 **Implementation**:
+
 ```php
 public static function selfConsistentClassification(string $input): string {
     return "Analyze this request using multiple reasoning approaches:
@@ -163,17 +173,18 @@ Respond with your analysis for each approach, then the final decision.";
 **Technique**: Break complex explanations into digestible chunks with user control.
 
 **Implementation**:
+
 ```php
 public static function progressiveExplanation(string $concept, int $depth = 1): string {
     $levels = [
         1 => "Provide a simple, one-sentence explanation",
-        2 => "Add key concepts and basic examples", 
+        2 => "Add key concepts and basic examples",
         3 => "Include technical details and edge cases",
         4 => "Provide comprehensive analysis with code examples"
     ];
-    
+
     return "Explain '{$concept}' at depth level {$depth}:
-    
+
 {$levels[$depth]}
 
 If the user wants more detail, they can ask for the next level.
@@ -186,10 +197,11 @@ Focus on clarity and practical understanding.";
 **Technique**: Score tool appropriateness before execution.
 
 **Implementation**:
+
 ```php
 public static function confidenceBasedToolSelection(array $availableTools, string $task): string {
     $toolList = implode(', ', $availableTools);
-    
+
     return "For the task: \"{$task}\"
 
 Available tools: {$toolList}
@@ -211,6 +223,7 @@ Respond in JSON format with your analysis and final tool selection.";
 **Technique**: Learn from errors and adapt approach dynamically.
 
 **Implementation**:
+
 ```php
 public static function reflexiveErrorRecovery(Exception $error, array $context): string {
     return "An error occurred during task execution:
@@ -237,6 +250,7 @@ Based on your reflection, provide:
 **Technique**: Choose optimal prompts based on task characteristics.
 
 **Implementation**:
+
 ```php
 public static function selectOptimalTemplate(array $taskCharacteristics): string {
     $characteristics = [
@@ -245,9 +259,9 @@ public static function selectOptimalTemplate(array $taskCharacteristics): string
         'user_expertise' => $taskCharacteristics['user_expertise'] ?? 'intermediate',
         'time_sensitivity' => $taskCharacteristics['time_sensitivity'] ?? 'normal'
     ];
-    
+
     return "Select the optimal prompting approach for a task with these characteristics:
-    
+
 " . json_encode($characteristics, JSON_PRETTY_PRINT) . "
 
 Consider:
@@ -267,6 +281,7 @@ Recommend the best template type and any modifications needed.";
 #### 1.1 Enhanced Request Classification
 
 **Current**:
+
 ```php
 protected function classifyRequest(string $input): array {
     // Basic classification with simple JSON schema
@@ -274,6 +289,7 @@ protected function classifyRequest(string $input): array {
 ```
 
 **Enhanced**:
+
 ```php
 protected function classifyRequestWithCoT(string $input): array {
     $classification = $this->llmClient->chat()->create([
@@ -315,7 +331,7 @@ protected function classifyRequestWithCoT(string $input): array {
             ]
         ]
     ]);
-    
+
     return json_decode($classification->choices[0]->message->content, true);
 }
 ```
@@ -323,16 +339,17 @@ protected function classifyRequestWithCoT(string $input): array {
 #### 1.2 Smart Context Management
 
 **Implementation**:
+
 ```php
 class ContextManager {
     protected function scoreHistoryRelevance(array $message, string $currentTask): float {
         // Implement semantic similarity scoring
         $taskVector = $this->embedText($currentTask);
         $messageVector = $this->embedText($message['content']);
-        
+
         return $this->cosineSimilarity($taskVector, $messageVector);
     }
-    
+
     public function buildRelevantContext(string $task, array $history): array {
         $scoredHistory = array_map(function($msg) use ($task) {
             return [
@@ -340,10 +357,10 @@ class ContextManager {
                 'relevance' => $this->scoreHistoryRelevance($msg, $task)
             ];
         }, $history);
-        
+
         // Sort by relevance and take top N
         usort($scoredHistory, fn($a, $b) => $b['relevance'] <=> $a['relevance']);
-        
+
         return array_slice($scoredHistory, 0, 10);
     }
 }
@@ -360,7 +377,7 @@ class MultiChannelReasoning {
         $planningResult = $this->structuredPlanning($task, $analysisResult);
         $executionResult = $this->guidedExecution($planningResult);
         $reflectionResult = $this->validateAndReflect($executionResult);
-        
+
         return new ReasoningResult([
             'analysis' => $analysisResult,
             'planning' => $planningResult,
@@ -368,7 +385,7 @@ class MultiChannelReasoning {
             'reflection' => $reflectionResult
         ]);
     }
-    
+
     protected function privateAnalysis(string $task): AnalysisResult {
         $prompt = PromptTemplates::privateAnalysis($task);
         // This reasoning is not shown to the user
@@ -384,30 +401,30 @@ class ToolSafetyFramework {
     protected array $dangerousOperations = [
         'delete', 'remove', 'drop', 'truncate', 'rm', 'unlink'
     ];
-    
+
     protected array $destructiveTools = [
         'bash' => ['rm', 'sudo', 'chmod 777'],
         'write_file' => ['config', 'env', 'key']
     ];
-    
+
     public function validateToolExecution(string $tool, array $params): SafetyResult {
         $risks = [];
-        
+
         // Check for dangerous operations
         if ($this->containsDangerousOperations($tool, $params)) {
             $risks[] = 'Contains potentially dangerous operations';
         }
-        
+
         // Check for destructive patterns
         if ($this->isDestructiveOperation($tool, $params)) {
             $risks[] = 'May cause irreversible changes';
         }
-        
+
         // Check for sensitive file access
         if ($this->accessesSensitiveFiles($tool, $params)) {
             $risks[] = 'Accesses sensitive configuration files';
         }
-        
+
         return new SafetyResult([
             'safe' => empty($risks),
             'risks' => $risks,
@@ -425,26 +442,26 @@ class ToolSafetyFramework {
 ```php
 class ErrorRecoverySystem {
     protected array $errorPatterns = [];
-    
+
     public function handleError(Exception $error, ExecutionContext $context): RecoveryStrategy {
         $errorPattern = $this->identifyErrorPattern($error, $context);
-        
+
         if ($this->hasLearnedSolution($errorPattern)) {
             return $this->applyLearnedSolution($errorPattern);
         }
-        
+
         $recoveryOptions = $this->generateRecoveryOptions($error, $context);
         $selectedStrategy = $this->selectBestStrategy($recoveryOptions);
-        
+
         // Learn from this error for future reference
         $this->recordErrorPattern($errorPattern, $selectedStrategy);
-        
+
         return $selectedStrategy;
     }
-    
+
     protected function generateRecoveryOptions(Exception $error, ExecutionContext $context): array {
         $prompt = PromptTemplates::errorRecovery($error, $context);
-        
+
         $response = $this->llmClient->chat()->create([
             'model' => $this->model,
             'messages' => [['role' => 'user', 'content' => $prompt]],
@@ -477,7 +494,7 @@ class ErrorRecoverySystem {
                 ]
             ]
         ]);
-        
+
         return json_decode($response->choices[0]->message->content, true);
     }
 }
@@ -499,18 +516,18 @@ class PromptPerformanceMonitor {
             'timestamp' => time()
         ]);
     }
-    
+
     public function optimizePromptTemplate(string $template): string {
         $performance = $this->getTemplatePerformance($template);
-        
+
         if ($performance['success_rate'] < 0.85) {
             return $this->enhanceTemplateForReliability($template);
         }
-        
+
         if ($performance['avg_response_time'] > 5.0) {
             return $this->optimizeTemplateForSpeed($template);
         }
-        
+
         return $template; // Already performing well
     }
 }
@@ -546,21 +563,25 @@ class PromptPerformanceMonitor {
 ### Migration Timeline
 
 **Week 1-2: Foundation**
+
 - Implement enhanced classification with fallback to original
 - Add context management with configurable history limits
 - Create safety framework with optional validation
 
 **Week 3-4: Advanced Features**
+
 - Deploy multi-channel reasoning for complex tasks
 - Enable adaptive error recovery with learning disabled initially
 - Add structured output validation with retry mechanisms
 
 **Week 5-6: Optimization**
+
 - Enable learning systems with data collection
 - Implement performance monitoring and alerting
 - Fine-tune prompt templates based on performance data
 
 **Week 7-8: Full Deployment**
+
 - Enable all advanced features by default
 - Remove legacy fallback code
 - Document lessons learned and best practices
@@ -579,7 +600,7 @@ class AdvancedPromptTemplates extends PromptTemplates
     /**
      * Chain-of-thought classification with self-consistency
      */
-    public static function chainOfThoughtClassification(string $input): string 
+    public static function chainOfThoughtClassification(string $input): string
     {
         return "Analyze this request using systematic reasoning:
 
@@ -598,10 +619,10 @@ Provide step-by-step reasoning for each stage, then your final classification.";
     /**
      * Safety-aware tool execution prompt
      */
-    public static function safeToolExecution(string $toolName, array $params): string 
+    public static function safeToolExecution(string $toolName, array $params): string
     {
         $paramsJson = json_encode($params, JSON_PRETTY_PRINT);
-        
+
         return "Before executing {$toolName} with parameters:
 {$paramsJson}
 
@@ -622,7 +643,7 @@ Only proceed if the operation is safe or user has confirmed.";
     /**
      * Multi-step reasoning for complex tasks
      */
-    public static function structuredTaskReasoning(Task $task, array $context): string 
+    public static function structuredTaskReasoning(Task $task, array $context): string
     {
         return "Execute this task using structured reasoning:
 
@@ -656,7 +677,7 @@ Proceed step by step through this framework.";
     /**
      * Error recovery with learning
      */
-    public static function intelligentErrorRecovery(Exception $error, array $context): string 
+    public static function intelligentErrorRecovery(Exception $error, array $context): string
     {
         return "An error occurred. Use systematic error recovery:
 
@@ -690,12 +711,12 @@ Provide your analysis and recommended solution.";
     /**
      * Context-aware explanation prompt
      */
-    public static function adaptiveExplanation(string $concept, array $userContext): string 
+    public static function adaptiveExplanation(string $concept, array $userContext): string
     {
         $expertise = $userContext['expertise_level'] ?? 'intermediate';
         $timeConstraint = $userContext['time_constraint'] ?? 'normal';
         $preferredStyle = $userContext['explanation_style'] ?? 'practical';
-        
+
         return "Explain '{$concept}' adapted to the user's context:
 
 USER CONTEXT:

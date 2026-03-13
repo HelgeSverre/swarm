@@ -3,11 +3,13 @@
 ## System Architecture
 
 ### Overview
+
 Swarm is an AI-powered coding assistant that uses OpenAI's GPT models to understand natural language requests and execute coding tasks. The system is built with a modular architecture that separates concerns between request processing, task management, tool execution, and UI rendering.
 
 ### Core Flow
+
 ```
-1. User Input (CLI) 
+1. User Input (CLI)
    ↓
 2. Request Classification (CodingAgent)
    ↓
@@ -37,7 +39,9 @@ Swarm is an AI-powered coding assistant that uses OpenAI's GPT models to underst
 ## Component Details
 
 ### ModelCapabilities (src/Agent/ModelCapabilities.php)
+
 Static helper encapsulating model-specific API knowledge. Single source of truth for which parameters each model family supports:
+
 - `isReasoningModel(string $model): bool` — prefix-based detection for gpt-5*, o1*, o3*, o4-mini* (with exception for gpt-5-chat-latest)
 - `supportsTemperature(string $model): bool` — inverse of isReasoningModel
 - `supportsReasoningEffort(string $model): bool` — same as isReasoningModel
@@ -45,12 +49,15 @@ Static helper encapsulating model-specific API knowledge. Single source of truth
 - `buildRequestOptions(model, messages, options, reasoningEffort, verbosity): array` — builds correct API parameters per model, stripping unsupported ones
 
 **Key rules:**
+
 - GPT-5 reasoning models do NOT accept `temperature` (causes 400 error). Use `reasoning_effort` and `verbosity` instead.
 - `gpt-5-chat-latest` is a non-reasoning GPT-5 variant that behaves like GPT-4 (supports temperature, no reasoning_effort/verbosity).
 - o1/o3/o4-mini models are reasoning models with the same restrictions as GPT-5.
 
 ### CodingAgent (src/Agent/CodingAgent.php)
+
 The brain of the system. Uses multi-channel processing with handler delegation:
+
 - `processRequest()`: Main entry point, routes through channels with recovery
 - `processWithChannels()`: Multi-channel processing (analysis → classification → routing → execution)
 - `quickClassifyRequest()`: Fast pattern-based classification for simple requests
@@ -59,8 +66,10 @@ The brain of the system. Uses multi-channel processing with handler delegation:
 - `callLLMWithEnhancements()`: LLM call with retry logic, exponential backoff, and model-aware parameter handling via `ModelCapabilities`
 - `setProgressCallback()`: Sets callback for progress reporting
 
-### Request Handlers (src/Agent/*Handler.php)
+### Request Handlers (src/Agent/\*Handler.php)
+
 Handlers implement `RequestHandler` interface for clean separation:
+
 - `ImplementationHandler`: Code generation and task execution with tools
 - `DemonstrationHandler`: Code examples in markdown
 - `ExplanationHandler`: Educational content
@@ -68,40 +77,52 @@ Handlers implement `RequestHandler` interface for clean separation:
 - `ConversationHandler`: General conversation with context
 
 ### ConversationBuffer (src/Agent/ConversationBuffer.php)
+
 Intelligent context management with relevance-based selection:
+
 - `addMessage()`: Add messages with automatic memory management
 - `getOptimalContext()`: Get contextually relevant messages for a given query
 - `getRecentContext()`: Simple recent message retrieval
 
 ### ToolExecutor (src/Core/ToolExecutor.php)
+
 Manages tool registration and execution:
+
 - Maintains registry of available tools
 - Routes function calls to appropriate tool handlers
 - Logs all tool executions
 - Handles errors gracefully
 - Supports toolkits for grouped tool registration
 
-### Tool System (src/Tools/*)
+### Tool System (src/Tools/\*)
+
 Each tool is a class extending the abstract Tool class:
+
 - Implements required methods: `name()`, `description()`, `parameters()`, `execute()`
 - Auto-generates OpenAI function schemas via `toOpenAISchema()`
 - Examples: ReadFile, WriteFile, FindFiles, Search, Terminal
 
-### Task Management (src/Task/*)
+### Task Management (src/Task/\*)
+
 Type-safe task management with immutable objects:
+
 - `Task.php`: Immutable value object with readonly properties
 - `TaskStatus.php`: Enum with states (Pending, Planned, Executing, Completed)
 - `TaskManager.php`: Manages task queue with proper state transitions
 
 ### Prompt Management (src/Prompts/PromptTemplates.php)
+
 Centralized prompt templates for consistency:
+
 - Static methods returning type-safe prompt strings
 - System prompts for different modes (classification, planning, execution, etc.)
 - Task-related prompts with parameter injection
 - Code assistance prompts inspired by Claude Code patterns
 
 ### UI (src/CLI/UI.php)
+
 Manages the terminal UI:
+
 - ANSI escape codes for colors and positioning
 - Real-time updates without flicker
 - Input handling with readline support
@@ -110,11 +131,13 @@ Manages the terminal UI:
 ## PHP Code Style Preferences
 
 ### Class Member Visibility
+
 - **Use `protected` as the default visibility** instead of `private`
 - This allows for easier extension and testing
 - Only use `private` when absolutely necessary to prevent access
 
 ### PHP Version
+
 - Target PHP 8.3+ features
 - Use constructor property promotion
 - Use readonly properties where appropriate
@@ -124,23 +147,27 @@ Manages the terminal UI:
 - Use named arguments for clarity in complex method calls
 
 ### Code Organization
+
 - Follow PSR-4 autoloading standards
 - Use descriptive namespaces matching directory structure
 - Group related functionality into focused classes
 - Prefer composition over inheritance
 
 ### Testing
+
 - Use Pest for testing instead of PHPUnit
 - Write descriptive test names
 - Focus on behavior rather than implementation
 
 ### Logging
+
 - Use PSR-3 LoggerInterface for all logging
 - Log to files only in CLI applications to avoid UI interference
 - Use appropriate log levels (debug, info, warning, error)
 - Include contextual data in log messages
 
 ### Terminal UI (TUI) Specific
+
 - Always clear scrollback buffer when refreshing UI
 - Use subtle colors (grays) for borders
 - Ensure proper terminal size detection with fallbacks
@@ -148,11 +175,13 @@ Manages the terminal UI:
 - Position input areas carefully to avoid cutoff
 
 ### Dependencies
+
 - Prefer well-maintained packages
 - Use Laravel components where they make sense (Pint for formatting)
 - Keep composer.json organized with proper sections
 
 ### Error Handling
+
 - Use exceptions for exceptional cases
 - Provide meaningful error messages
 - Log errors with full context
@@ -161,6 +190,7 @@ Manages the terminal UI:
 ## Key Implementation Details
 
 ### Conversation History Management
+
 ```php
 // History is managed by ConversationBuffer with intelligent context selection
 // ConversationBuffer provides:
@@ -170,6 +200,7 @@ Manages the terminal UI:
 ```
 
 ### Progress Reporting System
+
 ```php
 // CodingAgent and ToolRouter support progress callbacks
 $agent->setProgressCallback(function($operation, $details) {
@@ -179,6 +210,7 @@ $agent->setProgressCallback(function($operation, $details) {
 ```
 
 ### Request Classification Schema
+
 ```php
 {
   'request_type' => enum['demonstration', 'implementation', 'explanation', 'query', 'conversation'],
@@ -189,6 +221,7 @@ $agent->setProgressCallback(function($operation, $details) {
 ```
 
 ### Task Planning Schema
+
 ```php
 {
   'plan_summary' => string,
@@ -203,6 +236,7 @@ $agent->setProgressCallback(function($operation, $details) {
 ```
 
 ### Task Value Object
+
 ```php
 readonly class Task {
     public string $id;
@@ -211,7 +245,7 @@ readonly class Task {
     public ?string $plan;
     public array $steps;
     public ?DateTimeImmutable $createdAt;
-    
+
     // Immutable state transitions
     public function withPlan(string $plan, array $steps): self
     public function startExecuting(): self
@@ -220,6 +254,7 @@ readonly class Task {
 ```
 
 ## Environment Variables
+
 - `OPENAI_API_KEY`: Required for OpenAI API access
 - `OPENAI_MODEL`: Model to use (default: gpt-4o-mini). Supports GPT-4, GPT-5, o1, o3, o4-mini families.
 - `OPENAI_TEMPERATURE`: Temperature setting (default: 0.7). Ignored for reasoning models (gpt-5*, o1*, o3*, o4-mini*).
@@ -231,6 +266,7 @@ readonly class Task {
 - `LOG_PATH`: Path for log files (default: storage/logs)
 
 ## Architecture Highlights
+
 - **Handler Pattern**: Request handling is delegated to focused handler classes via `RequestHandler` interface
 - **ConversationBuffer**: Intelligent context management replaces simple array-based history
 - **Self-Consistent Classification**: Multiple reasoning paths vote on request classification

@@ -1,4 +1,4 @@
-# 💮 Swarm 
+# 💮 Swarm
 
 AI-powered coding agent written in PHP that helps with development tasks through natural language.
 
@@ -150,6 +150,7 @@ src/
 ### How It Works
 
 1. **Request Processing Flow**:
+
    ```
    User Input → Request Classification → Route to Handler → Execute → Response
    ```
@@ -191,7 +192,9 @@ composer check
 ```
 
 ### Test Coverage
+
 The project has comprehensive test coverage including:
+
 - Unit tests for all core components
 - Feature tests for integration scenarios
 - Integration tests with real API calls
@@ -204,32 +207,39 @@ The project has comprehensive test coverage including:
 Environment variables (in `.env`):
 
 ### OpenAI Settings
+
 - `OPENAI_API_KEY`: Your OpenAI API key (required)
 - `OPENAI_MODEL`: Model to use (default: gpt-4.1-nano - or use gpt-4.1-mini)
 - `OPENAI_TEMPERATURE`: Temperature for responses (default: 0.7)
 
 ### API Integrations
+
 - `TAVILY_API_KEY`: API key for Tavily web search/extract tools (optional)
 
 ### Security Settings
+
 - `TERMINAL_ENABLED`: Enable/disable terminal command execution (default: false - disabled for security)
 
 ### Application Settings
+
 - `APP_ENV`: Application environment (local, production)
 - `DEBUG`: Enable debug mode (true/false)
 
-### Logging Settings  
+### Logging Settings
+
 - `LOG_ENABLED`: Enable file logging (true/false)
 - `LOG_PATH`: Log directory (default: logs)
 - `LOG_LEVEL`: Log level (debug, info, warning, error)
 
 ### Timeout Settings
+
 - `SWARM_REQUEST_TIMEOUT`: Per-request timeout in seconds (default: 600 = 10 minutes)
 - `SWARM_SUBPROCESS_TIMEOUT`: Subprocess timeout in seconds (default: 300 = 5 minutes)
 - `SWARM_HEARTBEAT_INTERVAL`: Heartbeat interval in seconds (default: 30)
 - `SWARM_TIMEOUT_RETRY_ENABLED`: Enable retry suggestion on timeout (default: true)
 
-**Note on Running the App**: 
+**Note on Running the App**:
+
 - The main CLI process runs with unlimited execution time
 - Individual requests and subprocesses have configurable timeouts (see `SWARM_REQUEST_TIMEOUT` and `SWARM_SUBPROCESS_TIMEOUT`)
 - Composer scripts also run with unlimited timeout (`process-timeout: 0`)
@@ -237,7 +247,9 @@ Environment variables (in `.env`):
 ## Advanced Features
 
 ### Request Classification
+
 The agent uses structured outputs to classify requests with confidence scores:
+
 ```json
 {
   "request_type": "demonstration",
@@ -248,7 +260,9 @@ The agent uses structured outputs to classify requests with confidence scores:
 ```
 
 ### Structured Task Planning
+
 Tasks are planned with detailed steps and complexity estimates:
+
 ```json
 {
   "plan_summary": "Create a REST API endpoint",
@@ -264,13 +278,16 @@ Tasks are planned with detailed steps and complexity estimates:
 ```
 
 ### Tool System
+
 Tools are registered with schemas for OpenAI function calling:
+
 - Abstract class-based design (extends `Tool`)
 - Automatic schema generation via `toOpenAISchema()`
 - Type validation and error handling
 - Easy to add new tools by implementing the interface
 
 Available tools:
+
 - **ReadFile**: Read contents of files with line numbers and path validation
 - **WriteFile**: Create or overwrite files with content and path validation
 - **Grep**: Search for patterns in files using regular expressions
@@ -281,7 +298,9 @@ Available tools:
 - **TavilyExtract**: Extract structured data from web pages
 
 ### Path Security System
+
 The PathChecker class provides secure file access control:
+
 - **Project Directory Protection**: Files are restricted to the project directory by default
 - **Allow-list Support**: Additional directories can be explicitly allowed
 - **Path Traversal Prevention**: Blocks attempts to access parent directories
@@ -289,7 +308,9 @@ The PathChecker class provides secure file access control:
 - **Real-time Validation**: All file operations are validated before execution
 
 ### Prompt Management
+
 All prompts are centralized in `PromptTemplates` class:
+
 - System prompts for different interaction modes
 - Task-related prompts (extraction, planning, execution)
 - Code assistance prompts (explain, refactor, debug, review, generate, document, test)

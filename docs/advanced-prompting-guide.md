@@ -60,12 +60,14 @@ The Swarm agent currently uses a three-stage process:
 ```
 
 **Strengths:**
+
 - Clear separation of concerns
 - Structured JSON outputs
 - Tool abstraction layer
 - Conversation history management
 
 **Limitations:**
+
 - Basic reasoning patterns
 - Limited error recovery
 - Static context management
@@ -80,7 +82,7 @@ Let's examine the existing template structure:
 public static function defaultSystem(array $availableTools = [], $agentName = 'Swarm'): string
 {
     $toolList = !empty($availableTools) ? implode(', ', $availableTools) : 'various coding tools';
-    
+
     return "You are '{$agentName}', an AI coding assistant...";
 }
 ```
@@ -93,6 +95,7 @@ public static function defaultSystem(array $availableTools = [], $agentName = 'S
 4. Consider how each template guides the LLM's behavior
 
 **Key Observations:**
+
 - Templates are static with minimal context adaptation
 - No chain-of-thought guidance
 - Limited error handling instructions
@@ -108,15 +111,15 @@ public function processRequest(string $userInput): AgentResponse
 {
     // 1. Add to conversation history
     $this->addToHistory('user', $userInput);
-    
+
     // 2. Classify the request
     $classification = $this->classifyRequest($userInput);
-    
+
     // 3. Route based on classification
     if ($classification['request_type'] === RequestType::Demonstration) {
         return $this->handleDemonstration($userInput);
     }
-    
+
     // 4. Extract and execute tasks if needed
     if ($classification['requires_tools']) {
         $tasks = $this->extractTasks($userInput);
@@ -135,7 +138,7 @@ public function testBasicRequestFlow()
 {
     $agent = new CodingAgent(/* dependencies */);
     $response = $agent->processRequest("Create a simple PHP class for user management");
-    
+
     // Add logging to trace the flow
     $this->assertInstanceOf(AgentResponse::class, $response);
 }
@@ -150,6 +153,7 @@ public function testBasicRequestFlow()
 The first improvement is adding structured reasoning to request classification.
 
 **Current Classification:**
+
 ```php
 protected function classifyRequest(string $input): array
 {
@@ -166,7 +170,7 @@ protected function classifyRequest(string $input): array
 
 ```php
 // New method in PromptTemplates.php
-public static function chainOfThoughtClassification(string $input): string 
+public static function chainOfThoughtClassification(string $input): string
 {
     return "Analyze this request using systematic reasoning:
 
@@ -242,6 +246,7 @@ Provide your reasoning for each step, then the final classification.";
 Next, we'll add safety validation to tool execution.
 
 **Current Tool Execution:**
+
 ```php
 // Basic function call without safety checks
 $toolCall = $this->callOpenAIWithFunctions($prompt, $this->getToolFunctions());
@@ -254,10 +259,10 @@ if ($toolCall) {
 
 ```php
 // New template for safe tool execution
-public static function safeToolExecution(string $toolName, array $params): string 
+public static function safeToolExecution(string $toolName, array $params): string
 {
     $paramsJson = json_encode($params, JSON_PRETTY_PRINT);
-    
+
     return "TOOL EXECUTION REQUEST:
 Tool: {$toolName}
 Parameters: {$paramsJson}
@@ -301,13 +306,13 @@ class ToolSafetyFramework
         'write_file' => ['.env', 'config', 'database', 'key', 'secret'],
         'terminal' => ['format', 'delete', 'drop']
     ];
-    
+
     public function assessRisk(string $tool, array $params): RiskAssessment
     {
         $riskLevel = $this->calculateRiskLevel($tool, $params);
         $warnings = $this->identifyWarnings($tool, $params);
         $alternatives = $this->suggestSaferAlternatives($tool, $params);
-        
+
         return new RiskAssessment([
             'level' => $riskLevel,
             'warnings' => $warnings,
@@ -315,7 +320,7 @@ class ToolSafetyFramework
             'requires_confirmation' => $riskLevel >= RiskLevel::MEDIUM
         ]);
     }
-    
+
     protected function calculateRiskLevel(string $tool, array $params): RiskLevel
     {
         // Check for dangerous patterns
@@ -326,12 +331,12 @@ class ToolSafetyFramework
                 }
             }
         }
-        
+
         // Check for file modifications
         if ($this->modifiesFiles($tool, $params)) {
             return RiskLevel::MEDIUM;
         }
-        
+
         return RiskLevel::LOW;
     }
 }
@@ -342,6 +347,7 @@ class ToolSafetyFramework
 Improve context selection for better relevance and token efficiency.
 
 **Current Context Building:**
+
 ```php
 protected function buildMessagesWithHistory(string $currentPrompt, ?string $systemPrompt = null): array
 {
@@ -364,16 +370,16 @@ class ContextManager
     {
         // 1. Score messages for relevance
         $scoredHistory = $this->scoreHistoryRelevance($fullHistory, $currentTask);
-        
+
         // 2. Select top relevant messages within token budget
         $selectedMessages = $this->selectByRelevanceAndBudget($scoredHistory, 4000);
-        
+
         // 3. Add project context if available
         $projectContext = $this->analyzeProjectStructure();
-        
+
         // 4. Include recent error context for learning
         $errorContext = $this->getRecentErrorPatterns();
-        
+
         return [
             'conversation_history' => $selectedMessages,
             'project_context' => $projectContext,
@@ -381,21 +387,21 @@ class ContextManager
             'task_context' => $this->extractTaskSpecificContext($currentTask)
         ];
     }
-    
+
     protected function scoreHistoryRelevance(array $history, string $currentTask): array
     {
         return array_map(function($message) use ($currentTask) {
             $relevanceScore = $this->calculateSemanticSimilarity(
-                $message['content'], 
+                $message['content'],
                 $currentTask
             );
-            
+
             // Boost score for recent messages
             $recencyBoost = $this->calculateRecencyBoost($message['timestamp']);
-            
+
             // Boost score for error messages (learning context)
             $errorBoost = $message['role'] === 'error' ? 0.2 : 0;
-            
+
             return [
                 'message' => $message,
                 'score' => $relevanceScore + $recencyBoost + $errorBoost
@@ -436,22 +442,22 @@ class MultiChannelReasoning
     public function processTask(Task $task): ReasoningResult
     {
         $result = new ReasoningResult();
-        
+
         // Phase 1: Private Analysis (not shown to user)
         $result->analysis = $this->privateAnalysis($task);
-        
+
         // Phase 2: Structured Planning (shown to user)
         $result->planning = $this->structuredPlanning($task, $result->analysis);
-        
+
         // Phase 3: Guided Execution (tool usage)
         $result->execution = $this->guidedExecution($result->planning);
-        
+
         // Phase 4: Reflection and Validation
         $result->reflection = $this->validateAndReflect($result->execution);
-        
+
         return $result;
     }
-    
+
     protected function privateAnalysis(Task $task): AnalysisResult
     {
         $prompt = "PRIVATE ANALYSIS (internal reasoning only):
@@ -504,17 +510,17 @@ class SelfConsistencyFramework
     public function generateConsistentSolution(string $problem, int $attempts = 3): ConsistentResult
     {
         $solutions = [];
-        
+
         // Generate multiple reasoning paths
         for ($i = 0; $i < $attempts; $i++) {
             $solution = $this->generateSingleSolution($problem, $i);
             $solutions[] = $solution;
         }
-        
+
         // Analyze consistency and select best answer
         return $this->selectMostConsistent($solutions);
     }
-    
+
     protected function generateSingleSolution(string $problem, int $attempt): ReasoningSolution
     {
         $prompt = "REASONING ATTEMPT #{$attempt}:
@@ -527,7 +533,7 @@ Use a different reasoning approach for this attempt:
 Think through the problem step by step and provide your solution.";
 
         $response = $this->callLLM($prompt);
-        
+
         return new ReasoningSolution([
             'attempt' => $attempt,
             'reasoning' => $response['reasoning'],
@@ -535,26 +541,26 @@ Think through the problem step by step and provide your solution.";
             'confidence' => $response['confidence']
         ]);
     }
-    
+
     protected function getReasoningApproach(int $attempt): string
     {
         $approaches = [
             0 => "Approach 1: Break down into smallest components",
-            1 => "Approach 2: Consider the problem from user perspective", 
+            1 => "Approach 2: Consider the problem from user perspective",
             2 => "Approach 3: Think about potential edge cases first"
         ];
-        
+
         return $approaches[$attempt] ?? $approaches[0];
     }
-    
+
     protected function selectMostConsistent(array $solutions): ConsistentResult
     {
         // Compare solutions for consistency
         $consistencyScores = $this->calculateConsistencyScores($solutions);
-        
+
         // Weight by confidence and consistency
         $bestSolution = $this->weightedSelection($solutions, $consistencyScores);
-        
+
         return new ConsistentResult([
             'selected_solution' => $bestSolution,
             'consistency_score' => max($consistencyScores),
@@ -573,10 +579,10 @@ Create test cases for problems with multiple valid approaches:
 public function testSelfConsistencyFramework()
 {
     $framework = new SelfConsistencyFramework();
-    
+
     $problem = "Design a user authentication system for a web application";
     $result = $framework->generateConsistentSolution($problem);
-    
+
     $this->assertGreaterThan(0.7, $result->consistency_score);
     $this->assertCount(3, $result->alternative_solutions);
 }
@@ -598,9 +604,9 @@ class ProgressiveDisclosure
             3 => $this->generateTechnicalDetails($concept, $userContext),
             4 => $this->generateImplementationExamples($concept, $userContext)
         ];
-        
+
         $initialLayer = $this->selectInitialLayer($userContext);
-        
+
         return new LayeredExplanation([
             'concept' => $concept,
             'current_layer' => $initialLayer,
@@ -608,12 +614,12 @@ class ProgressiveDisclosure
             'navigation_hints' => $this->generateNavigationHints($layers)
         ]);
     }
-    
+
     protected function selectInitialLayer(array $userContext): int
     {
         $expertise = $userContext['expertise_level'] ?? 'intermediate';
         $timeConstraint = $userContext['time_constraint'] ?? 'normal';
-        
+
         return match ($expertise) {
             'beginner' => 1,
             'intermediate' => 2,
@@ -621,7 +627,7 @@ class ProgressiveDisclosure
             default => 2
         };
     }
-    
+
     protected function generateOverview(string $concept): ExplanationLayer
     {
         $prompt = "Provide a simple, one-sentence overview of '{$concept}':
@@ -654,26 +660,26 @@ class ReflexiveLearning
 {
     protected array $errorPatterns = [];
     protected array $successPatterns = [];
-    
+
     public function handleError(Exception $error, ExecutionContext $context): RecoveryStrategy
     {
         // 1. Analyze the error
         $errorAnalysis = $this->analyzeError($error, $context);
-        
+
         // 2. Check for known patterns
         $knownPattern = $this->findMatchingPattern($errorAnalysis);
-        
+
         // 3. Generate recovery strategy
-        $recoveryStrategy = $knownPattern 
+        $recoveryStrategy = $knownPattern
             ? $this->applyLearnedStrategy($knownPattern)
             : $this->generateNewStrategy($errorAnalysis);
-        
+
         // 4. Learn from this experience
         $this->recordLearning($errorAnalysis, $recoveryStrategy);
-        
+
         return $recoveryStrategy;
     }
-    
+
     protected function analyzeError(Exception $error, ExecutionContext $context): ErrorAnalysis
     {
         $prompt = "REFLEXIVE ERROR ANALYSIS:
@@ -692,7 +698,7 @@ ANALYSIS FRAMEWORK:
 Provide systematic analysis for learning purposes.";
 
         $response = $this->callLLM($prompt);
-        
+
         return new ErrorAnalysis([
             'error' => $error,
             'context' => $context,
@@ -703,7 +709,7 @@ Provide systematic analysis for learning purposes.";
             'recovery_options' => $response['recovery_options']
         ]);
     }
-    
+
     protected function recordLearning(ErrorAnalysis $analysis, RecoveryStrategy $strategy): void
     {
         $pattern = [
@@ -713,9 +719,9 @@ Provide systematic analysis for learning purposes.";
             'confidence' => $strategy->success_probability,
             'timestamp' => time()
         ];
-        
+
         $this->errorPatterns[$analysis->pattern_signature] = $pattern;
-        
+
         // Clean up old patterns (keep last 100)
         if (count($this->errorPatterns) > 100) {
             $this->errorPatterns = array_slice($this->errorPatterns, -100, null, true);
@@ -732,15 +738,15 @@ Create an error scenario and test the learning system:
 public function testReflexiveLearning()
 {
     $learning = new ReflexiveLearning();
-    
+
     // Simulate an error
     $error = new RuntimeException("File not found: config.php");
     $context = new ExecutionContext(['tool' => 'read_file', 'path' => 'config.php']);
-    
+
     // First occurrence - should generate new strategy
     $strategy1 = $learning->handleError($error, $context);
     $this->assertInstanceOf(RecoveryStrategy::class, $strategy1);
-    
+
     // Second occurrence - should use learned strategy
     $strategy2 = $learning->handleError($error, $context);
     $this->assertEquals($strategy1->approach, $strategy2->approach);
@@ -762,15 +768,15 @@ abstract class SpecializedAgent
     protected string $specialty;
     protected array $capabilities;
     protected PromptTemplates $promptTemplates;
-    
+
     abstract public function canHandle(Task $task): bool;
     abstract public function execute(Task $task): AgentResult;
-    
+
     public function getSpecialty(): string
     {
         return $this->specialty;
     }
-    
+
     public function getCapabilities(): array
     {
         return $this->capabilities;
@@ -783,30 +789,30 @@ class CodeGenerationAgent extends SpecializedAgent
     protected string $specialty = 'code_generation';
     protected array $capabilities = [
         'generate_classes',
-        'generate_functions', 
+        'generate_functions',
         'generate_tests',
         'generate_documentation'
     ];
-    
+
     public function canHandle(Task $task): bool
     {
         $codeKeywords = ['create', 'generate', 'write', 'implement', 'build'];
         $taskDescription = strtolower($task->description);
-        
+
         return str_contains_any($taskDescription, $codeKeywords) &&
                str_contains_any($taskDescription, ['class', 'function', 'method', 'code']);
     }
-    
+
     public function execute(Task $task): AgentResult
     {
         $prompt = $this->promptTemplates->codeGeneration($task);
-        
+
         // Specialized code generation process
         $analysis = $this->analyzeCodeRequirements($task);
         $design = $this->designCodeStructure($analysis);
         $implementation = $this->generateImplementation($design);
         $validation = $this->validateGeneration($implementation);
-        
+
         return new AgentResult([
             'agent' => $this->specialty,
             'task' => $task,
@@ -827,13 +833,13 @@ class DebuggingAgent extends SpecializedAgent
         'fix_suggestion',
         'code_review'
     ];
-    
+
     public function canHandle(Task $task): bool
     {
         $debugKeywords = ['debug', 'fix', 'error', 'bug', 'issue', 'problem'];
         return str_contains_any(strtolower($task->description), $debugKeywords);
     }
-    
+
     public function execute(Task $task): AgentResult
     {
         // Specialized debugging process
@@ -841,7 +847,7 @@ class DebuggingAgent extends SpecializedAgent
         $rootCause = $this->findRootCause($errorAnalysis);
         $solutions = $this->generateSolutions($rootCause);
         $bestSolution = $this->selectBestSolution($solutions);
-        
+
         return new AgentResult([
             'agent' => $this->specialty,
             'task' => $task,
@@ -857,36 +863,36 @@ class DebuggingAgent extends SpecializedAgent
 class AgentCoordinator
 {
     protected array $specialists = [];
-    
+
     public function __construct(array $specialists)
     {
         $this->specialists = $specialists;
     }
-    
+
     public function delegateTask(Task $task): AgentResult
     {
         // Find the best specialist for this task
         $bestAgent = $this->selectBestAgent($task);
-        
+
         if (!$bestAgent) {
             throw new NoSuitableAgentException("No agent can handle task: {$task->description}");
         }
-        
+
         // Execute with the specialist
         $result = $bestAgent->execute($task);
-        
+
         // Post-process if needed
         return $this->postProcessResult($result);
     }
-    
+
     protected function selectBestAgent(Task $task): ?SpecializedAgent
     {
         $capableAgents = array_filter($this->specialists, fn($agent) => $agent->canHandle($task));
-        
+
         if (empty($capableAgents)) {
             return null;
         }
-        
+
         // Score agents based on specialty match
         $scoredAgents = array_map(function($agent) use ($task) {
             return [
@@ -894,9 +900,9 @@ class AgentCoordinator
                 'score' => $this->scoreAgentSuitability($agent, $task)
             ];
         }, $capableAgents);
-        
+
         usort($scoredAgents, fn($a, $b) => $b['score'] <=> $a['score']);
-        
+
         return $scoredAgents[0]['agent'];
     }
 }
@@ -912,24 +918,24 @@ class CollaborativeProblemSolver
 {
     protected AgentCoordinator $coordinator;
     protected ConversationManager $conversation;
-    
+
     public function solveCollaboratively(ComplexTask $task): CollaborativeResult
     {
         // 1. Break down the problem
         $subtasks = $this->decomposeTask($task);
-        
+
         // 2. Assign specialists to subtasks
         $assignments = $this->assignSubtasks($subtasks);
-        
+
         // 3. Execute with coordination
         $results = $this->executeCollaboratively($assignments);
-        
+
         // 4. Integrate results
         $integratedSolution = $this->integrateResults($results);
-        
+
         // 5. Validate final solution
         $validation = $this->validateIntegratedSolution($integratedSolution);
-        
+
         return new CollaborativeResult([
             'original_task' => $task,
             'subtasks' => $subtasks,
@@ -939,30 +945,30 @@ class CollaborativeProblemSolver
             'validation' => $validation
         ]);
     }
-    
+
     protected function executeCollaboratively(array $assignments): array
     {
         $results = [];
         $sharedContext = new SharedContext();
-        
+
         foreach ($assignments as $assignment) {
             $agent = $assignment['agent'];
             $subtask = $assignment['subtask'];
-            
+
             // Update agent with shared context
             $agent->updateContext($sharedContext);
-            
+
             // Execute subtask
             $result = $agent->execute($subtask);
             $results[] = $result;
-            
+
             // Update shared context with new information
             $sharedContext->addResult($result);
-            
+
             // Allow other agents to learn from this result
             $this->broadcastLearning($result, $assignments);
         }
-        
+
         return $results;
     }
 }
@@ -980,10 +986,10 @@ class DynamicAgentFactory
     {
         $requirements = $this->analyzeTaskRequirements($task);
         $agentSpec = $this->generateAgentSpecification($requirements);
-        
+
         return $this->buildAgent($agentSpec);
     }
-    
+
     protected function analyzeTaskRequirements(Task $task): TaskRequirements
     {
         $prompt = "TASK REQUIREMENTS ANALYSIS:
@@ -1000,7 +1006,7 @@ ANALYSIS FRAMEWORK:
 Provide detailed requirements analysis for creating a specialized agent.";
 
         $response = $this->callLLM($prompt);
-        
+
         return new TaskRequirements([
             'domain' => $response['domain'],
             'skills' => $response['skills'],
@@ -1009,7 +1015,7 @@ Provide detailed requirements analysis for creating a specialized agent.";
             'constraints' => $response['constraints']
         ]);
     }
-    
+
     protected function generateAgentSpecification(TaskRequirements $requirements): AgentSpecification
     {
         return new AgentSpecification([
@@ -1045,7 +1051,7 @@ class PromptPerformanceMonitor
 {
     protected MetricsCollector $metrics;
     protected array $performanceThresholds;
-    
+
     public function __construct(MetricsCollector $metrics)
     {
         $this->metrics = $metrics;
@@ -1056,7 +1062,7 @@ class PromptPerformanceMonitor
             'error_rate' => 0.10         // 10%
         ];
     }
-    
+
     public function trackPromptExecution(PromptExecution $execution): void
     {
         $this->metrics->record([
@@ -1068,15 +1074,15 @@ class PromptPerformanceMonitor
             'token_usage' => $execution->tokenUsage,
             'timestamp' => time()
         ]);
-        
+
         // Check for performance issues
         $this->checkPerformanceThresholds($execution);
     }
-    
+
     public function generatePerformanceReport(string $timeframe = '24h'): PerformanceReport
     {
         $data = $this->metrics->query($timeframe);
-        
+
         return new PerformanceReport([
             'timeframe' => $timeframe,
             'total_executions' => count($data),
@@ -1087,17 +1093,17 @@ class PromptPerformanceMonitor
             'improvement_opportunities' => $this->identifyImprovementOpportunities($data)
         ]);
     }
-    
+
     public function optimizeUnderperformingPrompts(): array
     {
         $underperformers = $this->identifyUnderperformingPrompts();
         $optimizations = [];
-        
+
         foreach ($underperformers as $prompt) {
             $optimization = $this->generateOptimization($prompt);
             $optimizations[] = $optimization;
         }
-        
+
         return $optimizations;
     }
 }
@@ -1115,29 +1121,29 @@ class PromptABTesting
             'status' => 'active',
             'target_sample_size' => 100
         ]);
-        
+
         return $test;
     }
-    
+
     public function executeTest(ABTest $test, array $testCases): ABTestResult
     {
         $results = [
             'base' => [],
             'variants' => array_fill_keys(array_keys($test->variants), [])
         ];
-        
+
         foreach ($testCases as $testCase) {
             // Randomly assign to base or variant
             $assignment = $this->randomAssignment($test);
-            
-            $prompt = $assignment === 'base' 
-                ? $test->base_prompt 
+
+            $prompt = $assignment === 'base'
+                ? $test->base_prompt
                 : $test->variants[$assignment];
-            
+
             $result = $this->executePrompt($prompt, $testCase);
             $results[$assignment][] = $result;
         }
-        
+
         return $this->analyzeResults($test, $results);
     }
 }
@@ -1154,7 +1160,7 @@ class ResourceManager
     protected array $connectionPools;
     protected TokenBudgetManager $tokenBudget;
     protected CacheManager $cache;
-    
+
     public function optimizeForScale(int $expectedConcurrency): void
     {
         // Configure connection pools
@@ -1163,14 +1169,14 @@ class ResourceManager
             'max_connections' => $expectedConcurrency * 2,
             'timeout' => 30
         ]);
-        
+
         // Set up token budget management
         $this->tokenBudget->setLimits([
             'per_request' => 8000,
             'per_minute' => 150000,
             'per_hour' => 1000000
         ]);
-        
+
         // Configure caching for frequently used patterns
         $this->cache->configure([
             'prompt_results' => ['ttl' => 3600], // 1 hour
@@ -1178,21 +1184,21 @@ class ResourceManager
             'context_embeddings' => ['ttl' => 7200] // 2 hours
         ]);
     }
-    
+
     public function handleRequest(AgentRequest $request): AgentResponse
     {
         // Check token budget
         if (!$this->tokenBudget->canProcess($request)) {
             return new AgentResponse(['error' => 'Rate limit exceeded']);
         }
-        
+
         // Try cache first
         $cacheKey = $this->generateCacheKey($request);
         $cached = $this->cache->get($cacheKey);
         if ($cached) {
             return $cached;
         }
-        
+
         // Process with resource management
         $connection = $this->connectionPools['llm']->getConnection();
         try {
@@ -1210,27 +1216,27 @@ class TokenBudgetManager
 {
     protected array $limits;
     protected array $usage;
-    
+
     public function canProcess(AgentRequest $request): bool
     {
         $estimatedTokens = $this->estimateTokenUsage($request);
-        
+
         return $this->checkLimits($estimatedTokens);
     }
-    
+
     protected function estimateTokenUsage(AgentRequest $request): int
     {
         // Estimate based on request type and complexity
         $baseTokens = 1000;
-        
+
         if ($request->type === 'code_generation') {
             $baseTokens *= 3;
         }
-        
+
         if ($request->includesHistory) {
             $baseTokens += count($request->history) * 100;
         }
-        
+
         return $baseTokens;
     }
 }
@@ -1246,7 +1252,7 @@ class SecurityFramework
 {
     protected array $securityPolicies;
     protected AuditLogger $auditLogger;
-    
+
     public function validateRequest(AgentRequest $request): SecurityValidation
     {
         $validations = [
@@ -1256,20 +1262,20 @@ class SecurityFramework
             'authentication' => $this->validateAuthentication($request),
             'authorization' => $this->checkAuthorization($request)
         ];
-        
+
         $allPassed = array_reduce($validations, fn($carry, $v) => $carry && $v->passed, true);
-        
+
         if (!$allPassed) {
             $this->auditLogger->logSecurityViolation($request, $validations);
         }
-        
+
         return new SecurityValidation([
             'passed' => $allPassed,
             'validations' => $validations,
             'risk_level' => $this->calculateRiskLevel($validations)
         ]);
     }
-    
+
     protected function detectMaliciousContent(AgentRequest $request): ValidationResult
     {
         $maliciousPatterns = [
@@ -1277,22 +1283,22 @@ class SecurityFramework
             '/eval\s*\(/i',
             '/exec\s*\(/i',
             '/system\s*\(/i',
-            
+
             // Path traversal
             '/\.\.\//',
             '/\.\.\\\\/',
-            
-            // SQL injection patterns  
+
+            // SQL injection patterns
             '/union\s+select/i',
             '/drop\s+table/i',
-            
+
             // XSS patterns
             '/<script/i',
             '/javascript:/i'
         ];
-        
+
         $content = $request->input . ' ' . json_encode($request->parameters);
-        
+
         foreach ($maliciousPatterns as $pattern) {
             if (preg_match($pattern, $content)) {
                 return new ValidationResult([
@@ -1302,20 +1308,20 @@ class SecurityFramework
                 ]);
             }
         }
-        
+
         return new ValidationResult(['passed' => true]);
     }
-    
+
     public function sanitizeOutput(AgentResponse $response): AgentResponse
     {
         // Remove any sensitive information from output
         $sanitized = $this->removeSensitiveData($response->content);
-        
+
         // Validate that generated code is safe
         if ($response->type === 'code_generation') {
             $sanitized = $this->validateGeneratedCode($sanitized);
         }
-        
+
         return $response->withContent($sanitized);
     }
 }
@@ -1336,7 +1342,7 @@ class AuditLogger
             'timestamp' => microtime(true)
         ]);
     }
-    
+
     public function logSecurityViolation(AgentRequest $request, array $validations): void
     {
         $this->log([
@@ -1378,7 +1384,7 @@ class EnvironmentConfig
                 'timeout' => 30
             ]
         ];
-        
+
         $environmentConfigs = [
             'development' => [
                 'llm' => [
@@ -1416,7 +1422,7 @@ class EnvironmentConfig
                 ]
             ]
         ];
-        
+
         return array_merge_recursive($baseConfig, $environmentConfigs[$environment] ?? []);
     }
 }
@@ -1436,13 +1442,13 @@ class DeploymentManager
             'health_check' => fn() => $this->runHealthCheck(),
             'enable_traffic' => fn() => $this->enableTraffic()
         ];
-        
+
         $results = [];
         foreach ($steps as $stepName => $stepFunction) {
             try {
                 $result = $stepFunction();
                 $results[$stepName] = $result;
-                
+
                 if (!$result->success) {
                     // Rollback on failure
                     $this->rollback($stepName, $results);
@@ -1454,7 +1460,7 @@ class DeploymentManager
                 break;
             }
         }
-        
+
         return new DeploymentResult([
             'version' => $version,
             'environment' => $environment,
@@ -1489,7 +1495,7 @@ class DeploymentManager
 class EcommerceAgent extends SpecializedAgent
 {
     protected string $specialty = 'ecommerce_development';
-    
+
     public function generateUserManagementSystem(EcommerceRequirements $requirements): SystemResult
     {
         // Multi-phase generation with specialized prompts
@@ -1500,15 +1506,15 @@ class EcommerceAgent extends SpecializedAgent
             'implementation' => $this->generateImplementation($requirements),
             'testing' => $this->generateTests($requirements)
         ];
-        
+
         $results = [];
         foreach ($phases as $phase => $phaseFunction) {
             $results[$phase] = $phaseFunction();
         }
-        
+
         return new SystemResult($results);
     }
-    
+
     protected function analyzeEcommerceRequirements(EcommerceRequirements $req): AnalysisResult
     {
         $prompt = "ECOMMERCE USER MANAGEMENT ANALYSIS:
@@ -1552,6 +1558,7 @@ Provide comprehensive analysis for each framework area.";
 ```
 
 **Results**:
+
 - 90% reduction in development time
 - Consistent code quality across components
 - Automatic compliance with security best practices
@@ -1572,15 +1579,15 @@ class LegacyModernizationAgent extends SpecializedAgent
     public function modernizeCodebase(LegacyCodebase $codebase): ModernizationResult
     {
         $modernizationPlan = $this->createModernizationPlan($codebase);
-        
+
         $results = [];
         foreach ($modernizationPlan->phases as $phase) {
             $results[] = $this->executeModernizationPhase($phase, $codebase);
         }
-        
+
         return new ModernizationResult($results);
     }
-    
+
     protected function createModernizationPlan(LegacyCodebase $codebase): ModernizationPlan
     {
         $prompt = "LEGACY MODERNIZATION PLANNING:
@@ -1623,6 +1630,7 @@ Create a detailed modernization plan with phases, risks, and mitigation strategi
 ```
 
 **Results**:
+
 - 60% faster modernization process
 - Reduced errors through systematic analysis
 - Comprehensive migration documentation
@@ -1634,7 +1642,7 @@ Create a detailed modernization plan with phases, risks, and mitigation strategi
 
 **Implementation**:
 
-```php
+````php
 // Code review agent with multiple analysis layers
 class CodeReviewAgent extends SpecializedAgent
 {
@@ -1647,10 +1655,10 @@ class CodeReviewAgent extends SpecializedAgent
             'architecture' => $this->reviewArchitecture($submission),
             'testing' => $this->reviewTestCoverage($submission)
         ];
-        
+
         $overallAssessment = $this->synthesizeReviews($reviews);
         $actionableRecommendations = $this->generateRecommendations($reviews);
-        
+
         return new CodeReviewResult([
             'individual_reviews' => $reviews,
             'overall_assessment' => $overallAssessment,
@@ -1658,7 +1666,7 @@ class CodeReviewAgent extends SpecializedAgent
             'approval_status' => $this->determineApprovalStatus($reviews)
         ]);
     }
-    
+
     protected function reviewSecurity(CodeSubmission $submission): SecurityReview
     {
         $prompt = "SECURITY CODE REVIEW:
@@ -1666,9 +1674,10 @@ class CodeReviewAgent extends SpecializedAgent
 CODE SUBMISSION:
 ```{$submission->language}
 {$submission->code}
-```
+````
 
 SECURITY ANALYSIS FRAMEWORK:
+
 1. INPUT VALIDATION
    □ Are all inputs properly validated?
    □ Is there protection against injection attacks?
@@ -1693,8 +1702,10 @@ Provide detailed security assessment with specific recommendations.";
 
         return $this->callLLM($prompt);
     }
+
 }
-```
+
+````
 
 **Results**:
 - 85% accuracy in identifying security issues
@@ -1741,7 +1752,7 @@ Check the solution for correctness and completeness.
 
 Work through each step systematically.";
     }
-    
+
     // Safety Templates
     public static function riskAssessment(string $operation, array $parameters): string
     {
@@ -1768,7 +1779,7 @@ RISK ANALYSIS:
 
 Provide risk level (LOW/MEDIUM/HIGH) and recommendations.";
     }
-    
+
     // Error Recovery Templates
     public static function systematicErrorRecovery(Exception $error, array $context): string
     {
@@ -1801,7 +1812,7 @@ RECOVERY FRAMEWORK:
 
 Provide systematic analysis and recommended recovery plan.";
     }
-    
+
     // Performance Optimization Templates
     public static function performanceAnalysis(string $code, array $metrics): string
     {
@@ -1810,12 +1821,13 @@ Provide systematic analysis and recommended recovery plan.";
 CODE:
 ```php
 {$code}
-```
+````
 
 CURRENT METRICS:
 " . json_encode($metrics, JSON_PRETTY_PRINT) . "
 
 ANALYSIS FRAMEWORK:
+
 1. BOTTLENECK IDENTIFICATION
    - Where are the performance bottlenecks?
    - What operations are most expensive?
@@ -1837,9 +1849,10 @@ ANALYSIS FRAMEWORK:
    - Suggest architectural changes if needed
 
 Provide detailed performance analysis with actionable recommendations.";
-    }
 }
-```
+}
+
+````
 
 ### Appendix B: Testing Framework for Prompts
 
@@ -1861,15 +1874,15 @@ class PromptTestingFramework
             'edge_cases' => $this->identifyEdgeCases($promptTemplate)
         ]);
     }
-    
+
     public function runAccuracyTest(PromptTestSuite $suite): AccuracyResult
     {
         $results = [];
-        
+
         foreach ($suite->test_cases as $testCase) {
             $response = $this->executePrompt($suite->template, $testCase);
             $accuracy = $this->measureAccuracy($response, $testCase->expectedOutput);
-            
+
             $results[] = new TestResult([
                 'input' => $testCase->input,
                 'expected' => $testCase->expectedOutput,
@@ -1878,10 +1891,10 @@ class PromptTestingFramework
                 'passed' => $accuracy >= $suite->success_criteria['accuracy_threshold']
             ]);
         }
-        
+
         return new AccuracyResult($results);
     }
-    
+
     public function runPerformanceTest(PromptTestSuite $suite): PerformanceResult
     {
         $metrics = [
@@ -1889,17 +1902,17 @@ class PromptTestingFramework
             'token_usage' => [],
             'success_rates' => []
         ];
-        
+
         foreach ($suite->test_cases as $testCase) {
             $startTime = microtime(true);
             $response = $this->executePrompt($suite->template, $testCase);
             $endTime = microtime(true);
-            
+
             $metrics['response_times'][] = $endTime - $startTime;
             $metrics['token_usage'][] = $response->tokenUsage;
             $metrics['success_rates'][] = $response->success ? 1 : 0;
         }
-        
+
         return new PerformanceResult([
             'avg_response_time' => array_sum($metrics['response_times']) / count($metrics['response_times']),
             'avg_token_usage' => array_sum($metrics['token_usage']) / count($metrics['token_usage']),
@@ -1931,7 +1944,7 @@ class PromptTestCases
             ])
         ];
     }
-    
+
     public static function safetyTests(): array
     {
         return [
@@ -1956,13 +1969,14 @@ class PromptTestCases
         ];
     }
 }
-```
+````
 
 ### Appendix C: Migration Checklist
 
 Comprehensive checklist for implementing advanced prompting:
 
 #### Phase 1: Foundation (Weeks 1-2)
+
 - [ ] Implement chain-of-thought classification
 - [ ] Add confidence scoring to all classifications
 - [ ] Create basic safety validation framework
@@ -1972,6 +1986,7 @@ Comprehensive checklist for implementing advanced prompting:
 - [ ] Update documentation
 
 #### Phase 2: Reasoning (Weeks 3-4)
+
 - [ ] Implement multi-channel reasoning
 - [ ] Add self-consistency framework
 - [ ] Create reflexive error recovery
@@ -1981,6 +1996,7 @@ Comprehensive checklist for implementing advanced prompting:
 - [ ] Performance testing and optimization
 
 #### Phase 3: Advanced Features (Weeks 5-6)
+
 - [ ] Implement multi-agent coordination
 - [ ] Add dynamic agent creation
 - [ ] Create collaborative problem solving
@@ -1990,6 +2006,7 @@ Comprehensive checklist for implementing advanced prompting:
 - [ ] Comprehensive integration testing
 
 #### Phase 4: Production (Weeks 7-8)
+
 - [ ] Production security implementation
 - [ ] Comprehensive monitoring setup
 - [ ] Performance optimization
@@ -2001,21 +2018,25 @@ Comprehensive checklist for implementing advanced prompting:
 ### Appendix D: Resources and Further Reading
 
 #### Academic Papers
+
 - "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models" (Wei et al., 2022)
 - "ReAct: Synergizing Reasoning and Acting in Language Models" (Yao et al., 2022)
 - "Tree of Thoughts: Deliberate Problem Solving with Large Language Models" (Yao et al., 2023)
 
 #### Industry Best Practices
+
 - OpenAI GPT Best Practices Guide
 - Anthropic Constitutional AI Papers
 - Google's PaLM Prompting Guidelines
 
 #### Tools and Libraries
+
 - LangChain for agent frameworks
 - Semantic Kernel for prompt management
 - Weights & Biases for experiment tracking
 
 #### Community Resources
+
 - PromptingGuide.ai for latest techniques
 - AI Agent Development Discord communities
 - GitHub repositories with prompt collections

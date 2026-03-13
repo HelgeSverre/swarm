@@ -5,11 +5,13 @@ A lightweight, practical Terminal User Interface library for PHP that provides c
 ## Why Minimal TUI?
 
 The existing TUI frameworks often suffer from:
+
 - **Over-engineering**: 2000+ lines to display text
-- **Memory waste**: Object-per-character allocation disasters  
+- **Memory waste**: Object-per-character allocation disasters
 - **Complexity explosion**: 20+ classes to understand for basic functionality
 
 **Minimal TUI solves this with:**
+
 - **~800 total lines** vs 1,567+ in alternatives
 - **String-based rendering** - no memory allocation disasters
 - **Component composition** - build complex UIs from simple parts
@@ -41,20 +43,20 @@ class MyApp extends TuiApp
     public function __construct()
     {
         parent::__construct();
-        
+
         // Create components
         $list = new ListWidget(['Item 1', 'Item 2', 'Item 3']);
         $input = new InputField('Type something...');
-        
+
         // Setup layout
         $layout = Layout::vsplit($this->width, $this->height, 50);
         $this->setLayout($layout);
-        
+
         // Add components
         $this->addComponent('list', new Panel('Items', $list), 'left');
         $this->addComponent('input', new Panel('Input', $input), 'right');
     }
-    
+
     protected function onCommand(string $command): void
     {
         // Handle user input
@@ -72,7 +74,7 @@ $app->run();
 # Simple todo app
 php examples/minimal-tui/Examples/simple-demo.php
 
-# Complex chat interface (replicates FullTerminalUI functionality)  
+# Complex chat interface (replicates FullTerminalUI functionality)
 php examples/minimal-tui/Examples/chat-demo.php
 ```
 
@@ -94,8 +96,9 @@ protected function onCommand(string $text): void {
 ```
 
 **Keyboard shortcuts:**
+
 - `Ctrl+A` - Move to beginning
-- `Ctrl+E` - Move to end  
+- `Ctrl+E` - Move to end
 - `Ctrl+K` - Delete to end
 - `Ctrl+U` - Delete to beginning
 - `Left/Right` - Move cursor
@@ -157,12 +160,13 @@ $layout->area('custom', $x, $y, $width, $height);
 ### Core Classes
 
 - **`Terminal`** - ANSI utilities, input handling, terminal management
-- **`Layout`** - Simple layout system for positioning components  
+- **`Layout`** - Simple layout system for positioning components
 - **`TuiApp`** - Main application framework with event loop
 
 ### Component System
 
 All components implement these methods:
+
 - `render(): string` - Return rendered content
 - `setSize(int $width, int $height): self` - Set component dimensions
 - `setFocused(bool $focused): self` - Handle focus state
@@ -184,26 +188,26 @@ class MyWidget
     protected bool $focused = false;
     protected int $width = 0;
     protected int $height = 0;
-    
+
     public function setSize(int $width, int $height): self
     {
         $this->width = $width;
         $this->height = $height;
         return $this;
     }
-    
+
     public function setFocused(bool $focused): self
     {
         $this->focused = $focused;
         return $this;
     }
-    
+
     public function handleInput(string $key): mixed
     {
         // Handle keyboard input
         return null;
     }
-    
+
     public function render(): string
     {
         return "My custom content";
@@ -225,7 +229,7 @@ class ChatApp extends TuiApp
             $this->sendMessage($command);
         }
     }
-    
+
     protected function handleResize(): void
     {
         parent::handleResize();
@@ -237,10 +241,12 @@ class ChatApp extends TuiApp
 ## Keyboard Shortcuts
 
 ### Global
+
 - `Alt+Q` - Quit application
 - `Tab` - Cycle focus between components
 
 ### Component-specific
+
 - **Lists**: `Up/Down`, `j/k`, `Enter`, `1-9` for quick select
 - **Input**: `Ctrl+A/E/K/U`, `Left/Right`, `Backspace`
 
@@ -255,13 +261,13 @@ The library is designed for efficiency:
 
 ## Comparison
 
-| Feature | Minimal TUI | FullTerminalUI | Complex TUI Framework |
-|---------|-------------|----------------|----------------------|
-| **Lines of code** | ~800 | 1,567 | 2,000+ |
-| **Memory usage** | String-based | Moderate | Object-per-cell |
-| **Complexity** | Simple | Monolithic | Over-engineered |
-| **Features** | All essentials | Complete | Everything + kitchen sink |
-| **Learning curve** | Minutes | Hours | Days |
+| Feature            | Minimal TUI    | FullTerminalUI | Complex TUI Framework     |
+| ------------------ | -------------- | -------------- | ------------------------- |
+| **Lines of code**  | ~800           | 1,567          | 2,000+                    |
+| **Memory usage**   | String-based   | Moderate       | Object-per-cell           |
+| **Complexity**     | Simple         | Monolithic     | Over-engineered           |
+| **Features**       | All essentials | Complete       | Everything + kitchen sink |
+| **Learning curve** | Minutes        | Hours          | Days                      |
 
 ## Requirements
 

@@ -1,6 +1,7 @@
 # Swarm AI Coding Assistant - System Architecture Overview
 
 ## Table of Contents
+
 1. [System Overview](#system-overview)
 2. [Core Flow Diagrams](#core-flow-diagrams)
 3. [Component Architecture](#component-architecture)
@@ -24,17 +25,17 @@ flowchart TD
     B --> C[ProcessSpawner::launch]
     C --> D[Child Process: WorkerProcess]
     D --> E[CodingAgent::processRequest]
-    
+
     E --> F{Request Classification}
     F -->|Demonstration| G[handleDemonstration]
     F -->|Explanation| H[handleExplanation]
     F -->|Conversation| I[handleConversation]
     F -->|Implementation| J[Task Extraction]
-    
+
     G --> AA[AgentResponse]
     H --> AA
     I --> AA
-    
+
     J --> K[extractTasks]
     K --> L[TaskManager::addTasks]
     L --> M[Plan Each Task]
@@ -45,7 +46,7 @@ flowchart TD
     Q --> N
     N -->|All Complete| R[Generate Summary]
     R --> AA
-    
+
     AA --> S[IPC Message to Parent]
     S --> T[Swarm::processUpdates]
     T --> U[UI::displayResponse]
@@ -62,11 +63,11 @@ flowchart LR
     B --> C[OpenAI Structured Output]
     C --> D{Request Type}
     D --> E[Demonstration]
-    D --> F[Explanation] 
+    D --> F[Explanation]
     D --> G[Conversation]
     D --> H[Implementation]
     D --> I[Query]
-    
+
     style E fill:#e1f5d1
     style F fill:#d1e7f5
     style G fill:#f5e1d1
@@ -82,12 +83,12 @@ sequenceDiagram
     participant TaskManager
     participant ToolExecutor
     participant Tools
-    
+
     User->>Agent: Request
     Agent->>Agent: classifyRequest
     Agent->>Agent: extractTasks
     Agent->>TaskManager: addTasks
-    
+
     loop For each task
         Agent->>TaskManager: getNextTask()
         TaskManager-->>Agent: task
@@ -101,7 +102,7 @@ sequenceDiagram
         end
         Agent->>TaskManager: completeCurrentTask()
     end
-    
+
     Agent->>Agent: generateSummary()
     Agent-->>User: AgentResponse
 ```
@@ -116,12 +117,12 @@ flowchart TD
     C -->|write_file| E[WriteFile Tool]
     C -->|bash| F[Terminal Tool]
     C -->|grep| G[Grep Tool]
-    
+
     D --> H[Execute & Log]
     E --> H
     F --> H
     G --> H
-    
+
     H --> I[ToolResponse]
     I --> J[Update Tool Log]
     J --> K[Progress Callback]
@@ -136,11 +137,11 @@ flowchart LR
     B -->|Agent Message| C
     B -->|Tool Call| D[ToolCallEntry]
     B -->|Notification| E[NotificationEntry]
-    
+
     C --> F[ActivityEntry Base]
     D --> F
     E --> F
-    
+
     F --> G[UI::addToHistory]
     G --> H[Format & Display]
     H --> I[ANSI Terminal Output]
@@ -157,32 +158,32 @@ graph TB
         TUI[UI]
         Input[InputHandler]
     end
-    
+
     subgraph "Agent Layer"
         Agent[CodingAgent]
         Response[AgentResponse]
     end
-    
+
     subgraph "Task Management"
         TaskMgr[TaskManager]
         Task[Task Value Object]
         TaskStatus[TaskStatus Enum]
     end
-    
+
     subgraph "Tool System"
         Executor[ToolExecutor]
         Tools[Tool Implementations]
         Toolkits[Toolkit System]
         ToolResp[ToolResponse]
     end
-    
+
     subgraph "UI Components"
         Activity[ActivityEntry]
         Conv[ConversationEntry]
         Tool[ToolCallEntry]
         Notif[NotificationEntry]
     end
-    
+
     CLI --> Agent
     CLI --> TUI
     TUI --> Input
@@ -199,6 +200,7 @@ graph TB
 ## Key Classes and Their Responsibilities
 
 ### 1. **Swarm** (`src/CLI/Swarm.php`)
+
 - Main entry point for the application
 - Manages the main loop and state persistence
 - Coordinates between UI and Agent
@@ -211,6 +213,7 @@ graph TB
   - Extracted command and update handling methods
 
 ### 2. **CodingAgent** (`src/Agent/CodingAgent.php`)
+
 - Core AI logic and OpenAI integration
 - Request classification and routing
 - Task extraction and planning
@@ -218,6 +221,7 @@ graph TB
 - Conversation history management
 
 Key methods:
+
 - `processRequest()`: Main request handler
 - `classifyRequest()`: Uses structured output to classify intent
 - `extractTasks()`: Extracts actionable tasks from requests
@@ -227,6 +231,7 @@ Key methods:
 - `getTaskManager()`: Access to task manager for history
 
 ### 3. **TaskManager** (`src/Task/TaskManager.php`)
+
 - Manages task queue and lifecycle
 - Tracks task status transitions
 - Provides next task for execution
@@ -235,12 +240,14 @@ Key methods:
 - Execution time tracking
 
 Key methods:
+
 - `addToHistory()`: Archives completed tasks with duplicate prevention
 - `getTaskHistory()` / `setTaskHistory()`: History access
 - `clearCompletedTasks()`: Manages task lifecycle
 - `getTasksAsArrays()`: Backward compatibility
 
 ### 4. **ToolExecutor** (`src/Core/ToolExecutor.php`)
+
 - Registers available tools and toolkits
 - Routes tool calls to implementations
 - Maintains execution log
@@ -248,12 +255,14 @@ Key methods:
 - Progress reporting
 
 ### 5. **Tool System** (`src/Tools/*`)
+
 - Individual tools: ReadFile, WriteFile, Terminal, Grep, WebFetch, Playwright
 - Toolkit system: TavilyToolkit providing web search and extraction
 - All tools extend abstract Tool class
 - Toolkits implement Toolkit interface
 
 ### 6. **UI** (`src/CLI/UI.php`)
+
 - Terminal UI management with ANSI codes
 - Activity history display with type-safe entries
 - Real-time updates
@@ -261,20 +270,23 @@ Key methods:
 - Progress animations
 
 ### 7. **Activity System** (`src/CLI/Activity/*`)
+
 - Type-safe activity entries (replaced error-prone arrays)
 - Human-readable formatting
 - JSON parsing for function calls
 - Classes: ActivityEntry (base), ConversationEntry, ToolCallEntry, NotificationEntry
 
 ### 8. **Task** (`src/Task/Task.php`)
+
 - Immutable value object with readonly properties
 - Status tracking via TaskStatus enum
 - Timestamps for creation and completion
 - Immutable state transitions
 
 ### 9. **IPC System** (`src/CLI/*`)
+
 - ProcessSpawner: Parent process management
-- WorkerProcess: Child process execution  
+- WorkerProcess: Child process execution
 - JSON message protocol for communication
 - Real-time progress updates
 
@@ -309,23 +321,23 @@ sequenceDiagram
     participant Proc as ProcessSpawner
     participant Child as Child Process
     participant Agent as CodingAgent
-    
+
     CLI->>Proc: launch($input)
     Proc->>Proc: proc_open() with pipes
     Proc->>Child: Spawn bin/worker
-    
+
     Note over Proc,Child: Bidirectional pipe communication
-    
+
     Proc->>Child: Write input via stdin pipe
     Child->>Agent: Process request
-    
+
     loop Real-time Updates
         Agent->>Child: Progress update
         Child->>Proc: JSON message via stdout
         Proc->>CLI: readUpdates()
         CLI->>CLI: Update UI
     end
-    
+
     Agent->>Child: Final response
     Child->>Proc: Completion message
     Proc->>CLI: Process complete
@@ -365,7 +377,7 @@ All IPC messages are JSON-encoded with a type field:
 
 // Error
 {
-    "type": "status", 
+    "type": "status",
     "status": "error",
     "error": "Error message"
 }
@@ -427,6 +439,7 @@ The system automatically saves and loads state from `.swarm.json`:
 ## Adding New Tools
 
 1. **Create Tool Class**: Extend `Tool` abstract class
+
    ```php
    class MyTool extends Tool {
        public function name(): string { return 'my_tool'; }
@@ -437,6 +450,7 @@ The system automatically saves and loads state from `.swarm.json`:
    ```
 
 2. **Register in ToolExecutor**: Add to tool registration in `Swarm::createFromEnvironment()`
+
    ```php
    $executor->register(new MyTool($logger));
    ```
@@ -447,28 +461,30 @@ The system automatically saves and loads state from `.swarm.json`:
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | Required for AI functionality | - |
-| `OPENAI_MODEL` | Model to use | gpt-4o-mini |
-| `TAVILY_API_KEY` | API key for Tavily search/extract | - |
-| `OPENAI_TEMPERATURE` | Creativity level | 0.7 |
-| `LOG_ENABLED` | Enable file logging | false |
-| `LOG_LEVEL` | Logging level | info |
-| `LOG_PATH` | Log file location | logs |
-| `SWARM_REQUEST_TIMEOUT` | Max request time in seconds | 600 |
-| `SWARM_TIMEOUT_RETRY_ENABLED` | Allow retry on timeout | true |
-| `SWARM_HEARTBEAT_INTERVAL` | Heartbeat frequency | 2 |
+| Variable                      | Description                       | Default     |
+| ----------------------------- | --------------------------------- | ----------- |
+| `OPENAI_API_KEY`              | Required for AI functionality     | -           |
+| `OPENAI_MODEL`                | Model to use                      | gpt-4o-mini |
+| `TAVILY_API_KEY`              | API key for Tavily search/extract | -           |
+| `OPENAI_TEMPERATURE`          | Creativity level                  | 0.7         |
+| `LOG_ENABLED`                 | Enable file logging               | false       |
+| `LOG_LEVEL`                   | Logging level                     | info        |
+| `LOG_PATH`                    | Log file location                 | logs        |
+| `SWARM_REQUEST_TIMEOUT`       | Max request time in seconds       | 600         |
+| `SWARM_TIMEOUT_RETRY_ENABLED` | Allow retry on timeout            | true        |
+| `SWARM_HEARTBEAT_INTERVAL`    | Heartbeat frequency               | 2           |
 
 ### Logging
 
 The system uses PSR-3 compatible logging throughout:
+
 - **Debug**: Detailed execution flow
 - **Info**: Key operations and results
 - **Warning**: Non-critical issues
 - **Error**: Failures and exceptions
 
 Logs include:
+
 - OpenAI API calls and responses
 - Tool executions with parameters
 - Task state transitions
@@ -477,11 +493,13 @@ Logs include:
 ## Recent Improvements
 
 ### Class Renaming (Latest)
+
 - **SwarmCLI** → **Swarm** (clearer, more concise)
 - **TUIRenderer** → **UI** (simpler, still clear in context)
 - Updated all references in code, tests, and imports
 
 ### Enhanced Robustness
+
 - **Atomic file writes**: Write to temp file, then rename
 - **Better error recovery**: Graceful handling of file operation failures
 - **State validation**: Added `validateState()` method
@@ -489,18 +507,21 @@ Logs include:
 - **Non-fatal errors**: State save failures don't crash the app
 
 ### Code Organization
+
 - **Configuration constants**: Replace hardcoded values
 - **Command handling extraction**: Match expression for cleaner code
 - **Update processing simplification**: Dedicated handlers for each update type
 - **Smaller, focused methods**: Better testability and maintainability
 
 ### Dependency Injection Refactoring
+
 - Modified constructor to accept dependencies: `CodingAgent`, `UI`, and `LoggerInterface`
 - Added `Swarm::createFromEnvironment()` static factory method
 - Improved testability by allowing mock injection
 - Maintained backward compatibility
 
 ### Task History Implementation
+
 - Moved task history functionality from Swarm to TaskManager
 - Added automatic archival of completed tasks
 - 1000 task history limit by default
@@ -508,6 +529,7 @@ Logs include:
 - Duplicate prevention
 
 ### Type-Safe Activity System
+
 - Replaced error-prone arrays with typed ActivityEntry classes
 - Fixed "Undefined array key 'color'" error
 - Improved UI reliability and maintainability
