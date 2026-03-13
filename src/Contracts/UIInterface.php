@@ -73,6 +73,23 @@ interface UIInterface
     public function updateProcessingMessage(string $message): void;
 
     /**
+     * Non-blocking check for user input
+     *
+     * @return string|null The user's input, or null if no input is available
+     */
+    public function checkForInput(): ?string;
+
+    /**
+     * Render the current UI state
+     */
+    public function render(): void;
+
+    /**
+     * Stop the UI (called before exit)
+     */
+    public function stop(): void;
+
+    /**
      * Cleanup UI resources (called on shutdown)
      */
     public function cleanup(): void;

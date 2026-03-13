@@ -150,6 +150,21 @@ class SimpleUI implements UIInterface
         // Messages are shown via showAgentThinking
     }
 
+    public function checkForInput(): ?string
+    {
+        return null;
+    }
+
+    public function render(): void
+    {
+        // SimpleUI renders inline, nothing to do
+    }
+
+    public function stop(): void
+    {
+        $this->cleanup();
+    }
+
     public function cleanup(): void
     {
         $this->stopProcessing();
