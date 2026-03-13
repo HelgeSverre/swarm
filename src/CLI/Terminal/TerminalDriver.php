@@ -64,13 +64,6 @@ class TerminalDriver
         $this->initialized = false;
     }
 
-    protected function detectOS(): void
-    {
-        $this->isMacOS = str_contains(PHP_OS, 'Darwin');
-        $this->modKey = $this->isMacOS ? 'Option' : 'Alt';
-        $this->modSymbol = $this->isMacOS ? '⌥' : 'Alt+';
-    }
-
     public function updateTerminalSize(): void
     {
         $this->terminalHeight = (int) exec('tput lines') ?: 24;
@@ -225,5 +218,12 @@ class TerminalDriver
     public function getModSymbol(): string
     {
         return $this->modSymbol;
+    }
+
+    protected function detectOS(): void
+    {
+        $this->isMacOS = str_contains(PHP_OS, 'Darwin');
+        $this->modKey = $this->isMacOS ? 'Option' : 'Alt';
+        $this->modSymbol = $this->isMacOS ? '⌥' : 'Alt+';
     }
 }

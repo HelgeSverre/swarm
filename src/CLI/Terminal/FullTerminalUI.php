@@ -20,7 +20,7 @@ class FullTerminalUI implements UIInterface
 
     public function __construct(EventBus $eventBus)
     {
-        $this->driver = new TerminalDriver();
+        $this->driver = new TerminalDriver;
         $this->viewModel = new TuiViewModel($eventBus);
         $this->inputController = new InputController($this->driver, $this->viewModel);
         $this->renderer = new TuiRenderer($this->driver, $this->viewModel);

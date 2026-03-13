@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace HelgeSverre\Swarm\Core;
 
+use HelgeSverre\Swarm\Agent\CodingAgent;
 use HelgeSverre\Swarm\Application\Runtime\RuntimeContext;
 use HelgeSverre\Swarm\Application\Runtime\RuntimeKernel;
-use HelgeSverre\Swarm\Agent\CodingAgent;
 use HelgeSverre\Swarm\CLI\CommandHandler;
 use HelgeSverre\Swarm\CLI\Process\ProcessManager;
 use HelgeSverre\Swarm\CLI\StateManager;
@@ -46,15 +46,6 @@ class Container
     public function __construct(
         protected Application $app
     ) {}
-
-    protected function getRuntimeContext(): RuntimeContext
-    {
-        if ($this->runtimeContext === null) {
-            $this->runtimeContext = RuntimeKernel::bootCli($this->app);
-        }
-
-        return $this->runtimeContext;
-    }
 
     /**
      * Get or create the EventBus instance
@@ -206,5 +197,14 @@ class Container
             'processes' => $this->processManager !== null,
             default => false
         };
+    }
+
+    protected function getRuntimeContext(): RuntimeContext
+    {
+        if ($this->runtimeContext === null) {
+            $this->runtimeContext = RuntimeKernel::bootCli($this->app);
+        }
+
+        return $this->runtimeContext;
     }
 }

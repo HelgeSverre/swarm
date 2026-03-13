@@ -6,6 +6,10 @@ namespace HelgeSverre\Swarm\CLI\Process\Message;
 
 enum WorkerUpdateType: string
 {
+    public static function fromValue(?string $value): self
+    {
+        return self::tryFrom($value ?? '') ?? self::Unknown;
+    }
     case Progress = 'progress';
     case StateSync = 'state_sync';
     case TaskStatus = 'task_status';
@@ -15,9 +19,4 @@ enum WorkerUpdateType: string
     case ToolStarted = 'tool_started';
     case ToolCompleted = 'tool_completed';
     case Unknown = 'unknown';
-
-    public static function fromValue(?string $value): self
-    {
-        return self::tryFrom($value ?? '') ?? self::Unknown;
-    }
 }

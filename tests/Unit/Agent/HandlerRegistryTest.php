@@ -1,10 +1,10 @@
 <?php
 
+use HelgeSverre\Swarm\Agent\AgentProgressReporter;
 use HelgeSverre\Swarm\Agent\ConversationBuffer;
 use HelgeSverre\Swarm\Agent\ConversationHandler;
 use HelgeSverre\Swarm\Agent\DemonstrationHandler;
 use HelgeSverre\Swarm\Agent\ExplanationHandler;
-use HelgeSverre\Swarm\Agent\AgentProgressReporter;
 use HelgeSverre\Swarm\Agent\HandlerRegistry;
 use HelgeSverre\Swarm\Agent\ImplementationHandler;
 use HelgeSverre\Swarm\Agent\QueryHandler;

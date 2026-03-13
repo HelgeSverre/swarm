@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace HelgeSverre\Swarm\CLI;
 
-use HelgeSverre\Swarm\CLI\Process\ProcessManager;
 use HelgeSverre\Swarm\Core\Application;
 use HelgeSverre\Swarm\Core\Container;
 use HelgeSverre\Swarm\Events\EventBus;

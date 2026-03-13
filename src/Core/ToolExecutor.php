@@ -42,8 +42,7 @@ class ToolExecutor
         ?LoggerInterface $logger = null,
         ?FileAccessPolicy $fileAccessPolicy = null,
         ?EventBus $eventBus = null,
-    ): self
-    {
+    ): self {
         $executor = new self($logger, $eventBus ?? new EventBus);
 
         $executor->register(new ReadFile($fileAccessPolicy));

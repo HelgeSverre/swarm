@@ -338,5 +338,4 @@ class CodingAgent
             'response_success' => $response->success,
         ]);
     }
-
 }

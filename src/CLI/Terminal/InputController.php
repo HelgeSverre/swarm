@@ -24,11 +24,13 @@ class InputController
     {
         if ($this->viewModel->isShowTaskOverlay()) {
             $this->handleTaskOverlayInput($key);
+
             return;
         }
 
         if ($this->viewModel->isShowHelp()) {
             $this->handleHelpInput($key);
+
             return;
         }
 
@@ -49,18 +51,21 @@ class InputController
     {
         if (str_starts_with($key, 'ALT+')) {
             $this->handleGlobalShortcuts($key);
+
             return;
         }
 
         if ($key === 'TAB') {
             $this->viewModel->setCurrentFocus(TuiViewModel::FOCUS_TASKS);
             $this->viewModel->markStateChanged();
+
             return;
         }
 
         if (mb_strtoupper($key) === 'R' && $this->viewModel->getCurrentReasoning()) {
             $this->viewModel->setShowReasoning(! $this->viewModel->isShowReasoning());
             $this->viewModel->markStateChanged();
+
             return;
         }
 
@@ -85,6 +90,7 @@ class InputController
     {
         if (str_starts_with($key, 'ALT+')) {
             $this->handleGlobalShortcuts($key);
+
             return;
         }
 
@@ -135,6 +141,7 @@ class InputController
     {
         if (str_starts_with($key, 'ALT+')) {
             $this->handleGlobalShortcuts($key);
+
             return;
         }
 
@@ -205,14 +212,17 @@ class InputController
                 if ($this->stopCallback) {
                     ($this->stopCallback)();
                 }
+
                 return true;
             case 'ALT+T':
                 $this->viewModel->setShowTaskOverlay(! $this->viewModel->isShowTaskOverlay());
                 $this->viewModel->markStateChanged();
+
                 return true;
             case 'ALT+H':
                 $this->viewModel->setShowHelp(true);
                 $this->viewModel->markStateChanged();
+
                 return true;
             case 'ALT+C':
                 if ($this->viewModel->getCurrentFocus() === TuiViewModel::FOCUS_MAIN) {
@@ -220,6 +230,7 @@ class InputController
                     $this->viewModel->addHistory('system', 'History cleared');
                     $this->viewModel->markStateChanged();
                 }
+
                 return true;
             case 'ALT+R':
                 $thoughtToggled = $this->viewModel->toggleNearestThought($this->driver->getWidth() - max(30, (int) ($this->driver->getWidth() * 0.25)) - 1);
@@ -228,18 +239,22 @@ class InputController
                     $this->viewModel->addHistory('system', 'Display refreshed');
                 }
                 $this->viewModel->markStateChanged();
+
                 return true;
             case 'ALT+1':
                 $this->viewModel->setCurrentFocus(TuiViewModel::FOCUS_MAIN);
                 $this->viewModel->markStateChanged();
+
                 return true;
             case 'ALT+2':
                 $this->viewModel->setCurrentFocus(TuiViewModel::FOCUS_TASKS);
                 $this->viewModel->markStateChanged();
+
                 return true;
             case 'ALT+3':
                 $this->viewModel->setCurrentFocus(TuiViewModel::FOCUS_CONTEXT);
                 $this->viewModel->markStateChanged();
+
                 return true;
         }
 
@@ -251,6 +266,7 @@ class InputController
         if ($key === 'ESC' || $key === 'ALT+T') {
             $this->viewModel->setShowTaskOverlay(false);
             $this->viewModel->markStateChanged();
+
             return;
         }
 

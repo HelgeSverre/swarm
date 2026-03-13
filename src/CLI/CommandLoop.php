@@ -69,6 +69,14 @@ class CommandLoop
     }
 
     /**
+     * Remove a completed request from tracking
+     */
+    public function clearRequest(string $processId): void
+    {
+        unset($this->activeRequests[$processId]);
+    }
+
+    /**
      * Route user input to a built-in command or async AI request
      */
     protected function handleUserInput(string $input): void
@@ -148,13 +156,5 @@ class CommandLoop
 
             $this->ui->displayError($e->getMessage());
         }
-    }
-
-    /**
-     * Remove a completed request from tracking
-     */
-    public function clearRequest(string $processId): void
-    {
-        unset($this->activeRequests[$processId]);
     }
 }

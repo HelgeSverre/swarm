@@ -82,7 +82,7 @@ class PathChecker implements FileAccessPolicy
         $parentDirectory = realpath(dirname($normalized));
 
         if ($parentDirectory === false || ! is_dir($parentDirectory) || ! is_writable($parentDirectory)) {
-            throw new PathNotAllowedException("Parent directory does not exist or is not writable: " . dirname($normalized));
+            throw new PathNotAllowedException('Parent directory does not exist or is not writable: ' . dirname($normalized));
         }
 
         if (! $this->isResolvedPathAllowed($parentDirectory)) {
